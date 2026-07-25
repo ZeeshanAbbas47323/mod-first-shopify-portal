@@ -102,6 +102,9 @@ const productFormSchema = z.object({
   // Inventory
   sku: z.string().optional(),
   quantity: z.string().optional(),
+  // Discounts
+  discount_percent: z.string().optional(),
+  discount_amount: z.string().optional(),
   // Shipping
   requires_shipping: z.boolean(),
   weight: z.string().optional(),
@@ -766,6 +769,10 @@ export function ProductForm({ product }: { product?: ProductDetailRow }) {
       cost_per_item: product?.cost_per_item != null ? String(product.cost_per_item) : "",
       sku: product?.sku ?? "",
       quantity: product?.quantity != null ? String(product.quantity) : "",
+      discount_percent: (product as { discount_percent?: number | null })?.discount_percent != null
+        ? String((product as { discount_percent?: number | null }).discount_percent) : "",
+      discount_amount: (product as { discount_amount?: number | null })?.discount_amount != null
+        ? String((product as { discount_amount?: number | null }).discount_amount) : "",
       requires_shipping: product?.requires_shipping ?? false,
       weight: product?.weight != null ? String(product.weight) : "",
       vendor: typeof product?.vendor === "object" && product?.vendor !== null
@@ -875,6 +882,7 @@ export function ProductForm({ product }: { product?: ProductDetailRow }) {
   };
 
   const onSubmit = async (values: ProductFormValues) => {
+    const hasVariants = values.variants.length > 0;
     const body = {
       // API field names
       name: values.title,
@@ -887,6 +895,11 @@ export function ProductForm({ product }: { product?: ProductDetailRow }) {
       sale_price: parseNum(values.compare_at_price) ?? undefined,
       cost_price: parseNum(values.cost_per_item) ?? undefined,
       sku: values.sku || undefined,
+      // Product-level stock is only sent when the product has NO variants —
+      // when variants exist, stock is tracked per-variant via the inventory API.
+      quantity: hasVariants ? undefined : parseNum(values.quantity) ?? undefined,
+      discount_percent: parseNum(values.discount_percent) ?? undefined,
+      discount_amount: parseNum(values.discount_amount) ?? undefined,
       weight: parseNum(values.weight) ?? undefined,
       vendor_id: values.vendor ? Number(values.vendor) || undefined : undefined,
       category_id: values.category ? Number(values.category) || undefined : undefined,
@@ -1118,6 +1131,22 @@ export function ProductForm({ product }: { product?: ProductDetailRow }) {
                 </div>
               </div>
             </div>
+            <div className="mt-3 grid gap-3 sm:grid-cols-2">
+              <div className="space-y-1.5">
+                <Label htmlFor="p-discount-pct">Discount (%)</Label>
+                <div className="relative">
+                  <Input id="p-discount-pct" type="number" step="0.01" min="0" max="100" placeholder="0" className="pr-6" {...register("discount_percent")} />
+                  <span className="absolute top-1/2 right-3 -translate-y-1/2 text-sm text-muted-foreground">%</span>
+                </div>
+              </div>
+              <div className="space-y-1.5">
+                <Label htmlFor="p-discount-amt">Discount amount</Label>
+                <div className="relative">
+                  <span className="absolute top-1/2 left-3 -translate-y-1/2 text-sm text-muted-foreground">$</span>
+                  <Input id="p-discount-amt" type="number" step="0.01" min="0" placeholder="0.00" className="pl-6" {...register("discount_amount")} />
+                </div>
+              </div>
+            </div>
             <ProfitDisplay price={priceVal} cost={costVal} />
           </Section>
 
@@ -1128,6 +1157,19 @@ export function ProductForm({ product }: { product?: ProductDetailRow }) {
                 <Label htmlFor="p-sku">SKU (Stock Keeping Unit)</Label>
                 <Input id="p-sku" placeholder="SKU-001" className="max-w-xs" {...register("sku")} />
               </div>
+              {variantFields.length === 0 ? (
+                <div className="space-y-1.5">
+                  <Label htmlFor="p-qty">Quantity</Label>
+                  <Input id="p-qty" type="number" min="0" step="1" placeholder="0" className="max-w-xs" {...register("quantity")} />
+                  <p className="text-xs text-muted-foreground">
+                    Initial stock for this product. Use the stock manager on the products list to adjust it later.
+                  </p>
+                </div>
+              ) : (
+                <div className="rounded-lg border border-dashed border-border bg-muted/30 p-3 text-sm text-muted-foreground">
+                  Stock is tracked per variant. Use the stock manager on the products list to set quantities for each variant.
+                </div>
+              )}
             </div>
           </Section>
 

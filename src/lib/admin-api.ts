@@ -1246,6 +1246,138 @@ export async function deletePopup(id: number | string): Promise<string> {
   return (data?.message as string) ?? "Popup deleted.";
 }
 
+// ─── Coupons ─────────────────────────────────────────────────────────────────
+
+export const COUPON_TYPES = ["percentage", "fixed_amount", "free_shipping"] as const;
+export type CouponType = (typeof COUPON_TYPES)[number];
+
+export const COUPON_STATUSES = ["active", "expired", "used_up"] as const;
+export type CouponStatus = (typeof COUPON_STATUSES)[number];
+
+export interface CouponRow {
+  id: number | string;
+  code: string;
+  type: CouponType;
+  value: number;
+  min_order_amount?: number | null;
+  usage_limit?: number | null;
+  per_user_limit?: number | null;
+  used_count?: number;
+  start_date?: string | null;
+  end_date?: string | null;
+  status?: CouponStatus;
+  is_active?: boolean;
+  created_at?: string;
+  [k: string]: unknown;
+}
+
+export async function listCoupons(params: ListParams): Promise<ListResult<CouponRow>> {
+  const { data } = await api.post("coupons/list", buildBody(params));
+  return parseList<CouponRow>(data, params.limit);
+}
+
+export async function getCouponById(id: number | string): Promise<CouponRow> {
+  const { data } = await api.get(`coupons/get/${id}`);
+  return (data?.payload ?? data?.data ?? data) as CouponRow;
+}
+
+export async function createCoupon(body: Partial<CouponRow>): Promise<string> {
+  const { data } = await api.post("coupons", body);
+  return (data?.message as string) ?? "Coupon created.";
+}
+
+export async function updateCoupon(id: number | string, body: Partial<CouponRow>): Promise<string> {
+  const { data } = await api.put(`coupons/${id}`, body);
+  return (data?.message as string) ?? "Coupon updated.";
+}
+
+export async function validateCoupon(body: {
+  code: string;
+  order_amount: number;
+  user_id?: number;
+}): Promise<Json> {
+  const { data } = await api.post("coupons/validate", body);
+  return (data?.payload ?? data?.data ?? data) as Json;
+}
+
+// ─── Inventory ───────────────────────────────────────────────────────────────
+
+export const INVENTORY_REASONS = [
+  "STOCK_IN", "STOCK_OUT", "MANUAL_ADJUSTMENT",
+  "ORDER_PLACED", "ORDER_CANCELLED", "RETURNED", "DAMAGED",
+] as const;
+export type InventoryReason = (typeof INVENTORY_REASONS)[number];
+
+export interface InventoryStock {
+  product_id: number | string;
+  variant_id?: number | string | null;
+  quantity: number;
+  reserved?: number;
+  available?: number;
+  [k: string]: unknown;
+}
+
+export interface InventoryLogRow {
+  id: number | string;
+  product_id?: number | string;
+  variant_id?: number | string | null;
+  quantity_change?: number;
+  quantity_before?: number;
+  quantity_after?: number;
+  reason?: string;
+  notes?: string | null;
+  performed_by?: number | string | null;
+  performer?: { full_name?: string; email?: string } | null;
+  created_at?: string;
+  [k: string]: unknown;
+}
+
+export async function increaseInventory(body: {
+  product_id: number | string;
+  variant_id?: number | string | null;
+  quantity: number;
+  reason?: InventoryReason;
+  notes?: string;
+}): Promise<string> {
+  const { data } = await api.post("inventory/increase", body);
+  return (data?.message as string) ?? "Stock increased.";
+}
+
+export async function decreaseInventory(body: {
+  product_id: number | string;
+  variant_id?: number | string | null;
+  quantity: number;
+  reason?: InventoryReason;
+  notes?: string;
+}): Promise<string> {
+  const { data } = await api.post("inventory/decrease", body);
+  return (data?.message as string) ?? "Stock decreased.";
+}
+
+export async function adjustInventory(body: {
+  product_id: number | string;
+  variant_id?: number | string | null;
+  quantity: number;
+  notes?: string;
+}): Promise<string> {
+  const { data } = await api.post("inventory/adjust", body);
+  return (data?.message as string) ?? "Stock adjusted.";
+}
+
+export async function getInventoryStock(
+  productId: number | string,
+  variantId?: number | string
+): Promise<InventoryStock> {
+  const qs = variantId !== undefined && variantId !== null ? `?variant_id=${variantId}` : "";
+  const { data } = await api.get(`inventory/get/${productId}${qs}`);
+  return (data?.payload ?? data?.data ?? data) as InventoryStock;
+}
+
+export async function listInventoryLogs(params: ListParams): Promise<ListResult<InventoryLogRow>> {
+  const { data } = await api.post("inventory/logs", buildBody(params));
+  return parseList<InventoryLogRow>(data, params.limit);
+}
+
 // ─── Pickup Locations ─────────────────────────────────────────────────────────
 
 export interface PickupLocationRow {

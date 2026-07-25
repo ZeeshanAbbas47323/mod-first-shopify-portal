@@ -4,7 +4,7 @@ import * as React from "react";
 import { useRouter } from "next/navigation";
 import { type ColumnDef } from "@tanstack/react-table";
 import { format } from "date-fns";
-import { Package, Plus, Search } from "lucide-react";
+import { Boxes, Package, Plus, Search } from "lucide-react";
 import { toast } from "sonner";
 import type { DateRange } from "react-day-picker";
 
@@ -21,6 +21,7 @@ import { DataTable } from "@/components/data-table";
 import { DateRangePicker } from "@/components/date-range-picker";
 import { StatusBadge } from "@/components/status-badge";
 import { apiErrorMessage } from "@/lib/auth-api";
+import { StockDialog } from "@/components/products/stock-dialog";
 import { listProducts, type ProductRow } from "@/lib/admin-api";
 import { cn, imgUrl } from "@/lib/utils";
 
@@ -143,6 +144,25 @@ const columns: ColumnDef<ProductRow>[] = [
 ];
 
 export default function ProductsPage() {
+  const [stockTarget, setStockTarget] = React.useState<ProductRow | null>(null);
+  const columnsWithStock = React.useMemo<ColumnDef<ProductRow>[]>(() => [
+    ...columns,
+    {
+      id: "actions",
+      header: "",
+      cell: ({ row }) => (
+        <Button
+          size="sm"
+          variant="ghost"
+          className="size-8 p-0"
+          onClick={(e) => { e.stopPropagation(); setStockTarget(row.original); }}
+          aria-label="Manage stock"
+        >
+          <Boxes className="size-4" />
+        </Button>
+      ),
+    },
+  ], []);
   const router = useRouter();
   const [rows, setRows] = React.useState<ProductRow[]>([]);
   const [loading, setLoading] = React.useState(true);
@@ -234,12 +254,21 @@ export default function ProductsPage() {
       </div>
 
       <DataTable
-        columns={columns}
+        columns={columnsWithStock}
         data={rows}
         loading={loading}
         onRowClick={(row) => router.push(`/products/${row.id}`)}
         serverPagination={{ pageIndex: page, pageCount, total, onPageChange: setPage }}
       />
+
+      {stockTarget && (
+        <StockDialog
+          open={!!stockTarget}
+          onOpenChange={(v) => !v && setStockTarget(null)}
+          productId={stockTarget.id}
+          productName={stockTarget.title}
+        />
+      )}
     </div>
   );
 }
