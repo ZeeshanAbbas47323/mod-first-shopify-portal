@@ -44,6 +44,7 @@ import {
   type BlogRow,
 } from "@/lib/admin-api";
 import { FooterSectionsTab } from "@/components/content/footer-sections-tab";
+import { PopupsTab } from "@/components/content/popups-tab";
 
 const PAGE_SIZE = 10;
 
@@ -125,7 +126,7 @@ const columns: ColumnDef<BlogRow>[] = [
 ];
 
 export default function ContentPage() {
-  const [activeTab, setActiveTab] = React.useState<"blogs" | "footer">("blogs");
+  const [activeTab, setActiveTab] = React.useState<"blogs" | "footer" | "popups">("blogs");
   const [rows, setRows] = React.useState<BlogRow[]>([]);
   const [loading, setLoading] = React.useState(true);
   const [page, setPage] = React.useState(0);
@@ -185,16 +186,20 @@ export default function ContentPage() {
       {/* Page header + tab switcher */}
       <div className="flex flex-wrap items-center justify-between gap-3">
         <h1 className="text-xl font-bold">Content</h1>
-        <Tabs value={activeTab} onValueChange={(v) => setActiveTab(v as "blogs" | "footer")}>
+        <Tabs value={activeTab} onValueChange={(v) => setActiveTab(v as "blogs" | "footer" | "popups")}>
           <TabsList>
             <TabsTrigger value="blogs">Blog posts</TabsTrigger>
             <TabsTrigger value="footer">Footer sections</TabsTrigger>
+            <TabsTrigger value="popups">Popups</TabsTrigger>
           </TabsList>
         </Tabs>
       </div>
 
       {/* Footer tab */}
       {activeTab === "footer" && <FooterSectionsTab />}
+
+      {/* Popups tab */}
+      {activeTab === "popups" && <PopupsTab />}
 
       {/* Blogs tab */}
       {activeTab === "blogs" && <>

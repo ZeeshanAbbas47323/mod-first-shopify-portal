@@ -17,9 +17,15 @@ import {
   Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
 } from "@/components/ui/select";
 import { Badge } from "@/components/ui/badge";
+import { MediaUpload } from "@/components/media-upload";
+import {
+  Dialog, DialogContent, DialogDescription,
+  DialogFooter, DialogHeader, DialogTitle,
+} from "@/components/ui/dialog";
 import { apiErrorMessage } from "@/lib/auth-api";
 import {
   listFooterSections,
+  createFooterSection,
   updateFooterSection,
   manageFooterLinks,
   type FooterSectionRow,
@@ -111,6 +117,7 @@ function SectionCard({ section, onSaved }: { section: FooterSectionRow; onSaved:
   // Section fields
   const [title, setTitle] = React.useState(section.title ?? "");
   const [description, setDescription] = React.useState(section.description ?? "");
+  const [imageUrl, setImageUrl] = React.useState<string | null>(section.image_url ?? null);
   const [isActive, setIsActive] = React.useState(section.is_active ?? true);
   const [sortOrder, setSortOrder] = React.useState(String(section.sort_order ?? 0));
 
@@ -145,6 +152,7 @@ function SectionCard({ section, onSaved }: { section: FooterSectionRow; onSaved:
       await updateFooterSection(section.id, {
         title: title || undefined,
         description: description || undefined,
+        image_url: imageUrl || undefined,
         is_active: isActive,
         sort_order: parseInt(sortOrder) || 0,
       });
@@ -217,6 +225,10 @@ function SectionCard({ section, onSaved }: { section: FooterSectionRow; onSaved:
                 <Label htmlFor={`desc-${section.id}`}>Description</Label>
                 <Textarea id={`desc-${section.id}`} rows={2} value={description} onChange={(e) => setDescription(e.target.value)} placeholder="Short description shown in footer…" />
               </div>
+              <div className="space-y-1.5 sm:col-span-2">
+                <Label>Image</Label>
+                <MediaUpload value={imageUrl} onChange={setImageUrl} folder="footer" />
+              </div>
               <div className="flex items-center gap-3">
                 <label className="flex cursor-pointer items-center gap-2">
                   <div className="relative">
@@ -268,11 +280,105 @@ function SectionCard({ section, onSaved }: { section: FooterSectionRow; onSaved:
   );
 }
 
+// ─── Add Section Dialog ───────────────────────────────────────────────────────
+
+function AddSectionDialog({
+  open, onOpenChange, onCreated,
+}: {
+  open: boolean;
+  onOpenChange: (v: boolean) => void;
+  onCreated: () => void;
+}) {
+  const [sectionKey, setSectionKey] = React.useState("");
+  const [title, setTitle] = React.useState("");
+  const [description, setDescription] = React.useState("");
+  const [imageUrl, setImageUrl] = React.useState<string | null>(null);
+  const [sortOrder, setSortOrder] = React.useState("0");
+  const [saving, setSaving] = React.useState(false);
+
+  React.useEffect(() => {
+    if (open) {
+      setSectionKey(""); setTitle(""); setDescription("");
+      setImageUrl(null); setSortOrder("0");
+    }
+  }, [open]);
+
+  const create = async () => {
+    const key = sectionKey.trim().toLowerCase().replace(/[^a-z0-9_]+/g, "_");
+    if (!key) {
+      toast.error("Section key is required.");
+      return;
+    }
+    setSaving(true);
+    try {
+      const msg = await createFooterSection({
+        section_key: key,
+        title: title || undefined,
+        description: description || undefined,
+        image_url: imageUrl || undefined,
+        sort_order: parseInt(sortOrder) || 0,
+        is_active: true,
+      });
+      toast.success(msg);
+      onOpenChange(false);
+      onCreated();
+    } catch (e) {
+      toast.error(apiErrorMessage(e, "Couldn't create footer section."));
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  return (
+    <Dialog open={open} onOpenChange={onOpenChange}>
+      <DialogContent className="sm:max-w-md">
+        <DialogHeader>
+          <DialogTitle>Add footer section</DialogTitle>
+          <DialogDescription>Create a new section for the storefront footer.</DialogDescription>
+        </DialogHeader>
+        <div className="space-y-4">
+          <div className="space-y-1.5">
+            <Label htmlFor="fs-key">Section key *</Label>
+            <Input id="fs-key" value={sectionKey} onChange={(e) => setSectionKey(e.target.value)}
+              placeholder="main_footer" className="font-mono" />
+            <p className="text-xs text-muted-foreground">Lowercase letters and underscores only.</p>
+          </div>
+          <div className="space-y-1.5">
+            <Label htmlFor="fs-title">Title</Label>
+            <Input id="fs-title" value={title} onChange={(e) => setTitle(e.target.value)} placeholder="Company" />
+          </div>
+          <div className="space-y-1.5">
+            <Label htmlFor="fs-desc">Description</Label>
+            <Textarea id="fs-desc" rows={2} value={description} onChange={(e) => setDescription(e.target.value)}
+              placeholder="Short description shown in footer…" />
+          </div>
+          <div className="space-y-1.5">
+            <Label>Image</Label>
+            <MediaUpload value={imageUrl} onChange={setImageUrl} folder="footer" />
+          </div>
+          <div className="space-y-1.5">
+            <Label htmlFor="fs-sort">Sort order</Label>
+            <Input id="fs-sort" type="number" min="0" value={sortOrder} onChange={(e) => setSortOrder(e.target.value)} />
+          </div>
+        </div>
+        <DialogFooter>
+          <Button type="button" variant="outline" onClick={() => onOpenChange(false)}>Cancel</Button>
+          <Button type="button" onClick={create} disabled={saving}>
+            {saving ? <Loader2 className="size-4 animate-spin" /> : <Plus className="size-4" />}
+            Create section
+          </Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
+  );
+}
+
 // ─── Main Tab ─────────────────────────────────────────────────────────────────
 
 export function FooterSectionsTab() {
   const [sections, setSections] = React.useState<FooterSectionRow[]>([]);
   const [loading, setLoading] = React.useState(true);
+  const [addOpen, setAddOpen] = React.useState(false);
 
   const load = React.useCallback(() => {
     setLoading(true);
@@ -284,30 +390,32 @@ export function FooterSectionsTab() {
 
   React.useEffect(() => { load(); }, [load]);
 
-  if (loading) {
-    return (
-      <div className="flex flex-col gap-3 animate-pulse">
-        {[1, 2, 3].map((i) => <div key={i} className="h-16 rounded-xl bg-muted" />)}
-      </div>
-    );
-  }
-
-  if (!sections.length) {
-    return (
-      <div className="flex h-48 items-center justify-center text-sm text-muted-foreground">
-        No footer sections found.
-      </div>
-    );
-  }
-
   return (
     <div className="flex flex-col gap-3">
-      {sections
-        .slice()
-        .sort((a, b) => (a.sort_order ?? 0) - (b.sort_order ?? 0))
-        .map((s) => (
-          <SectionCard key={s.id} section={s} onSaved={load} />
-        ))}
+      <div className="flex justify-end">
+        <Button onClick={() => setAddOpen(true)}>
+          <Plus className="size-4" /> Add section
+        </Button>
+      </div>
+
+      <AddSectionDialog open={addOpen} onOpenChange={setAddOpen} onCreated={load} />
+
+      {loading ? (
+        <div className="flex flex-col gap-3 animate-pulse">
+          {[1, 2, 3].map((i) => <div key={i} className="h-16 rounded-xl bg-muted" />)}
+        </div>
+      ) : !sections.length ? (
+        <div className="flex h-48 items-center justify-center text-sm text-muted-foreground">
+          No footer sections found.
+        </div>
+      ) : (
+        sections
+          .slice()
+          .sort((a, b) => (a.sort_order ?? 0) - (b.sort_order ?? 0))
+          .map((s) => (
+            <SectionCard key={s.id} section={s} onSaved={load} />
+          ))
+      )}
     </div>
   );
 }

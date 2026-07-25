@@ -44,6 +44,9 @@ import { ColorsSection } from "@/components/settings/colors-section";
 import { MenusSection } from "@/components/settings/menus-section";
 import { MenuRightsSection } from "@/components/settings/menu-rights-section";
 import { WebsiteSettingsSection } from "@/components/settings/website-settings-section";
+import { ShippingSection } from "@/components/settings/shipping-section";
+import { CouriersSection } from "@/components/settings/couriers-section";
+import { PickupLocationsSection } from "@/components/settings/pickup-locations-section";
 import { useAuthStore } from "@/stores/auth-store";
 import { cn } from "@/lib/utils";
 import { useForm } from "react-hook-form";
@@ -64,7 +67,10 @@ type SectionKey =
   | "sizes"
   | "colors"
   | "menus"
-  | "menu-rights";
+  | "menu-rights"
+  | "shipping"
+  | "couriers"
+  | "pickup-locations";
 
 const settingsNav: {
   label: string;
@@ -83,7 +89,9 @@ const settingsNav: {
   { label: "Payments", icon: CreditCard },
   { label: "Checkout", icon: ShoppingCart },
   { label: "Customer accounts", icon: UserRound },
-  { label: "Shipping and delivery", icon: Truck },
+  { label: "Shipping and delivery", icon: Truck, key: "shipping" },
+  { label: "Couriers", icon: Truck, key: "couriers" },
+  { label: "Pickup locations", icon: MapPin, key: "pickup-locations" },
   { label: "Taxes and duties", icon: Percent },
   { label: "Locations", icon: MapPin },
   { label: "Apps", icon: AppWindow },
@@ -108,6 +116,9 @@ const sectionMeta: Record<
   colors: { title: "Colors", icon: Palette },
   menus: { title: "Menus", icon: ListTree },
   "menu-rights": { title: "Menu rights", icon: ShieldCheck },
+  shipping: { title: "Shipping & Delivery", icon: Truck },
+  couriers: { title: "Couriers", icon: Truck },
+  "pickup-locations": { title: "Pickup Locations", icon: MapPin },
 };
 
 function ChangePasswordSection() {
@@ -344,6 +355,9 @@ export default function SettingsPage() {
             {section === "menu-rights" && <MenuRightsSection />}
 
             {section === "general" && <WebsiteSettingsSection />}
+            {section === "shipping" && <ShippingSection />}
+            {section === "couriers" && <CouriersSection />}
+            {section === "pickup-locations" && <PickupLocationsSection />}
           </div>
         </div>
       </div>

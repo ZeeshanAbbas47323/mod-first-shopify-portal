@@ -1058,6 +1058,152 @@ export async function updateWebsiteSettings(
   return (data?.message as string) ?? "Settings saved.";
 }
 
+// ─── Shipping / Shipments ─────────────────────────────────────────────────────
+
+export interface ShipmentRow {
+  id: number | string;
+  order_id?: number | string;
+  order_number?: string;
+  carrier?: string;
+  tracking_number?: string;
+  status?: string;
+  pickup_address?: string;
+  delivery_address?: string;
+  estimated_delivery?: string;
+  shipped_at?: string;
+  created_at?: string;
+  [k: string]: unknown;
+}
+
+export async function listShipments(params: ListParams): Promise<ListResult<ShipmentRow>> {
+  const { data } = await api.post("shipping/list", buildBody(params));
+  return parseList<ShipmentRow>(data, params.limit);
+}
+
+export async function getShipmentById(id: number | string): Promise<ShipmentRow> {
+  const { data } = await api.get(`shipping/${id}`);
+  return (data?.payload ?? data?.data ?? data) as ShipmentRow;
+}
+
+export async function trackShipment(id: number | string): Promise<Json> {
+  const { data } = await api.get(`shipping/${id}/track`);
+  return (data?.payload ?? data?.data ?? data) as Json;
+}
+
+export async function voidShipment(id: number | string): Promise<string> {
+  const { data } = await api.delete(`shipping/${id}`);
+  return (data?.message as string) ?? "Shipment voided.";
+}
+
+export async function cancelPickup(id: number | string): Promise<string> {
+  const { data } = await api.delete(`shipping/pickup/${id}`);
+  return (data?.message as string) ?? "Pickup cancelled.";
+}
+
+// ─── Couriers ─────────────────────────────────────────────────────────────────
+
+export interface CourierRow {
+  id: number | string;
+  name: string;
+  tracking_url?: string | null;
+  logo_url?: string | null;
+  is_active?: boolean;
+  created_at?: string;
+}
+
+export async function listCouriers(params: ListParams): Promise<ListResult<CourierRow>> {
+  const { data } = await api.post("couriers/list", buildBody(params));
+  return parseList<CourierRow>(data, params.limit);
+}
+
+export async function createCourier(body: Partial<CourierRow>): Promise<string> {
+  const { data } = await api.post("couriers", body);
+  return (data?.message as string) ?? "Courier created.";
+}
+
+export async function updateCourier(id: number | string, body: Partial<CourierRow>): Promise<string> {
+  const { data } = await api.put(`couriers/${id}`, body);
+  return (data?.message as string) ?? "Courier updated.";
+}
+
+export async function deleteCourier(id: number | string): Promise<string> {
+  const { data } = await api.delete(`couriers/${id}`);
+  return (data?.message as string) ?? "Courier deleted.";
+}
+
+// ─── Popups ───────────────────────────────────────────────────────────────────
+
+export interface PopupRow {
+  id: number | string;
+  title: string;
+  description?: string | null;
+  image_url?: string | null;
+  button_text?: string | null;
+  button_url?: string | null;
+  position?: "center" | "bottom-left" | "bottom-right" | string;
+  is_active?: boolean;
+  start_date?: string | null;
+  end_date?: string | null;
+  created_at?: string;
+}
+
+export async function listPopups(params: ListParams): Promise<ListResult<PopupRow>> {
+  const { data } = await api.post("popups/list", buildBody(params));
+  return parseList<PopupRow>(data, params.limit);
+}
+
+export async function createPopup(body: Partial<PopupRow>): Promise<string> {
+  const { data } = await api.post("popups", body);
+  return (data?.message as string) ?? "Popup created.";
+}
+
+export async function updatePopup(id: number | string, body: Partial<PopupRow>): Promise<string> {
+  const { data } = await api.put(`popups/${id}`, body);
+  return (data?.message as string) ?? "Popup updated.";
+}
+
+export async function deletePopup(id: number | string): Promise<string> {
+  const { data } = await api.delete(`popups/${id}`);
+  return (data?.message as string) ?? "Popup deleted.";
+}
+
+// ─── Pickup Locations ─────────────────────────────────────────────────────────
+
+export interface PickupLocationRow {
+  id: number | string;
+  name: string;
+  address?: string | null;
+  city?: string | null;
+  state?: string | null;
+  country?: string | null;
+  postal_code?: string | null;
+  phone?: string | null;
+  email?: string | null;
+  is_active?: boolean;
+  created_at?: string;
+  [k: string]: unknown;
+}
+
+export async function listPickupLocations(params: ListParams): Promise<ListResult<PickupLocationRow>> {
+  const { data } = await api.post("pickup-locations/list", buildBody(params));
+  return parseList<PickupLocationRow>(data, params.limit);
+}
+
+export async function createPickupLocation(body: Partial<PickupLocationRow>): Promise<string> {
+  const { data } = await api.post("pickup-locations", body);
+  return (data?.message as string) ?? "Pickup location created.";
+}
+
+export async function updatePickupLocation(id: number | string, body: Partial<PickupLocationRow>): Promise<string> {
+  const { data } = await api.put(`pickup-locations/${id}`, body);
+  return (data?.message as string) ?? "Pickup location updated.";
+}
+
+export async function deletePickupLocation(id: number | string): Promise<string> {
+  const { data } = await api.delete(`pickup-locations/${id}`);
+  return (data?.message as string) ?? "Pickup location deleted.";
+}
+
 // ─── Footer Sections ──────────────────────────────────────────────────────────
 
 export interface FooterLinkRow {
@@ -1089,6 +1235,13 @@ export async function listFooterSections(): Promise<FooterSectionRow[]> {
   const p: Json = data?.payload ?? data?.data ?? data ?? {};
   const rows: Json[] = p.rows ?? p.list ?? p.items ?? p.data ?? (Array.isArray(p) ? p : []);
   return rows as FooterSectionRow[];
+}
+
+export async function createFooterSection(
+  body: Partial<FooterSectionRow> & { section_key: string; links?: FooterLinkRow[] }
+): Promise<string> {
+  const { data } = await api.post("footer-sections", body);
+  return (data?.message as string) ?? "Footer section created.";
 }
 
 export async function updateFooterSection(
