@@ -28,6 +28,9 @@ const toneMap: Record<string, BadgeTone> = {
   // customers
   Subscribed: "success",
   "Not subscribed": "neutral",
+  // coupons
+  Expired: "critical",
+  "Used up": "neutral",
 };
 
 export function StatusBadge({

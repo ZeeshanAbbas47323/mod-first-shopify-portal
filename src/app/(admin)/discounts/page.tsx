@@ -24,6 +24,7 @@ import { DataTable } from "@/components/data-table";
 import { DateRangePicker } from "@/components/date-range-picker";
 import { StatusBadge } from "@/components/status-badge";
 import { apiErrorMessage } from "@/lib/auth-api";
+import { parseServerDate, toLocalDateInput } from "@/lib/utils";
 import {
   COUPON_TYPES,
   COUPON_STATUSES,
@@ -57,8 +58,7 @@ const typeLabel: Record<CouponType, string> = {
   free_shipping: "Free shipping",
 };
 
-const statusTone = (s?: string) =>
-  s === "active" ? "success" : s === "expired" ? "critical" : "neutral";
+// Status tones now live in the shared toneMap (src/components/status-badge.tsx).
 
 const columns: ColumnDef<CouponRow>[] = [
   {
@@ -111,7 +111,10 @@ const columns: ColumnDef<CouponRow>[] = [
     cell: ({ row }) => {
       const r = row.original;
       if (!r.start_date && !r.end_date) return <span className="text-muted-foreground text-sm">Always</span>;
-      const f = (d?: string | null) => (d ? format(new Date(d), "MMM d, yyyy") : "∞");
+      const f = (d?: string | null) => {
+        const dt = parseServerDate(d ?? undefined);
+        return dt ? format(dt, "MMM d, yyyy") : "∞";
+      };
       return <span className="text-xs">{f(r.start_date)} → {f(r.end_date)}</span>;
     },
   },
@@ -121,7 +124,7 @@ const columns: ColumnDef<CouponRow>[] = [
     cell: ({ row }) => {
       const s = row.original.status ?? "active";
       const label = s === "used_up" ? "Used up" : s.charAt(0).toUpperCase() + s.slice(1);
-      return <StatusBadge status={label} tone={statusTone(s)} />;
+      return <StatusBadge status={label} />;
     },
   },
 ];
@@ -236,7 +239,10 @@ export default function DiscountsPage() {
 const couponSchema = z.object({
   code: z.string().min(1, "Code is required").regex(/^[A-Z0-9_-]+$/, "Uppercase letters, numbers, dashes and underscores only"),
   type: z.enum(COUPON_TYPES),
-  value: z.number({ error: "Value is required" }).nonnegative("Must be 0 or more"),
+  // `value` is only required for percentage / fixed_amount; free_shipping ignores it.
+  // A cleared input yields NaN under valueAsNumber — coerce that to undefined here
+  // and only enforce a number on the non-free-shipping branches via superRefine below.
+  value: z.union([z.number(), z.nan()]).optional(),
   min_order_amount: z.number().nonnegative().optional(),
   usage_limit: z.number().int().positive().optional(),
   per_user_limit: z.number().int().positive().optional(),
@@ -244,6 +250,19 @@ const couponSchema = z.object({
   end_date: z.string().optional(),
   status: z.enum(COUPON_STATUSES),
   is_active: z.boolean(),
+}).superRefine((data, ctx) => {
+  if (data.type === "free_shipping") return;
+  const v = data.value;
+  if (v === undefined || v === null || Number.isNaN(v)) {
+    ctx.addIssue({ code: "custom", path: ["value"], message: "Value is required" });
+    return;
+  }
+  if (v < 0) {
+    ctx.addIssue({ code: "custom", path: ["value"], message: "Must be 0 or more" });
+  }
+  if (data.type === "percentage" && v > 100) {
+    ctx.addIssue({ code: "custom", path: ["value"], message: "Percentage must be 100 or less" });
+  }
 });
 type CouponValues = z.infer<typeof couponSchema>;
 
@@ -277,8 +296,8 @@ function CouponDialog({
       min_order_amount: editing?.min_order_amount ?? undefined,
       usage_limit: editing?.usage_limit ?? undefined,
       per_user_limit: editing?.per_user_limit ?? undefined,
-      start_date: editing?.start_date?.slice(0, 10) ?? "",
-      end_date: editing?.end_date?.slice(0, 10) ?? "",
+      start_date: toLocalDateInput(editing?.start_date ?? undefined),
+      end_date: toLocalDateInput(editing?.end_date ?? undefined),
       status: editing?.status ?? "active",
       is_active: editing?.is_active ?? true,
     });
@@ -290,7 +309,7 @@ function CouponDialog({
     const body: Partial<CouponRow> = {
       code: values.code.toUpperCase(),
       type: values.type,
-      value: values.type === "free_shipping" ? 0 : values.value,
+      value: values.type === "free_shipping" ? 0 : (values.value ?? 0),
       min_order_amount: values.min_order_amount,
       usage_limit: values.usage_limit,
       per_user_limit: values.per_user_limit,
@@ -350,7 +369,7 @@ function CouponDialog({
               <Input id="coupon-value" type="number" step="0.01" min="0"
                 disabled={currentType === "free_shipping"}
                 aria-invalid={!!errors.value}
-                {...register("value", { valueAsNumber: true })} />
+                {...register("value", { setValueAs: numOrUndefined })} />
               {errors.value && <p className="text-sm text-destructive">{errors.value.message}</p>}
             </div>
             <div className="space-y-1.5">

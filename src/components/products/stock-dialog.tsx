@@ -46,12 +46,15 @@ const reasonLabel: Record<string, string> = {
   DAMAGED: "Damaged",
 };
 
-const stockSchema = z.object({
-  quantity: z.number({ error: "Quantity is required" }).positive("Must be greater than 0"),
-  reason: z.enum(INVENTORY_REASONS).optional(),
-  notes: z.string().optional(),
-});
-type StockValues = z.infer<typeof stockSchema>;
+const buildStockSchema = (mode: Mode) =>
+  z.object({
+    quantity: mode === "adjust"
+      ? z.number({ error: "Quantity is required" }).nonnegative("Must be 0 or more")
+      : z.number({ error: "Quantity is required" }).positive("Must be greater than 0"),
+    reason: z.enum(INVENTORY_REASONS).optional(),
+    notes: z.string().optional(),
+  });
+type StockValues = { quantity: number; reason?: InventoryReason; notes?: string };
 
 export function StockDialog({
   open, onOpenChange, productId, productName, variantId, variantLabel,
@@ -70,25 +73,53 @@ export function StockDialog({
   const [logsLoading, setLogsLoading] = React.useState(false);
   const [refreshKey, setRefreshKey] = React.useState(0);
 
+  const modeRef = React.useRef<Mode>(mode);
+  React.useEffect(() => { modeRef.current = mode; }, [mode]);
+
   const { register, handleSubmit, control, reset, formState: { errors, isSubmitting } } =
     useForm<StockValues>({
-      resolver: zodResolver(stockSchema),
-      defaultValues: { quantity: undefined, reason: undefined, notes: "" },
+      resolver: (values, context, options) =>
+        zodResolver(buildStockSchema(modeRef.current))(values, context, options),
+      defaultValues: { quantity: undefined as unknown as number, reason: undefined, notes: "" },
     });
 
   React.useEffect(() => {
     if (open) {
-      reset({ quantity: undefined, reason: undefined, notes: "" });
+      reset({ quantity: undefined as unknown as number, reason: undefined, notes: "" });
       setMode("increase");
     }
   }, [open, reset]);
+
+  // Re-reset when mode changes so the mode-specific schema applies to a fresh form
+  React.useEffect(() => {
+    reset({ quantity: undefined as unknown as number, reason: undefined, notes: "" });
+  }, [mode, reset]);
 
   React.useEffect(() => {
     if (!open) return;
     let cancelled = false;
     setStockLoading(true);
     getInventoryStock(productId, variantId ?? undefined)
-      .then((s) => !cancelled && setStock(s))
+      .then((raw) => {
+        if (cancelled) return;
+        // Response envelope may be flat, nested under `stock`, or an array `stocks[]`
+        const r = raw as Record<string, unknown> | null;
+        let flat: InventoryStock | null = null;
+        if (r && typeof r === "object") {
+          if (typeof (r as { quantity?: unknown }).quantity === "number") {
+            flat = r as unknown as InventoryStock;
+          } else if ((r as { stock?: unknown }).stock && typeof (r as { stock?: Record<string, unknown> }).stock === "object") {
+            flat = (r as { stock: InventoryStock }).stock;
+          } else if (Array.isArray((r as { stocks?: unknown }).stocks)) {
+            const stocks = (r as { stocks: InventoryStock[] }).stocks;
+            const target = variantId != null
+              ? stocks.find((s) => String(s.variant_id) === String(variantId))
+              : stocks.find((s) => s.variant_id == null) ?? stocks[0];
+            flat = target ?? null;
+          }
+        }
+        setStock(flat);
+      })
       .catch(() => !cancelled && setStock(null))
       .finally(() => !cancelled && setStockLoading(false));
     return () => { cancelled = true; };
@@ -177,9 +208,15 @@ export function StockDialog({
             <Label htmlFor="stock-qty">
               {mode === "adjust" ? "New exact quantity" : "Quantity"} *
             </Label>
-            <Input id="stock-qty" type="number" min="1" step="1"
+            <Input id="stock-qty" type="number" min={mode === "adjust" ? "0" : "1"} step="1"
               aria-invalid={!!errors.quantity}
-              {...register("quantity", { valueAsNumber: true })} />
+              {...register("quantity", {
+                setValueAs: (v) => {
+                  if (v === "" || v === null || v === undefined) return undefined;
+                  const n = typeof v === "number" ? v : parseFloat(String(v));
+                  return isNaN(n) ? undefined : n;
+                },
+              })} />
             {errors.quantity && <p className="text-sm text-destructive">{errors.quantity.message}</p>}
           </div>
 

@@ -150,17 +150,24 @@ export default function ProductsPage() {
     {
       id: "actions",
       header: "",
-      cell: ({ row }) => (
-        <Button
-          size="sm"
-          variant="ghost"
-          className="size-8 p-0"
-          onClick={(e) => { e.stopPropagation(); setStockTarget(row.original); }}
-          aria-label="Manage stock"
-        >
-          <Boxes className="size-4" />
-        </Button>
-      ),
+      cell: ({ row }) => {
+        // Products with variants track stock per variant; the row-level shortcut
+        // would target a phantom product-level bucket, so hide it. Users can
+        // adjust per-variant stock from the product's edit page.
+        const hasVariants = (row.original.variants_count ?? 0) > 0;
+        if (hasVariants) return null;
+        return (
+          <Button
+            size="sm"
+            variant="ghost"
+            className="size-8 p-0"
+            onClick={(e) => { e.stopPropagation(); setStockTarget(row.original); }}
+            aria-label="Manage stock"
+          >
+            <Boxes className="size-4" />
+          </Button>
+        );
+      },
     },
   ], []);
   const router = useRouter();

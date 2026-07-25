@@ -103,8 +103,22 @@ const productFormSchema = z.object({
   sku: z.string().optional(),
   quantity: z.string().optional(),
   // Discounts
-  discount_percent: z.string().optional(),
-  discount_amount: z.string().optional(),
+  discount_percent: z
+    .string()
+    .optional()
+    .refine((v) => {
+      if (!v || v.trim() === "") return true;
+      const n = parseFloat(v);
+      return !isNaN(n) && n >= 0 && n <= 100;
+    }, "Enter a value between 0 and 100"),
+  discount_amount: z
+    .string()
+    .optional()
+    .refine((v) => {
+      if (!v || v.trim() === "") return true;
+      const n = parseFloat(v);
+      return !isNaN(n) && n >= 0;
+    }, "Must be 0 or more"),
   // Shipping
   requires_shipping: z.boolean(),
   weight: z.string().optional(),
@@ -882,7 +896,12 @@ export function ProductForm({ product }: { product?: ProductDetailRow }) {
   };
 
   const onSubmit = async (values: ProductFormValues) => {
-    const hasVariants = values.variants.length > 0;
+    // Treat the product as variant-tracked when EITHER the form has variant rows
+    // OR the server thinks it has variants (guards against a partial hydration
+    // wiping out per-variant stock via a product-level quantity write).
+    const serverVariantCount =
+      (product as { variants_count?: number } | null | undefined)?.variants_count ?? 0;
+    const hasVariants = values.variants.length > 0 || serverVariantCount > 0;
     const body = {
       // API field names
       name: values.title,
