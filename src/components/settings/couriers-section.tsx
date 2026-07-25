@@ -12,6 +12,7 @@ import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { Textarea } from "@/components/ui/textarea";
 import {
   Dialog, DialogContent, DialogDescription,
   DialogFooter, DialogHeader, DialogTitle,
@@ -33,7 +34,22 @@ const columns: ColumnDef<CourierRow>[] = [
   {
     accessorKey: "name",
     header: "Courier",
-    cell: ({ row }) => <span className="font-medium">{row.original.name}</span>,
+    cell: ({ row }) => (
+      <div className="min-w-0">
+        <p className="truncate font-medium">{row.original.name}</p>
+        <p className="truncate font-mono text-xs text-muted-foreground">{row.original.code}</p>
+      </div>
+    ),
+  },
+  {
+    accessorKey: "email",
+    header: "Email",
+    cell: ({ row }) => row.original.email ?? "—",
+  },
+  {
+    accessorKey: "contact_number",
+    header: "Phone",
+    cell: ({ row }) => row.original.contact_number ?? "—",
   },
   {
     accessorKey: "tracking_url",
@@ -132,7 +148,13 @@ export function CouriersSection() {
 
 const courierSchema = z.object({
   name: z.string().min(1, "Name is required"),
+  code: z.string().min(1, "Code is required").regex(/^[A-Z0-9_]+$/, "Uppercase letters, numbers and underscores only"),
+  email: z.string().email("Must be a valid email").optional().or(z.literal("")),
+  contact_number: z.string().optional(),
+  booking_url: z.string().url("Must be a valid URL").optional().or(z.literal("")),
   tracking_url: z.string().url("Must be a valid URL").optional().or(z.literal("")),
+  website: z.string().url("Must be a valid URL").optional().or(z.literal("")),
+  notes: z.string().optional(),
   status: z.enum(["active", "inactive"]),
 });
 type CourierValues = z.infer<typeof courierSchema>;
@@ -148,7 +170,10 @@ function CourierDialog({
   const { register, handleSubmit, control, reset, formState: { errors, isSubmitting } } =
     useForm<CourierValues>({
       resolver: zodResolver(courierSchema),
-      defaultValues: { name: "", tracking_url: "", status: "active" },
+      defaultValues: {
+        name: "", code: "", email: "", contact_number: "",
+        booking_url: "", tracking_url: "", website: "", notes: "", status: "active",
+      },
     });
 
   const [deleting, setDeleting] = React.useState(false);
@@ -156,7 +181,13 @@ function CourierDialog({
   React.useEffect(() => {
     if (open) reset({
       name: editing?.name ?? "",
+      code: editing?.code ?? "",
+      email: editing?.email ?? "",
+      contact_number: editing?.contact_number ?? "",
+      booking_url: editing?.booking_url ?? "",
       tracking_url: editing?.tracking_url ?? "",
+      website: editing?.website ?? "",
+      notes: editing?.notes ?? "",
       status: editing?.is_active === false ? "inactive" : "active",
     });
   }, [open, editing, reset]);
@@ -164,7 +195,13 @@ function CourierDialog({
   const onSubmit = async (values: CourierValues) => {
     const body = {
       name: values.name,
+      code: values.code.toUpperCase(),
+      email: values.email || undefined,
+      contact_number: values.contact_number || undefined,
+      booking_url: values.booking_url || undefined,
       tracking_url: values.tracking_url || undefined,
+      website: values.website || undefined,
+      notes: values.notes || undefined,
       is_active: values.status === "active",
     };
     try {
@@ -194,7 +231,7 @@ function CourierDialog({
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="sm:max-w-sm">
+      <DialogContent className="max-h-[90vh] overflow-y-auto sm:max-w-lg">
         <DialogHeader>
           <DialogTitle>{editing ? "Edit courier" : "Add courier"}</DialogTitle>
           <DialogDescription>
@@ -202,18 +239,60 @@ function CourierDialog({
           </DialogDescription>
         </DialogHeader>
         <form onSubmit={handleSubmit(onSubmit)} className="space-y-4" noValidate>
-          <div className="space-y-1.5">
-            <Label htmlFor="courier-name">Name *</Label>
-            <Input id="courier-name" placeholder="DHL, FedEx…" aria-invalid={!!errors.name} {...register("name")} />
-            {errors.name && <p className="text-sm text-destructive">{errors.name.message}</p>}
+          <div className="grid grid-cols-2 gap-3">
+            <div className="space-y-1.5">
+              <Label htmlFor="courier-name">Name *</Label>
+              <Input id="courier-name" placeholder="FedEx Express" aria-invalid={!!errors.name} {...register("name")} />
+              {errors.name && <p className="text-sm text-destructive">{errors.name.message}</p>}
+            </div>
+            <div className="space-y-1.5">
+              <Label htmlFor="courier-code">Code *</Label>
+              <Input id="courier-code" placeholder="FEDEX" className="font-mono uppercase"
+                aria-invalid={!!errors.code} {...register("code")} />
+              {errors.code && <p className="text-sm text-destructive">{errors.code.message}</p>}
+            </div>
           </div>
+
+          <div className="grid grid-cols-2 gap-3">
+            <div className="space-y-1.5">
+              <Label htmlFor="courier-email">Email</Label>
+              <Input id="courier-email" type="email" placeholder="support@fedex.com"
+                aria-invalid={!!errors.email} {...register("email")} />
+              {errors.email && <p className="text-sm text-destructive">{errors.email.message}</p>}
+            </div>
+            <div className="space-y-1.5">
+              <Label htmlFor="courier-phone">Contact number</Label>
+              <Input id="courier-phone" placeholder="+1 (800) 463-3339" {...register("contact_number")} />
+            </div>
+          </div>
+
+          <div className="space-y-1.5">
+            <Label htmlFor="courier-website">Website</Label>
+            <Input id="courier-website" placeholder="https://fedex.com"
+              aria-invalid={!!errors.website} {...register("website")} />
+            {errors.website && <p className="text-sm text-destructive">{errors.website.message}</p>}
+          </div>
+
+          <div className="space-y-1.5">
+            <Label htmlFor="courier-booking-url">Booking URL</Label>
+            <Input id="courier-booking-url" placeholder="https://fedex.com/booking"
+              aria-invalid={!!errors.booking_url} {...register("booking_url")} />
+            {errors.booking_url && <p className="text-sm text-destructive">{errors.booking_url.message}</p>}
+          </div>
+
           <div className="space-y-1.5">
             <Label htmlFor="courier-url">Tracking URL</Label>
-            <Input id="courier-url" placeholder="https://track.example.com/{tracking_number}"
+            <Input id="courier-url" placeholder="https://fedex.com/track"
               aria-invalid={!!errors.tracking_url} {...register("tracking_url")} />
             {errors.tracking_url && <p className="text-sm text-destructive">{errors.tracking_url.message}</p>}
-            <p className="text-xs text-muted-foreground">Use {"{tracking_number}"} as placeholder.</p>
           </div>
+
+          <div className="space-y-1.5">
+            <Label htmlFor="courier-notes">Notes</Label>
+            <Textarea id="courier-notes" rows={2} placeholder="Reliable courier for nationwide shipping"
+              {...register("notes")} />
+          </div>
+
           <div className="space-y-1.5">
             <Label>Status</Label>
             <Controller control={control} name="status" render={({ field }) => (
@@ -226,6 +305,7 @@ function CourierDialog({
               </Select>
             )} />
           </div>
+
           <DialogFooter className="gap-2">
             {editing && (
               <Button type="button" variant="outline" disabled={deleting}

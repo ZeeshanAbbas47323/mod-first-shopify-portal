@@ -1142,13 +1142,42 @@ export async function cancelPickup(id: number | string): Promise<string> {
   return (data?.message as string) ?? "Pickup cancelled.";
 }
 
+export async function schedulePickup(body: {
+  shipment_ids: (number | string)[];
+  requested_start_time: string;
+  requested_end_time: string;
+}): Promise<string> {
+  const { data } = await api.post("shippings/pickup/schedule", body);
+  return (data?.message as string) ?? "Pickup scheduled.";
+}
+
+export async function getPickupById(pickupId: number | string): Promise<Json> {
+  const { data } = await api.get(`shippings/pickup/${pickupId}`);
+  return (data?.payload ?? data?.data ?? data) as Json;
+}
+
+export async function syncShipmentPickup(body: {
+  courier_id: number | string;
+  order_id: number | string;
+  shippingAddress?: ShippingAddressInput;
+  packageDetails?: PackageDetailsInput;
+}): Promise<string> {
+  const { data } = await api.post("shippings/pickup/sync", body);
+  return (data?.message as string) ?? "Pickup synced.";
+}
+
 // ─── Couriers ─────────────────────────────────────────────────────────────────
 
 export interface CourierRow {
   id: number | string;
   name: string;
+  code: string;
+  email?: string | null;
+  contact_number?: string | null;
+  booking_url?: string | null;
   tracking_url?: string | null;
-  logo_url?: string | null;
+  website?: string | null;
+  notes?: string | null;
   is_active?: boolean;
   created_at?: string;
 }
@@ -1156,6 +1185,11 @@ export interface CourierRow {
 export async function listCouriers(params: ListParams): Promise<ListResult<CourierRow>> {
   const { data } = await api.post("couriers/list", buildBody(params));
   return parseList<CourierRow>(data, params.limit);
+}
+
+export async function getCourierById(id: number | string): Promise<CourierRow> {
+  const { data } = await api.get(`couriers/get/${id}`);
+  return (data?.payload ?? data?.data ?? data) as CourierRow;
 }
 
 export async function createCourier(body: Partial<CourierRow>): Promise<string> {

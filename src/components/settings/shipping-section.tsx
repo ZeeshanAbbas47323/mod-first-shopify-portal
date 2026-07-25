@@ -3,7 +3,7 @@
 import * as React from "react";
 import { type ColumnDef } from "@tanstack/react-table";
 import { format } from "date-fns";
-import { Eye, Loader2, Plus, Search, Trash2, X } from "lucide-react";
+import { CalendarClock, Eye, Loader2, Plus, Search, Trash2, X } from "lucide-react";
 import { useForm, Controller } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
@@ -34,6 +34,7 @@ import {
   voidShipment,
   cancelPickup,
   createShipmentRate,
+  schedulePickup,
   listCouriers,
   type ShipmentRow,
   type CourierRow,
@@ -60,6 +61,7 @@ export function ShippingSection() {
   const [debounced, setDebounced] = React.useState("");
   const [refreshKey, setRefreshKey] = React.useState(0);
   const [createOpen, setCreateOpen] = React.useState(false);
+  const [pickupOpen, setPickupOpen] = React.useState(false);
 
   const [detailOpen, setDetailOpen] = React.useState(false);
   const [selected, setSelected] = React.useState<ShipmentRow | null>(null);
@@ -283,7 +285,15 @@ export function ShippingSection() {
                 </div>
               )}
 
-              <div className="flex gap-2 pt-2 border-t border-border">
+              <div className="flex flex-wrap gap-2 pt-2 border-t border-border">
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => setPickupOpen(true)}
+                >
+                  <CalendarClock className="size-3.5" />
+                  Schedule pickup
+                </Button>
                 <Button
                   variant="outline"
                   size="sm"
@@ -307,6 +317,13 @@ export function ShippingSection() {
           ) : null}
         </DialogContent>
       </Dialog>
+
+      <SchedulePickupDialog
+        open={pickupOpen}
+        onOpenChange={setPickupOpen}
+        shipmentId={selected?.id ?? null}
+        onScheduled={() => setRefreshKey((k) => k + 1)}
+      />
     </div>
   );
 }
@@ -331,6 +348,81 @@ function DetailRow({
         </p>
       )}
     </div>
+  );
+}
+
+// ─── Schedule Pickup Dialog ──────────────────────────────────────────────────
+
+const schedulePickupSchema = z.object({
+  requested_start_time: z.string().min(1, "Start time is required"),
+  requested_end_time: z.string().min(1, "End time is required"),
+});
+type SchedulePickupValues = z.infer<typeof schedulePickupSchema>;
+
+function SchedulePickupDialog({
+  open, onOpenChange, shipmentId, onScheduled,
+}: {
+  open: boolean;
+  onOpenChange: (v: boolean) => void;
+  shipmentId: number | string | null;
+  onScheduled: () => void;
+}) {
+  const { register, handleSubmit, reset, formState: { errors, isSubmitting } } =
+    useForm<SchedulePickupValues>({
+      resolver: zodResolver(schedulePickupSchema),
+      defaultValues: { requested_start_time: "", requested_end_time: "" },
+    });
+
+  React.useEffect(() => {
+    if (open) reset({ requested_start_time: "", requested_end_time: "" });
+  }, [open, reset]);
+
+  const onSubmit = async (values: SchedulePickupValues) => {
+    if (!shipmentId) return;
+    try {
+      const msg = await schedulePickup({
+        shipment_ids: [shipmentId],
+        requested_start_time: new Date(values.requested_start_time).toISOString(),
+        requested_end_time: new Date(values.requested_end_time).toISOString(),
+      });
+      toast.success(msg);
+      onOpenChange(false);
+      onScheduled();
+    } catch (err) {
+      toast.error(apiErrorMessage(err, "Couldn't schedule pickup."));
+    }
+  };
+
+  return (
+    <Dialog open={open} onOpenChange={onOpenChange}>
+      <DialogContent className="sm:max-w-sm">
+        <DialogHeader>
+          <DialogTitle>Schedule pickup</DialogTitle>
+          <DialogDescription>Choose a pickup window for this shipment.</DialogDescription>
+        </DialogHeader>
+        <form onSubmit={handleSubmit(onSubmit)} className="space-y-4" noValidate>
+          <div className="space-y-1.5">
+            <Label htmlFor="pickup-start">Start time *</Label>
+            <Input id="pickup-start" type="datetime-local"
+              aria-invalid={!!errors.requested_start_time} {...register("requested_start_time")} />
+            {errors.requested_start_time && <p className="text-sm text-destructive">{errors.requested_start_time.message}</p>}
+          </div>
+          <div className="space-y-1.5">
+            <Label htmlFor="pickup-end">End time *</Label>
+            <Input id="pickup-end" type="datetime-local"
+              aria-invalid={!!errors.requested_end_time} {...register("requested_end_time")} />
+            {errors.requested_end_time && <p className="text-sm text-destructive">{errors.requested_end_time.message}</p>}
+          </div>
+          <DialogFooter>
+            <Button type="button" variant="outline" onClick={() => onOpenChange(false)}>Cancel</Button>
+            <Button type="submit" disabled={isSubmitting}>
+              {isSubmitting && <Loader2 className="size-4 animate-spin" />}
+              Schedule pickup
+            </Button>
+          </DialogFooter>
+        </form>
+      </DialogContent>
+    </Dialog>
   );
 }
 
