@@ -999,58 +999,97 @@ export async function globalAdminSearch(
 
 export interface WebsiteSettingRow {
   id?: number | string;
+  // Required on create
   site_name?: string;
-  site_tagline?: string;
-  site_description?: string;
-  logo_url?: string | null;
-  favicon_url?: string | null;
-  footer_logo_url?: string | null;
   primary_color?: string;
   secondary_color?: string;
-  accent_color?: string;
   font_primary?: string;
   font_heading?: string;
-  contact_email?: string;
-  support_email?: string;
-  contact_phone?: string;
-  whatsapp_number?: string;
-  address?: string;
-  city?: string;
-  country_code?: string;
-  postal_code?: string;
-  province_code?: string;
-  business_hours?: string;
-  facebook_url?: string;
-  instagram_url?: string;
-  twitter_url?: string;
-  linkedin_url?: string;
-  youtube_url?: string;
-  tiktok_url?: string;
-  pinterest_url?: string;
-  playstore_url?: string;
-  appstore_url?: string;
-  currency?: string;
-  currency_symbol?: string;
+  // Optional
+  site_tagline?: string | null;
+  site_description?: string | null;
+  logo_url?: string | null;             // generic fallback logo
+  logo_white_url?: string | null;       // used in EMAILS (dark header band)
+  logo_black_url?: string | null;       // used on RECEIPTS and PRINTS (white paper)
+  favicon_url?: string | null;
+  footer_logo_url?: string | null;
+  accent_color?: string | null;
+  contact_email?: string | null;
+  support_email?: string | null;
+  contact_phone?: string | null;
+  whatsapp_number?: string | null;
+  address?: string | null;
+  city?: string | null;
+  country_code?: string | null;
+  postal_code?: string | null;
+  province_code?: string | null;
+  business_hours?: string | null;
+  facebook_url?: string | null;
+  instagram_url?: string | null;
+  twitter_url?: string | null;
+  linkedin_url?: string | null;
+  youtube_url?: string | null;
+  tiktok_url?: string | null;
+  pinterest_url?: string | null;
+  playstore_url?: string | null;
+  appstore_url?: string | null;
+  currency?: string;              // default USD
+  currency_symbol?: string;       // default $
   tax_percentage?: number | null;
   default_shipping_fee?: number | null;
-  free_shipping_threshold?: number | null;
+  free_shipping_threshold?: number | null;   // display only, not applied at checkout
   min_order_amount?: number | null;
-  first_order_discount_enabled?: boolean;
-  first_order_discount_type?: string;
+  first_order_discount_enabled?: boolean;    // default false
+  first_order_discount_type?: "percentage" | "fixed_amount" | string | null;
   first_order_discount_value?: number | null;
   first_order_max_discount?: number | null;
-  meta_title?: string;
-  meta_description?: string;
-  meta_keywords?: string;
-  is_active?: boolean;
+  meta_title?: string | null;
+  meta_description?: string | null;
+  meta_keywords?: string | null;
+  og_image_url?: string | null;
+  order_prefix?: string;          // string, min 1, max 10
+  is_active?: boolean;            // default true
 }
 
+/** Current admin settings (single row) — preferred over list-and-take-first. */
+export async function getCurrentWebsiteSettings(): Promise<WebsiteSettingRow | null> {
+  try {
+    const { data } = await api.get("website-settings/current");
+    const payload = (data?.payload ?? data?.data ?? data) as WebsiteSettingRow | null;
+    return payload && (payload.id != null || payload.site_name != null) ? payload : null;
+  } catch {
+    return null;
+  }
+}
+
+/** Website settings by ID. */
+export async function getWebsiteSettingById(id: number | string): Promise<WebsiteSettingRow> {
+  const { data } = await api.get(`website-settings/get/${id}`);
+  return (data?.payload ?? data?.data ?? data) as WebsiteSettingRow;
+}
+
+/** Public storefront settings (no auth required on the server, still callable). */
+export async function getPublicWebsiteSettings(): Promise<WebsiteSettingRow> {
+  const { data } = await api.get("website-settings/public");
+  return (data?.payload ?? data?.data ?? data) as WebsiteSettingRow;
+}
+
+/** Legacy alias — prefer getCurrentWebsiteSettings. Kept for existing callers. */
 export async function fetchWebsiteSettings(): Promise<WebsiteSettingRow | null> {
+  const current = await getCurrentWebsiteSettings();
+  if (current) return current;
+  // Fallback to list (older envs may not expose /current)
   const { data } = await api.post("website-settings/list", { page: 1, limit: 1 });
   const p: Json = data?.payload ?? data?.data ?? data ?? {};
   const rows: Json[] = p.rows ?? p.list ?? p.data ?? p.items ?? (Array.isArray(p) ? p : []);
-  if (!rows.length) return null;
-  return rows[0] as WebsiteSettingRow;
+  return rows.length ? (rows[0] as WebsiteSettingRow) : null;
+}
+
+export async function createWebsiteSettings(
+  body: Partial<WebsiteSettingRow>
+): Promise<string> {
+  const { data } = await api.post("website-settings", body);
+  return (data?.message as string) ?? "Settings created.";
 }
 
 export async function updateWebsiteSettings(

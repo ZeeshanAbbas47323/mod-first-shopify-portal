@@ -17,7 +17,8 @@ import { Textarea } from "@/components/ui/textarea";
 import { apiErrorMessage } from "@/lib/auth-api";
 import { uploadImage } from "@/lib/upload-api";
 import {
-  fetchWebsiteSettings,
+  getCurrentWebsiteSettings,
+  createWebsiteSettings,
   updateWebsiteSettings,
   type WebsiteSettingRow,
 } from "@/lib/admin-api";
@@ -25,14 +26,16 @@ import {
 // ─── Schema ──────────────────────────────────────────────────────────────────
 
 const schema = z.object({
+  // Required per API contract
   site_name: z.string().min(1, "Site name is required"),
+  primary_color: z.string().min(1, "Primary color is required"),
+  secondary_color: z.string().min(1, "Secondary color is required"),
+  font_primary: z.string().min(1, "Primary font is required"),
+  font_heading: z.string().min(1, "Heading font is required"),
+  // Optional
   site_tagline: z.string().optional(),
   site_description: z.string().optional(),
-  primary_color: z.string().optional(),
-  secondary_color: z.string().optional(),
   accent_color: z.string().optional(),
-  font_primary: z.string().optional(),
-  font_heading: z.string().optional(),
   contact_email: z.string().optional(),
   support_email: z.string().optional(),
   contact_phone: z.string().optional(),
@@ -65,6 +68,10 @@ const schema = z.object({
   meta_title: z.string().optional(),
   meta_description: z.string().optional(),
   meta_keywords: z.string().optional(),
+  order_prefix: z
+    .string()
+    .optional()
+    .refine((v) => !v || (v.length >= 1 && v.length <= 10), "1 to 10 characters"),
 });
 
 type FormValues = z.infer<typeof schema>;
@@ -172,8 +179,11 @@ export function WebsiteSettingsSection() {
 
   // Image fields managed outside form (file upload)
   const [logo, setLogo] = React.useState<string | null>(null);
+  const [logoWhite, setLogoWhite] = React.useState<string | null>(null);
+  const [logoBlack, setLogoBlack] = React.useState<string | null>(null);
   const [favicon, setFavicon] = React.useState<string | null>(null);
   const [footerLogo, setFooterLogo] = React.useState<string | null>(null);
+  const [ogImage, setOgImage] = React.useState<string | null>(null);
 
   const {
     register,
@@ -186,13 +196,16 @@ export function WebsiteSettingsSection() {
   });
 
   React.useEffect(() => {
-    fetchWebsiteSettings()
+    getCurrentWebsiteSettings()
       .then((s) => {
         setSetting(s);
         if (s) {
           setLogo(s.logo_url ?? null);
+          setLogoWhite(s.logo_white_url ?? null);
+          setLogoBlack(s.logo_black_url ?? null);
           setFavicon(s.favicon_url ?? null);
           setFooterLogo(s.footer_logo_url ?? null);
+          setOgImage(s.og_image_url ?? null);
           reset({
             site_name: s.site_name ?? "",
             site_tagline: s.site_tagline ?? "",
@@ -200,8 +213,8 @@ export function WebsiteSettingsSection() {
             primary_color: s.primary_color ?? "#030303",
             secondary_color: s.secondary_color ?? "#C2E105",
             accent_color: s.accent_color ?? "#FFFFFF",
-            font_primary: s.font_primary ?? "",
-            font_heading: s.font_heading ?? "",
+            font_primary: s.font_primary ?? "Barlow",
+            font_heading: s.font_heading ?? "Barlow",
             contact_email: s.contact_email ?? "",
             support_email: s.support_email ?? "",
             contact_phone: s.contact_phone ?? "",
@@ -234,7 +247,20 @@ export function WebsiteSettingsSection() {
             meta_title: s.meta_title ?? "",
             meta_description: s.meta_description ?? "",
             meta_keywords: s.meta_keywords ?? "",
+            order_prefix: s.order_prefix ?? "",
           });
+        } else {
+          // No settings row yet — leave sensible defaults for the create flow.
+          reset({
+            primary_color: "#030303",
+            secondary_color: "#C2E105",
+            accent_color: "#FFFFFF",
+            font_primary: "Barlow",
+            font_heading: "Barlow",
+            currency: "USD",
+            currency_symbol: "$",
+            first_order_discount_enabled: false,
+          } as FormValues);
         }
       })
       .catch(() => toast.error("Couldn't load website settings."))
@@ -242,19 +268,21 @@ export function WebsiteSettingsSection() {
   }, [reset]);
 
   const onSubmit = async (values: FormValues) => {
-    const id = setting?.id ?? 1;
     const body: Partial<WebsiteSettingRow> = {
       site_name: values.site_name,
       site_tagline: values.site_tagline || undefined,
       site_description: values.site_description || undefined,
       logo_url: logo,
+      logo_white_url: logoWhite,
+      logo_black_url: logoBlack,
       favicon_url: favicon,
       footer_logo_url: footerLogo,
-      primary_color: values.primary_color || undefined,
-      secondary_color: values.secondary_color || undefined,
+      og_image_url: ogImage,
+      primary_color: values.primary_color,
+      secondary_color: values.secondary_color,
       accent_color: values.accent_color || undefined,
-      font_primary: values.font_primary || undefined,
-      font_heading: values.font_heading || undefined,
+      font_primary: values.font_primary,
+      font_heading: values.font_heading,
       contact_email: values.contact_email || undefined,
       support_email: values.support_email || undefined,
       contact_phone: values.contact_phone || undefined,
@@ -287,10 +315,20 @@ export function WebsiteSettingsSection() {
       meta_title: values.meta_title || undefined,
       meta_description: values.meta_description || undefined,
       meta_keywords: values.meta_keywords || undefined,
+      order_prefix: values.order_prefix || undefined,
     };
 
     try {
-      const msg = await updateWebsiteSettings(id, body);
+      let msg: string;
+      if (setting?.id != null) {
+        msg = await updateWebsiteSettings(setting.id, body);
+      } else {
+        // No existing row → create one, then remember its id so subsequent saves update.
+        msg = await createWebsiteSettings(body);
+        // Refetch to pick up the newly-assigned id
+        const fresh = await getCurrentWebsiteSettings();
+        if (fresh) setSetting(fresh);
+      }
       toast.success(msg);
     } catch (e) {
       toast.error(apiErrorMessage(e, "Couldn't save settings."));
@@ -318,9 +356,11 @@ export function WebsiteSettingsSection() {
             <Textarea id="ws-desc" rows={3} placeholder="Short description of your store…" {...register("site_description")} />
           </div>
           <div className="grid gap-4 sm:grid-cols-3">
-            <ImageField label="Logo" hint="Shown in header" value={logo} onChange={setLogo} />
+            <ImageField label="Logo" hint="Generic fallback logo" value={logo} onChange={setLogo} />
             <ImageField label="Favicon" hint="Browser tab icon (32×32)" value={favicon} onChange={setFavicon} />
             <ImageField label="Footer logo" hint="Shown in site footer" value={footerLogo} onChange={setFooterLogo} />
+            <ImageField label="Logo (white)" hint="Used in emails (dark header)" value={logoWhite} onChange={setLogoWhite} />
+            <ImageField label="Logo (black)" hint="Used on receipts & prints" value={logoBlack} onChange={setLogoBlack} />
           </div>
         </div>
       </Section>
@@ -329,18 +369,20 @@ export function WebsiteSettingsSection() {
       <Section title="Branding">
         <div className="grid gap-4 sm:grid-cols-2">
           <div className="space-y-1.5">
-            <Label htmlFor="ws-primary">Primary color</Label>
+            <Label htmlFor="ws-primary">Primary color <span className="text-destructive">*</span></Label>
             <div className="flex items-center gap-2">
               <input type="color" id="ws-primary" className="h-9 w-12 cursor-pointer rounded-lg border border-input bg-card p-1" {...register("primary_color")} />
-              <Input placeholder="#030303" {...register("primary_color")} className="flex-1 font-mono" />
+              <Input placeholder="#030303" {...register("primary_color")} className="flex-1 font-mono" aria-invalid={!!errors.primary_color} />
             </div>
+            {errors.primary_color && <p className="text-sm text-destructive">{errors.primary_color.message}</p>}
           </div>
           <div className="space-y-1.5">
-            <Label htmlFor="ws-secondary">Secondary color</Label>
+            <Label htmlFor="ws-secondary">Secondary color <span className="text-destructive">*</span></Label>
             <div className="flex items-center gap-2">
               <input type="color" id="ws-secondary" className="h-9 w-12 cursor-pointer rounded-lg border border-input bg-card p-1" {...register("secondary_color")} />
-              <Input placeholder="#C2E105" {...register("secondary_color")} className="flex-1 font-mono" />
+              <Input placeholder="#C2E105" {...register("secondary_color")} className="flex-1 font-mono" aria-invalid={!!errors.secondary_color} />
             </div>
+            {errors.secondary_color && <p className="text-sm text-destructive">{errors.secondary_color.message}</p>}
           </div>
           <div className="space-y-1.5">
             <Label htmlFor="ws-accent">Accent color</Label>
@@ -350,12 +392,14 @@ export function WebsiteSettingsSection() {
             </div>
           </div>
           <div className="space-y-1.5">
-            <Label htmlFor="ws-font-primary">Primary font</Label>
-            <Input id="ws-font-primary" placeholder="Barlow" {...register("font_primary")} />
+            <Label htmlFor="ws-font-primary">Primary font <span className="text-destructive">*</span></Label>
+            <Input id="ws-font-primary" placeholder="Barlow" aria-invalid={!!errors.font_primary} {...register("font_primary")} />
+            {errors.font_primary && <p className="text-sm text-destructive">{errors.font_primary.message}</p>}
           </div>
           <div className="space-y-1.5">
-            <Label htmlFor="ws-font-heading">Heading font</Label>
-            <Input id="ws-font-heading" placeholder="Barlow" {...register("font_heading")} />
+            <Label htmlFor="ws-font-heading">Heading font <span className="text-destructive">*</span></Label>
+            <Input id="ws-font-heading" placeholder="Barlow" aria-invalid={!!errors.font_heading} {...register("font_heading")} />
+            {errors.font_heading && <p className="text-sm text-destructive">{errors.font_heading.message}</p>}
           </div>
         </div>
       </Section>
@@ -466,6 +510,15 @@ export function WebsiteSettingsSection() {
               <Input id="ws-min-order" type="number" step="0.01" min="0" placeholder="15.00" className="pl-7" {...register("min_order_amount")} />
             </div>
           </div>
+          <div className="space-y-1.5">
+            <Label htmlFor="ws-order-prefix">Order prefix</Label>
+            <Input id="ws-order-prefix" placeholder="MF" maxLength={10} aria-invalid={!!errors.order_prefix} {...register("order_prefix")} />
+            {errors.order_prefix ? (
+              <p className="text-sm text-destructive">{errors.order_prefix.message}</p>
+            ) : (
+              <p className="text-xs text-muted-foreground">Prepended to order numbers (1–10 characters).</p>
+            )}
+          </div>
         </div>
 
         <Separator className="my-4" />
@@ -515,6 +568,12 @@ export function WebsiteSettingsSection() {
             <Label htmlFor="ws-keywords">Meta keywords</Label>
             <Input id="ws-keywords" placeholder="custom t-shirts, dtf, embroidery, …" {...register("meta_keywords")} />
           </div>
+          <ImageField
+            label="Open Graph image"
+            hint="Shown when the storefront is shared on social media"
+            value={ogImage}
+            onChange={setOgImage}
+          />
         </div>
       </Section>
 
