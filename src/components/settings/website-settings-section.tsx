@@ -6,6 +6,7 @@ import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
 import { toast } from "sonner";
 import { ImagePlus, Loader2, X } from "lucide-react";
+import { imgUrl } from "@/lib/utils";
 
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -110,7 +111,7 @@ function ImageField({
       {value ? (
         <div className="relative inline-flex">
           {/* eslint-disable-next-line @next/next/no-img-element */}
-          <img src={value} alt={label} className="h-16 w-auto max-w-[160px] rounded-lg border border-border object-contain bg-muted/30 p-1" />
+          <img src={imgUrl(value)} alt={label} className="h-16 w-auto max-w-[160px] rounded-lg border border-border object-contain bg-muted/30 p-1" />
           <button
             type="button"
             onClick={() => onChange(null)}
