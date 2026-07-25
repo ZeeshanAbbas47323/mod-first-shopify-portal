@@ -605,13 +605,13 @@ export interface ReviewRow {
   product?: { name?: string; id?: number } | null;
   user_id?: number | null;
   user?: { full_name?: string; email?: string } | null;
-  reviewer_name?: string | null;
-  reviewer_email?: string | null;
   rating: number;
   title?: string | null;
-  body?: string | null;
-  status?: "pending" | "approved" | "rejected";
+  comment?: string | null;
+  video_url?: string | null;
   is_verified?: boolean;
+  status?: "pending" | "approved" | "rejected";
+  helpful_count?: number;
   is_active?: boolean;
   created_at?: string;
 }
@@ -623,8 +623,11 @@ export async function listReviews(
   return parseList<ReviewRow>(data, params.limit);
 }
 
-export const createReview = (body: Json) =>
-  createRecord("reviews", body, "Review created.");
+export async function getReviewById(id: number | string): Promise<ReviewRow> {
+  const { data } = await api.get(`reviews/get/${id}`);
+  return (data?.payload ?? data?.data ?? data) as ReviewRow;
+}
+
 export const updateReview = (id: number | string, body: Json) =>
   updateRecord(`reviews/${id}`, body, "Review updated.");
 

@@ -3,7 +3,7 @@
 import * as React from "react";
 import { type ColumnDef } from "@tanstack/react-table";
 import { format } from "date-fns";
-import { Loader2, Plus, Search, Star } from "lucide-react";
+import { Loader2, Search, Star, ThumbsUp } from "lucide-react";
 import { useForm, Controller } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
@@ -35,8 +35,8 @@ import { StatusBadge } from "@/components/status-badge";
 import { apiErrorMessage } from "@/lib/auth-api";
 import {
   REVIEW_STATUSES,
-  createReview,
   listReviews,
+  getReviewById,
   updateReview,
   type ReviewRow,
 } from "@/lib/admin-api";
@@ -79,14 +79,12 @@ const columns: ColumnDef<ReviewRow>[] = [
     header: "Reviewer",
     cell: ({ row }) => {
       const r = row.original;
-      const name =
-        r.reviewer_name ?? r.user?.full_name ?? "Anonymous";
-      const email = r.reviewer_email ?? r.user?.email;
+      const name = r.user?.full_name ?? (r.user_id ? `User #${r.user_id}` : "Anonymous");
       return (
         <div className="min-w-0">
           <p className="truncate font-medium">{name}</p>
-          {email && (
-            <p className="truncate text-xs text-muted-foreground">{email}</p>
+          {r.user?.email && (
+            <p className="truncate text-xs text-muted-foreground">{r.user.email}</p>
           )}
         </div>
       );
@@ -140,6 +138,16 @@ const columns: ColumnDef<ReviewRow>[] = [
       ),
   },
   {
+    accessorKey: "helpful_count",
+    header: "Helpful",
+    cell: ({ row }) => (
+      <span className="flex items-center gap-1 text-xs text-muted-foreground">
+        <ThumbsUp className="size-3" />
+        {row.original.helpful_count ?? 0}
+      </span>
+    ),
+  },
+  {
     accessorKey: "created_at",
     header: "Date",
     cell: ({ row }) => {
@@ -183,7 +191,7 @@ export default function ReviewsPage() {
       limit: PAGE_SIZE,
       dateRange,
       filters: {
-        search: debounced || undefined,
+        title: debounced || undefined,
         status: status === "all" ? undefined : status,
       },
     })
@@ -204,19 +212,21 @@ export default function ReviewsPage() {
     };
   }, [page, debounced, status, dateRange, refreshKey]);
 
+  const openReview = async (row: ReviewRow) => {
+    setEditing(row);
+    setDialogOpen(true);
+    try {
+      const full = await getReviewById(row.id);
+      setEditing(full);
+    } catch {
+      // fall back to the row data already shown
+    }
+  };
+
   return (
     <div className="flex flex-col gap-4">
       <div className="flex flex-wrap items-center justify-between gap-3">
         <h1 className="text-xl font-bold">Reviews</h1>
-        <Button
-          onClick={() => {
-            setEditing(null);
-            setDialogOpen(true);
-          }}
-        >
-          <Plus className="size-4" />
-          Add review
-        </Button>
       </div>
 
       <div className="flex flex-wrap items-center gap-2">
@@ -225,7 +235,7 @@ export default function ReviewsPage() {
           <Input
             value={search}
             onChange={(e) => setSearch(e.target.value)}
-            placeholder="Search reviewer or product"
+            placeholder="Search by title"
             className="bg-card pl-8"
           />
         </div>
@@ -259,10 +269,7 @@ export default function ReviewsPage() {
         columns={columns}
         data={rows}
         loading={loading}
-        onRowClick={(row) => {
-          setEditing(row);
-          setDialogOpen(true);
-        }}
+        onRowClick={openReview}
         serverPagination={{ pageIndex: page, pageCount, total, onPageChange: setPage }}
       />
     </div>
@@ -270,14 +277,12 @@ export default function ReviewsPage() {
 }
 
 const reviewSchema = z.object({
-  product_id: z.number({ error: "Product ID must be a number" }).int().positive("Required").optional(),
-  reviewer_name: z.string().min(1, "Name is required"),
-  reviewer_email: z.string().email("Invalid email").optional().or(z.literal("")),
   rating: z.number({ error: "Rating required" }).int().min(1).max(5),
   title: z.string().optional(),
-  body: z.string().optional(),
+  comment: z.string().optional(),
   status: z.enum(REVIEW_STATUSES),
   is_verified: z.boolean(),
+  helpful_count: z.number().int().min(0).optional(),
 });
 type ReviewValues = z.infer<typeof reviewSchema>;
 
@@ -333,109 +338,66 @@ function ReviewDialog({
   } = useForm<ReviewValues>({
     resolver: zodResolver(reviewSchema),
     defaultValues: {
-      product_id: undefined,
-      reviewer_name: "",
-      reviewer_email: "",
       rating: 5,
       title: "",
-      body: "",
+      comment: "",
       status: "pending",
       is_verified: false,
+      helpful_count: 0,
     },
   });
 
   React.useEffect(() => {
-    if (open) {
+    if (open && editing) {
       reset({
-        product_id: editing?.product_id ?? undefined,
-        reviewer_name:
-          editing?.reviewer_name ?? editing?.user?.full_name ?? "",
-        reviewer_email:
-          editing?.reviewer_email ?? editing?.user?.email ?? "",
-        rating: editing?.rating ?? 5,
-        title: editing?.title ?? "",
-        body: editing?.body ?? "",
-        status: editing?.status ?? "pending",
-        is_verified: editing?.is_verified ?? false,
+        rating: editing.rating ?? 5,
+        title: editing.title ?? "",
+        comment: editing.comment ?? "",
+        status: editing.status ?? "pending",
+        is_verified: editing.is_verified ?? false,
+        helpful_count: editing.helpful_count ?? 0,
       });
     }
   }, [open, editing, reset]);
 
   const onSubmit = async (values: ReviewValues) => {
+    if (!editing) return;
     try {
       const body = {
-        ...values,
-        reviewer_email: values.reviewer_email || undefined,
+        rating: values.rating,
         title: values.title || undefined,
-        body: values.body || undefined,
-        product_id: values.product_id || undefined,
-        is_active: true,
+        comment: values.comment || undefined,
+        status: values.status,
+        is_verified: values.is_verified,
+        helpful_count: values.helpful_count,
       };
-      const message = editing
-        ? await updateReview(editing.id, body)
-        : await createReview(body);
+      const message = await updateReview(editing.id, body);
       toast.success(message);
       onOpenChange(false);
       onSaved();
     } catch (error) {
-      toast.error(
-        apiErrorMessage(error, `Couldn't ${editing ? "update" : "create"} the review.`)
-      );
+      toast.error(apiErrorMessage(error, "Couldn't update the review."));
     }
   };
+
+  if (!editing) return null;
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="sm:max-w-md">
         <DialogHeader>
-          <DialogTitle>{editing ? "Edit review" : "Add review"}</DialogTitle>
+          <DialogTitle>Moderate review</DialogTitle>
           <DialogDescription>
-            {editing
-              ? `Update review by ${editing.reviewer_name ?? "reviewer"}.`
-              : "Manually add a product review."}
+            {editing.user?.full_name
+              ? `Review by ${editing.user.full_name}.`
+              : editing.user_id
+              ? `Review by user #${editing.user_id}.`
+              : "Review details."}
           </DialogDescription>
         </DialogHeader>
         <form onSubmit={handleSubmit(onSubmit)} className="space-y-4" noValidate>
-          <div className="grid gap-3 sm:grid-cols-2">
-            <div className="space-y-1.5">
-              <Label htmlFor="rv-name">Reviewer name</Label>
-              <Input
-                id="rv-name"
-                placeholder="Jane Doe"
-                aria-invalid={!!errors.reviewer_name}
-                {...register("reviewer_name")}
-              />
-              {errors.reviewer_name && (
-                <p className="text-sm text-destructive">{errors.reviewer_name.message}</p>
-              )}
-            </div>
-            <div className="space-y-1.5">
-              <Label htmlFor="rv-email">Email</Label>
-              <Input
-                id="rv-email"
-                type="email"
-                placeholder="jane@example.com"
-                aria-invalid={!!errors.reviewer_email}
-                {...register("reviewer_email")}
-              />
-              {errors.reviewer_email && (
-                <p className="text-sm text-destructive">{errors.reviewer_email.message}</p>
-              )}
-            </div>
-          </div>
-
-          <div className="space-y-1.5">
-            <Label htmlFor="rv-product">Product ID</Label>
-            <Input
-              id="rv-product"
-              type="number"
-              placeholder="42"
-              disabled={!!editing}
-              {...register("product_id", { valueAsNumber: true })}
-            />
-            {errors.product_id && (
-              <p className="text-sm text-destructive">{errors.product_id.message}</p>
-            )}
+          <div className="text-sm text-muted-foreground">
+            Product: {editing.product?.name ?? (editing.product_id ? `#${editing.product_id}` : "—")}
           </div>
 
           <div className="space-y-1.5">
@@ -458,14 +420,28 @@ function ReviewDialog({
           </div>
 
           <div className="space-y-1.5">
-            <Label htmlFor="rv-body">Review</Label>
+            <Label htmlFor="rv-comment">Comment</Label>
             <Textarea
-              id="rv-body"
+              id="rv-comment"
               rows={3}
-              placeholder="Write the review content…"
-              {...register("body")}
+              placeholder="Review content…"
+              {...register("comment")}
             />
           </div>
+
+          {editing.video_url && (
+            <div className="space-y-1.5">
+              <Label>Video</Label>
+              <a
+                href={editing.video_url}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="block truncate text-sm text-[#005bd3] hover:underline"
+              >
+                {editing.video_url}
+              </a>
+            </div>
+          )}
 
           <div className="grid gap-3 sm:grid-cols-2">
             <div className="space-y-1.5">
@@ -494,12 +470,21 @@ function ReviewDialog({
               />
             </div>
             <div className="space-y-1.5">
-              <Label>Verified purchase</Label>
-              <label className="flex cursor-pointer items-center gap-2 rounded-lg border border-input bg-card px-3 py-2 text-sm">
-                <input type="checkbox" className="accent-primary" {...register("is_verified")} />
-                Mark as verified
-              </label>
+              <Label htmlFor="rv-helpful">Helpful count</Label>
+              <Input
+                id="rv-helpful"
+                type="number"
+                min="0"
+                {...register("helpful_count", { valueAsNumber: true })}
+              />
             </div>
+          </div>
+
+          <div className="space-y-1.5">
+            <label className="flex cursor-pointer items-center gap-2 rounded-lg border border-input bg-card px-3 py-2 text-sm">
+              <input type="checkbox" className="accent-primary" {...register("is_verified")} />
+              Mark as verified purchase
+            </label>
           </div>
 
           <DialogFooter>
@@ -508,7 +493,7 @@ function ReviewDialog({
             </Button>
             <Button type="submit" disabled={isSubmitting}>
               {isSubmitting && <Loader2 className="size-4 animate-spin" />}
-              {editing ? "Save changes" : "Save review"}
+              Save changes
             </Button>
           </DialogFooter>
         </form>
