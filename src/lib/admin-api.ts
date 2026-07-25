@@ -1060,43 +1060,85 @@ export async function updateWebsiteSettings(
 
 // ─── Shipping / Shipments ─────────────────────────────────────────────────────
 
+export const SHIPMENT_STATUSES = [
+  "PENDING", "LABEL_CREATED", "PICKUP_SCHEDULED", "PICKED_UP", "SHIPPED",
+  "IN_TRANSIT", "OUT_FOR_DELIVERY", "DELIVERED", "RETURNED", "FAILED",
+  "CANCELLED", "PROCESSING",
+] as const;
+
 export interface ShipmentRow {
   id: number | string;
   order_id?: number | string;
-  order_number?: string;
-  carrier?: string;
+  courier_id?: number | string;
+  shipment_number?: string;
   tracking_number?: string;
+  provider_shipment_id?: string;
+  service_name?: string;
+  currency?: string;
+  provider_status?: string;
   status?: string;
+  is_active?: boolean;
   pickup_address?: string;
   delivery_address?: string;
-  estimated_delivery?: string;
   shipped_at?: string;
+  delivered_at?: string;
   created_at?: string;
+  updated_at?: string;
   [k: string]: unknown;
 }
 
+export interface ShippingAddressInput {
+  fullName: string;
+  phone: string;
+  addressLine1: string;
+  addressLine2?: string;
+  city: string;
+  state: string;
+  postalCode: string;
+  country: string;
+}
+
+export interface PackageDetailsInput {
+  description: string;
+  weight: number;
+  length: number;
+  width: number;
+  height: number;
+  quantity: number;
+}
+
+export async function createShipmentRate(body: {
+  courier_id: number | string;
+  order_id: number | string;
+  shippingAddress?: ShippingAddressInput;
+  packageDetails?: PackageDetailsInput;
+}): Promise<string> {
+  const { data } = await api.post("shippings/rates", body);
+  return (data?.message as string) ?? "Shipment created.";
+}
+
 export async function listShipments(params: ListParams): Promise<ListResult<ShipmentRow>> {
-  const { data } = await api.post("shipping/list", buildBody(params));
+  const { data } = await api.post("shippings/list", buildBody(params));
   return parseList<ShipmentRow>(data, params.limit);
 }
 
 export async function getShipmentById(id: number | string): Promise<ShipmentRow> {
-  const { data } = await api.get(`shipping/${id}`);
+  const { data } = await api.get(`shippings/${id}`);
   return (data?.payload ?? data?.data ?? data) as ShipmentRow;
 }
 
 export async function trackShipment(id: number | string): Promise<Json> {
-  const { data } = await api.get(`shipping/${id}/track`);
+  const { data } = await api.get(`shippings/${id}/track`);
   return (data?.payload ?? data?.data ?? data) as Json;
 }
 
 export async function voidShipment(id: number | string): Promise<string> {
-  const { data } = await api.delete(`shipping/${id}`);
+  const { data } = await api.delete(`shippings/${id}`);
   return (data?.message as string) ?? "Shipment voided.";
 }
 
 export async function cancelPickup(id: number | string): Promise<string> {
-  const { data } = await api.delete(`shipping/pickup/${id}`);
+  const { data } = await api.delete(`shippings/pickup/${id}`);
   return (data?.message as string) ?? "Pickup cancelled.";
 }
 

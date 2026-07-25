@@ -3,18 +3,27 @@
 import * as React from "react";
 import { type ColumnDef } from "@tanstack/react-table";
 import { format } from "date-fns";
-import { Eye, Loader2, Search, Trash2, X } from "lucide-react";
+import { Eye, Loader2, Plus, Search, Trash2, X } from "lucide-react";
+import { useForm, Controller } from "react-hook-form";
+import { zodResolver } from "@hookform/resolvers/zod";
+import { z } from "zod";
 import { toast } from "sonner";
 
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
 import {
   Dialog,
   DialogContent,
+  DialogDescription,
+  DialogFooter,
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
+import {
+  Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
+} from "@/components/ui/select";
 import { DataTable } from "@/components/data-table";
 import { StatusBadge } from "@/components/status-badge";
 import { apiErrorMessage } from "@/lib/auth-api";
@@ -24,15 +33,20 @@ import {
   trackShipment,
   voidShipment,
   cancelPickup,
+  createShipmentRate,
+  listCouriers,
   type ShipmentRow,
+  type CourierRow,
 } from "@/lib/admin-api";
 
 const PAGE_SIZE = 10;
 
 function statusTone(s?: string) {
-  if (!s) return "neutral" as const;
-  if (s === "delivered" || s === "completed") return "success" as const;
-  if (s === "cancelled" || s === "voided") return "neutral" as const;
+  const v = (s ?? "").toUpperCase();
+  if (!v) return "neutral" as const;
+  if (v === "DELIVERED") return "success" as const;
+  if (v === "CANCELLED" || v === "RETURNED") return "neutral" as const;
+  if (v === "FAILED") return "critical" as const;
   return "warning" as const;
 }
 
@@ -45,6 +59,7 @@ export function ShippingSection() {
   const [search, setSearch] = React.useState("");
   const [debounced, setDebounced] = React.useState("");
   const [refreshKey, setRefreshKey] = React.useState(0);
+  const [createOpen, setCreateOpen] = React.useState(false);
 
   const [detailOpen, setDetailOpen] = React.useState(false);
   const [selected, setSelected] = React.useState<ShipmentRow | null>(null);
@@ -61,7 +76,7 @@ export function ShippingSection() {
   React.useEffect(() => {
     let cancelled = false;
     setLoading(true);
-    listShipments({ page: page + 1, limit: PAGE_SIZE, filters: { order_number: debounced || undefined } })
+    listShipments({ page: page + 1, limit: PAGE_SIZE, filters: { tracking_number: debounced || undefined } })
       .then((res) => {
         if (cancelled) return;
         setRows(res.rows);
@@ -116,18 +131,23 @@ export function ShippingSection() {
 
   const columns: ColumnDef<ShipmentRow>[] = [
     {
-      accessorKey: "order_number",
-      header: "Order",
+      accessorKey: "shipment_number",
+      header: "Shipment",
       cell: ({ row }) => (
         <span className="font-mono text-sm font-medium">
-          {row.original.order_number ?? `#${row.original.order_id ?? row.original.id}`}
+          {row.original.shipment_number ?? `#${row.original.id}`}
         </span>
       ),
     },
     {
-      accessorKey: "carrier",
-      header: "Carrier",
-      cell: ({ row }) => row.original.carrier ?? "—",
+      accessorKey: "order_id",
+      header: "Order",
+      cell: ({ row }) => row.original.order_id ? `#${row.original.order_id}` : "—",
+    },
+    {
+      accessorKey: "service_name",
+      header: "Service",
+      cell: ({ row }) => row.original.service_name ?? "—",
     },
     {
       accessorKey: "tracking_number",
@@ -140,7 +160,7 @@ export function ShippingSection() {
       accessorKey: "status",
       header: "Status",
       cell: ({ row }) => {
-        const s = row.original.status ?? "unknown";
+        const s = row.original.status ?? "UNKNOWN";
         return <StatusBadge status={s.replace(/_/g, " ")} tone={statusTone(s)} />;
       },
     },
@@ -178,11 +198,20 @@ export function ShippingSection() {
           <Input
             value={search}
             onChange={(e) => setSearch(e.target.value)}
-            placeholder="Search by order or tracking #"
+            placeholder="Search by tracking #"
             className="bg-card pl-8"
           />
         </div>
+        <Button className="ml-auto" onClick={() => setCreateOpen(true)}>
+          <Plus className="size-4" /> Create shipment
+        </Button>
       </div>
+
+      <CreateShipmentDialog
+        open={createOpen}
+        onOpenChange={setCreateOpen}
+        onCreated={() => setRefreshKey((k) => k + 1)}
+      />
 
       <DataTable
         columns={columns}
@@ -197,7 +226,7 @@ export function ShippingSection() {
         <DialogContent className="sm:max-w-lg">
           <DialogHeader>
             <DialogTitle>
-              Shipment {selected?.order_number ?? `#${selected?.id}`}
+              Shipment {selected?.shipment_number ?? `#${selected?.id}`}
             </DialogTitle>
           </DialogHeader>
 
@@ -208,7 +237,8 @@ export function ShippingSection() {
           ) : selected ? (
             <div className="space-y-4">
               <div className="grid grid-cols-2 gap-3 text-sm">
-                <DetailRow label="Carrier" value={selected.carrier} />
+                <DetailRow label="Order" value={selected.order_id ? `#${selected.order_id}` : undefined} />
+                <DetailRow label="Service" value={selected.service_name} />
                 <DetailRow label="Tracking #" value={selected.tracking_number} mono />
                 <DetailRow label="Status">
                   <StatusBadge
@@ -221,9 +251,9 @@ export function ShippingSection() {
                     ? format(new Date(selected.shipped_at), "MMM d, yyyy")
                     : undefined
                 } />
-                <DetailRow label="Est. delivery" value={
-                  selected.estimated_delivery
-                    ? format(new Date(selected.estimated_delivery), "MMM d, yyyy")
+                <DetailRow label="Delivered at" value={
+                  selected.delivered_at
+                    ? format(new Date(selected.delivered_at), "MMM d, yyyy")
                     : undefined
                 } />
               </div>
@@ -301,5 +331,97 @@ function DetailRow({
         </p>
       )}
     </div>
+  );
+}
+
+// ─── Create Shipment Dialog ─────────────────────────────────────────────────
+
+const createShipmentSchema = z.object({
+  courier_id: z.string().min(1, "Courier is required"),
+  order_id: z.string().min(1, "Order ID is required"),
+});
+type CreateShipmentValues = z.infer<typeof createShipmentSchema>;
+
+function CreateShipmentDialog({
+  open, onOpenChange, onCreated,
+}: {
+  open: boolean;
+  onOpenChange: (v: boolean) => void;
+  onCreated: () => void;
+}) {
+  const [couriers, setCouriers] = React.useState<CourierRow[]>([]);
+
+  React.useEffect(() => {
+    if (open) {
+      listCouriers({ page: 1, limit: 100, filters: {} })
+        .then((res) => setCouriers(res.rows))
+        .catch(() => setCouriers([]));
+    }
+  }, [open]);
+
+  const { register, handleSubmit, control, reset, formState: { errors, isSubmitting } } =
+    useForm<CreateShipmentValues>({
+      resolver: zodResolver(createShipmentSchema),
+      defaultValues: { courier_id: "", order_id: "" },
+    });
+
+  React.useEffect(() => {
+    if (open) reset({ courier_id: "", order_id: "" });
+  }, [open, reset]);
+
+  const onSubmit = async (values: CreateShipmentValues) => {
+    try {
+      const msg = await createShipmentRate({
+        courier_id: Number(values.courier_id),
+        order_id: Number(values.order_id),
+      });
+      toast.success(msg);
+      onOpenChange(false);
+      onCreated();
+    } catch (err) {
+      toast.error(apiErrorMessage(err, "Couldn't create shipment."));
+    }
+  };
+
+  return (
+    <Dialog open={open} onOpenChange={onOpenChange}>
+      <DialogContent className="sm:max-w-sm">
+        <DialogHeader>
+          <DialogTitle>Create shipment</DialogTitle>
+          <DialogDescription>
+            Book a shipment for an order using the destination and package details already on the order.
+          </DialogDescription>
+        </DialogHeader>
+        <form onSubmit={handleSubmit(onSubmit)} className="space-y-4" noValidate>
+          <div className="space-y-1.5">
+            <Label htmlFor="ship-order-id">Order ID *</Label>
+            <Input id="ship-order-id" type="number" min="1" placeholder="17"
+              aria-invalid={!!errors.order_id} {...register("order_id")} />
+            {errors.order_id && <p className="text-sm text-destructive">{errors.order_id.message}</p>}
+          </div>
+          <div className="space-y-1.5">
+            <Label>Courier *</Label>
+            <Controller control={control} name="courier_id" render={({ field }) => (
+              <Select value={field.value} onValueChange={field.onChange}>
+                <SelectTrigger className="w-full"><SelectValue placeholder="Select a courier" /></SelectTrigger>
+                <SelectContent>
+                  {couriers.map((c) => (
+                    <SelectItem key={c.id} value={String(c.id)}>{c.name}</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            )} />
+            {errors.courier_id && <p className="text-sm text-destructive">{errors.courier_id.message}</p>}
+          </div>
+          <DialogFooter>
+            <Button type="button" variant="outline" onClick={() => onOpenChange(false)}>Cancel</Button>
+            <Button type="submit" disabled={isSubmitting}>
+              {isSubmitting && <Loader2 className="size-4 animate-spin" />}
+              Create shipment
+            </Button>
+          </DialogFooter>
+        </form>
+      </DialogContent>
+    </Dialog>
   );
 }
