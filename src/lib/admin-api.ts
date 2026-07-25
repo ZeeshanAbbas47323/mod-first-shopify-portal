@@ -1051,34 +1051,8 @@ export interface WebsiteSettingRow {
   is_active?: boolean;            // default true
 }
 
-/** Current admin settings (single row) — preferred over list-and-take-first. */
-export async function getCurrentWebsiteSettings(): Promise<WebsiteSettingRow | null> {
-  try {
-    const { data } = await api.get("website-settings/current");
-    const payload = (data?.payload ?? data?.data ?? data) as WebsiteSettingRow | null;
-    return payload && (payload.id != null || payload.site_name != null) ? payload : null;
-  } catch {
-    return null;
-  }
-}
-
-/** Website settings by ID. */
-export async function getWebsiteSettingById(id: number | string): Promise<WebsiteSettingRow> {
-  const { data } = await api.get(`website-settings/get/${id}`);
-  return (data?.payload ?? data?.data ?? data) as WebsiteSettingRow;
-}
-
-/** Public storefront settings (no auth required on the server, still callable). */
-export async function getPublicWebsiteSettings(): Promise<WebsiteSettingRow> {
-  const { data } = await api.get("website-settings/public");
-  return (data?.payload ?? data?.data ?? data) as WebsiteSettingRow;
-}
-
-/** Legacy alias — prefer getCurrentWebsiteSettings. Kept for existing callers. */
+/** Fetch website settings via list endpoint. */
 export async function fetchWebsiteSettings(): Promise<WebsiteSettingRow | null> {
-  const current = await getCurrentWebsiteSettings();
-  if (current) return current;
-  // Fallback to list (older envs may not expose /current)
   const { data } = await api.post("website-settings/list", { page: 1, limit: 1 });
   const p: Json = data?.payload ?? data?.data ?? data ?? {};
   const rows: Json[] = p.rows ?? p.list ?? p.data ?? p.items ?? (Array.isArray(p) ? p : []);

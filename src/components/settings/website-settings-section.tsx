@@ -17,7 +17,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { apiErrorMessage } from "@/lib/auth-api";
 import { uploadImage } from "@/lib/upload-api";
 import {
-  getCurrentWebsiteSettings,
+  fetchWebsiteSettings,
   createWebsiteSettings,
   updateWebsiteSettings,
   type WebsiteSettingRow,
@@ -196,7 +196,7 @@ export function WebsiteSettingsSection() {
   });
 
   React.useEffect(() => {
-    getCurrentWebsiteSettings()
+    fetchWebsiteSettings()
       .then((s) => {
         setSetting(s);
         if (s) {
@@ -326,7 +326,7 @@ export function WebsiteSettingsSection() {
         // No existing row → create one, then remember its id so subsequent saves update.
         msg = await createWebsiteSettings(body);
         // Refetch to pick up the newly-assigned id
-        const fresh = await getCurrentWebsiteSettings();
+        const fresh = await fetchWebsiteSettings();
         if (fresh) setSetting(fresh);
       }
       toast.success(msg);
