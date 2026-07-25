@@ -150,11 +150,11 @@ function ImageField({
 function Section({ title, children }: { title: string; children: React.ReactNode }) {
   return (
     <Card className="shadow-none">
-      <CardHeader className="pb-3">
+      <CardHeader>
         <CardTitle className="text-sm">{title}</CardTitle>
       </CardHeader>
       <Separator />
-      <CardContent className="pt-4">{children}</CardContent>
+      <CardContent>{children}</CardContent>
     </Card>
   );
 }
