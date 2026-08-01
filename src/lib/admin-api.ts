@@ -157,6 +157,132 @@ export async function listOrders(params: ListOrdersParams): Promise<ListResult<O
   return parseList<OrderRow>(data, params.limit);
 }
 
+export interface OrderItem {
+  id: number | string;
+  order_id?: number | string;
+  product_id?: number | string;
+  variant_id?: number | string;
+  quantity?: number;
+  unit_price?: string | number;
+  total_price?: string | number;
+  product_name?: string;
+  variant_name?: string;
+  sku?: string;
+  image?: string;
+  product?: {
+    id?: number | string;
+    title?: string;
+    images?: { url?: string }[];
+    [k: string]: unknown;
+  };
+  [k: string]: unknown;
+}
+
+export interface OrderAddress {
+  id?: number | string;
+  full_name?: string;
+  phone?: string;
+  email?: string;
+  address_line_1?: string;
+  address_line_2?: string;
+  city?: string;
+  state?: string;
+  postal_code?: string;
+  country?: string;
+  [k: string]: unknown;
+}
+
+export interface ActivityLog {
+  id?: number | string;
+  message?: string;
+  action?: string;
+  description?: string;
+  created_at?: string;
+  user?: { name?: string; email?: string } | string | null;
+  [k: string]: unknown;
+}
+
+export interface PaymentLog {
+  id?: number | string;
+  order_id?: number | string;
+  amount?: string | number;
+  payment_method?: string;
+  status?: string;
+  created_at?: string;
+  [k: string]: unknown;
+}
+
+export interface OrderDetail extends OrderRow {
+  order_number?: string;
+  full_name?: string;
+  phone?: string;
+  channel?: string;
+  humanize_channel?: string;
+  humanize_status?: string;
+  humanize_payment_status?: string;
+  humanize_delivery_type?: string;
+  humanize_shipping_status?: string;
+  subtotal?: string | number;
+  total_amount?: string | number;
+  tax_amount?: string | number;
+  shipping_fee?: string | number;
+  discount_amount?: string | number;
+  discount_label?: string | null;
+  paid_amount?: string | number;
+  cash_amount?: string | number;
+  online_amount?: string | number;
+  pos_payment_type?: string;
+  humanize_pos_payment_type?: string;
+  shipping_status?: string;
+  notes?: string | null;
+  items?: OrderItem[];
+  shippingAddr?: OrderAddress | null;
+  billingAddr?: OrderAddress | null;
+  shipping_address_id?: number | null;
+  billing_address_id?: number | null;
+  pickupLoc?: unknown;
+  pickup_location_id?: number | null;
+  activityLogs?: ActivityLog[];
+  paymentLogs?: PaymentLog[];
+  shipments?: ShipmentRow[];
+  comments?: unknown[];
+  coupon?: unknown;
+  coupon_id?: number | null;
+  estimated_delivery_date?: string | null;
+  order_date?: string;
+  [k: string]: unknown;
+}
+
+export async function getOrder(id: number | string): Promise<OrderDetail> {
+  const { data } = await api.get(`orders/${id}`);
+  return (data?.payload ?? data?.data ?? data) as OrderDetail;
+}
+
+export async function updateOrderStatus(
+  id: number | string,
+  status: string
+): Promise<string> {
+  const { data } = await api.put(`orders/update-status/${id}`, { status });
+  return (data?.message as string) ?? "Status updated.";
+}
+
+export type PrintType = "thermal_80mm" | "thermal_58mm" | "a4";
+export type PrintFormat = "html" | "pdf";
+
+export async function printOrder(body: {
+  order_code?: string;
+  order_id?: number | string;
+  print_type?: PrintType;
+  format?: PrintFormat;
+  raw?: boolean;
+}): Promise<Blob | Json> {
+  const isRaw = body.raw ?? (body.format === "pdf");
+  const { data } = await api.post("print/order", body, {
+    responseType: isRaw ? "blob" : "json",
+  });
+  return data;
+}
+
 export async function listUsers(params: ListParams): Promise<ListResult<UserRow>> {
   const { data } = await api.post("users/list", buildBody(params));
   return parseList<UserRow>(data, params.limit);

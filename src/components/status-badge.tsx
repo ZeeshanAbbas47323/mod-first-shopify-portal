@@ -18,11 +18,39 @@ const toneMap: Record<string, BadgeTone> = {
   Draft: "info",
   Archived: "neutral",
   // payment status
-  Paid: "neutral",
+  Paid: "success",
+  paid: "success",
   Pending: "warning",
-  Refunded: "neutral",
+  pending: "warning",
+  Refunded: "info",
+  refunded: "info",
+  Failed: "critical",
+  failed: "critical",
+  // order status
+  booked: "info",
+  accepted: "success",
+  design_review: "attention",
+  preparing: "warning",
+  label_create: "info",
+  shipped: "info",
+  ready_for_pickup: "attention",
+  completed: "success",
+  cancelled: "critical",
+  // shipment status
+  PENDING: "warning",
+  LABEL_CREATED: "info",
+  PICKUP_SCHEDULED: "info",
+  PICKED_UP: "info",
+  SHIPPED: "info",
+  IN_TRANSIT: "attention",
+  OUT_FOR_DELIVERY: "attention",
+  DELIVERED: "success",
+  RETURNED: "critical",
+  FAILED: "critical",
+  CANCELLED: "critical",
+  PROCESSING: "warning",
   // fulfillment status
-  Fulfilled: "neutral",
+  Fulfilled: "success",
   Unfulfilled: "attention",
   "Partially fulfilled": "warning",
   // customers
@@ -32,6 +60,9 @@ const toneMap: Record<string, BadgeTone> = {
   Expired: "critical",
   "Used up": "neutral",
 };
+
+const capitalize = (s: string) =>
+  s.replace(/_/g, " ").replace(/\b\w/g, (c) => c.toUpperCase());
 
 export function StatusBadge({
   status,
@@ -51,7 +82,7 @@ export function StatusBadge({
         className
       )}
     >
-      {status}
+      {capitalize(status)}
     </span>
   );
 }

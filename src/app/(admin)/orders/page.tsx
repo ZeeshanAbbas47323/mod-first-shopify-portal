@@ -1,6 +1,7 @@
 "use client";
 
 import * as React from "react";
+import { useRouter } from "next/navigation";
 import { format, subDays } from "date-fns";
 import { type ColumnDef } from "@tanstack/react-table";
 import { Download, Search, X } from "lucide-react";
@@ -145,6 +146,7 @@ const TABS = [
 
 
 export default function OrdersPage() {
+  const router = useRouter();
   const [tab, setTab] = React.useState("all");
   const [page, setPage] = React.useState(1);
   const [rows, setRows] = React.useState<OrderRow[]>([]);
@@ -273,6 +275,7 @@ export default function OrdersPage() {
         columns={columns}
         data={rows}
         loading={loading}
+        onRowClick={(row) => router.push(`/orders/${row.id}`)}
         serverPagination={{
           pageIndex: page - 1,
           pageCount: totalPages,
