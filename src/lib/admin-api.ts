@@ -1417,6 +1417,11 @@ export async function listPopups(params: ListParams): Promise<ListResult<PopupRo
   return parseList<PopupRow>(data, params.limit);
 }
 
+export async function getPopupById(id: number | string): Promise<PopupRow> {
+  const { data } = await api.get(`popups/get/${id}`);
+  return (data?.payload ?? data?.data ?? data) as PopupRow;
+}
+
 export async function createPopup(body: Partial<PopupRow>): Promise<string> {
   const { data } = await api.post("popups", body);
   return (data?.message as string) ?? "Popup created.";

@@ -172,7 +172,7 @@ export function PopupsTab() {
 
 const popupSchema = z.object({
   title: z.string().min(1, "Title is required"),
-  message: z.string().optional(),
+  message: z.string().min(1, "Message is required"),
   button_text: z.string().optional(),
   link_url: z.string().optional(),
   popup_type: z.enum(POPUP_TYPES),
@@ -224,7 +224,7 @@ function PopupDialog({
   const onSubmit = async (values: PopupValues) => {
     const body: Partial<PopupRow> = {
       title: values.title,
-      message: values.message || undefined,
+      message: values.message,
       button_text: values.button_text || undefined,
       link_url: values.link_url || undefined,
       popup_type: values.popup_type,
@@ -277,8 +277,10 @@ function PopupDialog({
           </div>
 
           <div className="space-y-1.5">
-            <Label htmlFor="popup-message">Message</Label>
-            <Textarea id="popup-message" rows={3} placeholder="Popup body text…" {...register("message")} />
+            <Label htmlFor="popup-message">Message *</Label>
+            <Textarea id="popup-message" rows={3} placeholder="Popup body text…"
+              aria-invalid={!!errors.message} {...register("message")} />
+            {errors.message && <p className="text-sm text-destructive">{errors.message.message}</p>}
           </div>
 
           <div className="grid grid-cols-2 gap-3">
