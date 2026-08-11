@@ -32,16 +32,19 @@ import {
 } from "@/components/ui/select";
 import { DataTable } from "@/components/data-table";
 import { DateRangePicker } from "@/components/date-range-picker";
-import { StatusBadge } from "@/components/status-badge";
+import { StatusToggle } from "@/components/status-badge";
 import { apiErrorMessage } from "@/lib/auth-api";
-import { createBranch, deleteRecord, listBranches, updateBranch, type BranchRow } from "@/lib/admin-api";
+import { createBranch, deleteRecord, listBranches, updateBranch, updateRecordStatus, type BranchRow } from "@/lib/admin-api";
 
 const PAGE_SIZE = 10;
 
 const STATUS_ITEMS = { all: "All statuses", active: "Active", inactive: "Inactive" };
 
 
-const columns: ColumnDef<BranchRow>[] = [
+function getColumns(
+  onToggleStatus: (row: BranchRow, next: boolean) => Promise<void>
+): ColumnDef<BranchRow>[] {
+  return [
   {
     accessorKey: "name",
     header: "Branch",
@@ -102,12 +105,12 @@ const columns: ColumnDef<BranchRow>[] = [
   {
     id: "status",
     header: "Status",
-    cell: ({ row }) =>
-      row.original.is_active === false ? (
-        <StatusBadge status="Inactive" tone="neutral" />
-      ) : (
-        <StatusBadge status="Active" tone="success" />
-      ),
+    cell: ({ row }) => (
+      <StatusToggle
+        isActive={row.original.is_active !== false}
+        onToggle={(next) => onToggleStatus(row.original, next)}
+      />
+    ),
   },
   {
     accessorKey: "created_at",
@@ -119,7 +122,8 @@ const columns: ColumnDef<BranchRow>[] = [
       return isNaN(date.getTime()) ? "—" : format(date, "MMM d, yyyy");
     },
   },
-];
+  ];
+}
 
 export function BranchesSection() {
   const [rows, setRows] = React.useState<BranchRow[]>([]);
@@ -175,6 +179,17 @@ export function BranchesSection() {
       cancelled = true;
     };
   }, [page, debounced, status, dateRange, refreshKey]);
+
+  const handleToggleStatus = async (row: BranchRow, next: boolean) => {
+    try {
+      await updateRecordStatus("branch", row.id, next);
+      toast.success(next ? "Branch activated." : "Branch deactivated.");
+      setRefreshKey((k) => k + 1);
+    } catch (error) {
+      toast.error(apiErrorMessage(error, "Couldn't update status."));
+    }
+  };
+  const columns = React.useMemo(() => getColumns(handleToggleStatus), []);
 
   return (
     <div className="flex flex-col gap-3">

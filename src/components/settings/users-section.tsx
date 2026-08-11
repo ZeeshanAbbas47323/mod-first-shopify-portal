@@ -33,9 +33,9 @@ import {
 } from "@/components/ui/select";
 import { DataTable } from "@/components/data-table";
 import { DateRangePicker } from "@/components/date-range-picker";
-import { StatusBadge } from "@/components/status-badge";
+import { StatusBadge, StatusToggle } from "@/components/status-badge";
 import { apiErrorMessage } from "@/lib/auth-api";
-import { createUser, deleteRecord, listUsers, unlockUser, updateUser, USER_ROLES, type UserRow } from "@/lib/admin-api";
+import { createUser, deleteRecord, listUsers, unlockUser, updateRecordStatus, updateUser, USER_ROLES, type UserRow } from "@/lib/admin-api";
 
 const PAGE_SIZE = 10;
 
@@ -55,7 +55,10 @@ function initialsOf(name: string) {
 const humanizeRole = (role?: string) =>
   role ? role.replace(/_/g, " ").replace(/\b\w/g, (c) => c.toUpperCase()) : "—";
 
-const columns: ColumnDef<UserRow>[] = [
+function getColumns(
+  onToggleStatus: (row: UserRow, next: boolean) => Promise<void>
+): ColumnDef<UserRow>[] {
+  return [
   {
     accessorKey: "full_name",
     header: "User",
@@ -93,10 +96,11 @@ const columns: ColumnDef<UserRow>[] = [
     cell: ({ row }) => {
       const u = row.original;
       if (u.is_locked) return <StatusBadge status="Locked" tone="critical" />;
-      return u.is_active === false ? (
-        <StatusBadge status="Inactive" tone="neutral" />
-      ) : (
-        <StatusBadge status="Active" tone="success" />
+      return (
+        <StatusToggle
+          isActive={u.is_active !== false}
+          onToggle={(next) => onToggleStatus(u, next)}
+        />
       );
     },
   },
@@ -110,7 +114,8 @@ const columns: ColumnDef<UserRow>[] = [
       return isNaN(date.getTime()) ? "—" : format(date, "MMM d, yyyy");
     },
   },
-];
+  ];
+}
 
 export function UsersSection() {
   const [rows, setRows] = React.useState<UserRow[]>([]);
@@ -167,6 +172,17 @@ export function UsersSection() {
       cancelled = true;
     };
   }, [page, debouncedSearch, role, status, dateRange, refreshKey]);
+
+  const handleToggleStatus = async (row: UserRow, next: boolean) => {
+    try {
+      await updateRecordStatus("user", row.id, next);
+      toast.success(next ? "User activated." : "User deactivated.");
+      setRefreshKey((k) => k + 1);
+    } catch (error) {
+      toast.error(apiErrorMessage(error, "Couldn't update status."));
+    }
+  };
+  const columns = React.useMemo(() => getColumns(handleToggleStatus), []);
 
   return (
     <div className="flex flex-col gap-3">

@@ -30,16 +30,19 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { DataTable } from "@/components/data-table";
-import { StatusBadge } from "@/components/status-badge";
+import { StatusToggle } from "@/components/status-badge";
 import { apiErrorMessage } from "@/lib/auth-api";
-import { createSize, deleteRecord, listSizes, updateSize, type SizeRow } from "@/lib/admin-api";
+import { createSize, deleteRecord, listSizes, updateRecordStatus, updateSize, type SizeRow } from "@/lib/admin-api";
 
 const PAGE_SIZE = 10;
 
 const STATUS_ITEMS = { all: "All statuses", active: "Active", inactive: "Inactive" };
 
 
-const columns: ColumnDef<SizeRow>[] = [
+function getColumns(
+  onToggleStatus: (row: SizeRow, next: boolean) => Promise<void>
+): ColumnDef<SizeRow>[] {
+  return [
   {
     accessorKey: "name",
     header: "Size",
@@ -59,12 +62,12 @@ const columns: ColumnDef<SizeRow>[] = [
   {
     id: "status",
     header: "Status",
-    cell: ({ row }) =>
-      row.original.is_active === false ? (
-        <StatusBadge status="Inactive" tone="neutral" />
-      ) : (
-        <StatusBadge status="Active" tone="success" />
-      ),
+    cell: ({ row }) => (
+      <StatusToggle
+        isActive={row.original.is_active !== false}
+        onToggle={(next) => onToggleStatus(row.original, next)}
+      />
+    ),
   },
   {
     accessorKey: "created_at",
@@ -76,7 +79,8 @@ const columns: ColumnDef<SizeRow>[] = [
       return isNaN(date.getTime()) ? "—" : format(date, "MMM d, yyyy");
     },
   },
-];
+  ];
+}
 
 export function SizesSection() {
   const [rows, setRows] = React.useState<SizeRow[]>([]);
@@ -128,6 +132,17 @@ export function SizesSection() {
       cancelled = true;
     };
   }, [page, debouncedSearch, status, refreshKey]);
+
+  const handleToggleStatus = async (row: SizeRow, next: boolean) => {
+    try {
+      await updateRecordStatus("size", row.id, next);
+      toast.success(next ? "Size activated." : "Size deactivated.");
+      setRefreshKey((k) => k + 1);
+    } catch (error) {
+      toast.error(apiErrorMessage(error, "Couldn't update status."));
+    }
+  };
+  const columns = React.useMemo(() => getColumns(handleToggleStatus), []);
 
   return (
     <div className="flex flex-col gap-3">

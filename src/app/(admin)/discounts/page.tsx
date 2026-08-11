@@ -22,7 +22,7 @@ import {
 } from "@/components/ui/select";
 import { DataTable } from "@/components/data-table";
 import { DateRangePicker } from "@/components/date-range-picker";
-import { StatusBadge } from "@/components/status-badge";
+import { StatusBadge, StatusToggle } from "@/components/status-badge";
 import { ConfirmDeleteDialog } from "@/components/confirm-delete-dialog";
 import { apiErrorMessage } from "@/lib/auth-api";
 import { parseServerDate, toLocalDateInput } from "@/lib/utils";
@@ -33,6 +33,7 @@ import {
   createCoupon,
   updateCoupon,
   deleteRecord,
+  updateRecordStatus,
   validateCoupon,
   type CouponRow,
   type CouponType,
@@ -62,7 +63,10 @@ const typeLabel: Record<CouponType, string> = {
 
 // Status tones now live in the shared toneMap (src/components/status-badge.tsx).
 
-const columns: ColumnDef<CouponRow>[] = [
+function getColumns(
+  onToggleStatus: (row: CouponRow, next: boolean) => Promise<void>
+): ColumnDef<CouponRow>[] {
+  return [
   {
     accessorKey: "code",
     header: "Code",
@@ -129,7 +133,18 @@ const columns: ColumnDef<CouponRow>[] = [
       return <StatusBadge status={label} />;
     },
   },
-];
+  {
+    id: "is_active",
+    header: "Enabled",
+    cell: ({ row }) => (
+      <StatusToggle
+        isActive={row.original.is_active !== false}
+        onToggle={(next) => onToggleStatus(row.original, next)}
+      />
+    ),
+  },
+  ];
+}
 
 export default function DiscountsPage() {
   const [rows, setRows] = React.useState<CouponRow[]>([]);
@@ -181,6 +196,17 @@ export default function DiscountsPage() {
       .finally(() => !cancelled && setLoading(false));
     return () => { cancelled = true; };
   }, [page, debounced, status, type, dateRange, refreshKey]);
+
+  const handleToggleStatus = async (row: CouponRow, next: boolean) => {
+    try {
+      await updateRecordStatus("coupon", row.id, next);
+      toast.success(next ? "Coupon enabled." : "Coupon disabled.");
+      setRefreshKey((k) => k + 1);
+    } catch (err) {
+      toast.error(apiErrorMessage(err, "Couldn't update status."));
+    }
+  };
+  const columns = React.useMemo(() => getColumns(handleToggleStatus), []);
 
   return (
     <div className="flex flex-col gap-4">

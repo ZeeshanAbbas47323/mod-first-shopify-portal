@@ -3,7 +3,7 @@
 import * as React from "react";
 import { type ColumnDef } from "@tanstack/react-table";
 import { format } from "date-fns";
-import { Loader2, Plus, Search, Trash2 } from "lucide-react";
+import { ArrowDown, ArrowUp, Loader2, Plus, Search, Trash2 } from "lucide-react";
 import { useForm, Controller, useWatch } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
@@ -29,13 +29,15 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { DataTable } from "@/components/data-table";
-import { StatusBadge } from "@/components/status-badge";
+import { StatusBadge, StatusToggle } from "@/components/status-badge";
 import { apiErrorMessage } from "@/lib/auth-api";
 import {
   createMenu,
   deleteRecord,
   listMenus,
   updateMenu,
+  updateRecordStatus,
+  updateSortOrder,
   MENU_LINK_TYPES,
   type MenuRow,
 } from "@/lib/admin-api";
@@ -52,7 +54,11 @@ const LINK_TYPE_ITEMS: Record<string, string> = Object.fromEntries([
 const humanize = (v?: string) =>
   v ? v.replace(/_/g, " ").replace(/\b\w/g, (c) => c.toUpperCase()) : "—";
 
-const columns: ColumnDef<MenuRow>[] = [
+function getColumns(
+  onToggleStatus: (row: MenuRow, next: boolean) => Promise<void>,
+  onMove: (row: MenuRow, direction: "up" | "down") => Promise<void>
+): ColumnDef<MenuRow>[] {
+  return [
   {
     accessorKey: "name",
     header: "Menu",
@@ -84,7 +90,23 @@ const columns: ColumnDef<MenuRow>[] = [
     accessorKey: "sort_order",
     header: () => <div className="text-right">Order</div>,
     cell: ({ row }) => (
-      <div className="text-right">{row.original.sort_order ?? "—"}</div>
+      <div className="flex items-center justify-end gap-1">
+        <span className="text-sm text-muted-foreground">{row.original.sort_order ?? "—"}</span>
+        <button
+          type="button"
+          className="rounded p-1 hover:bg-muted disabled:opacity-30"
+          onClick={(e) => { e.stopPropagation(); onMove(row.original, "up"); }}
+        >
+          <ArrowUp className="size-3.5" />
+        </button>
+        <button
+          type="button"
+          className="rounded p-1 hover:bg-muted disabled:opacity-30"
+          onClick={(e) => { e.stopPropagation(); onMove(row.original, "down"); }}
+        >
+          <ArrowDown className="size-3.5" />
+        </button>
+      </div>
     ),
   },
   {
@@ -100,12 +122,12 @@ const columns: ColumnDef<MenuRow>[] = [
   {
     id: "status",
     header: "Status",
-    cell: ({ row }) =>
-      row.original.is_active === false ? (
-        <StatusBadge status="Inactive" tone="neutral" />
-      ) : (
-        <StatusBadge status="Active" tone="success" />
-      ),
+    cell: ({ row }) => (
+      <StatusToggle
+        isActive={row.original.is_active !== false}
+        onToggle={(next) => onToggleStatus(row.original, next)}
+      />
+    ),
   },
   {
     accessorKey: "created_at",
@@ -117,7 +139,8 @@ const columns: ColumnDef<MenuRow>[] = [
       return isNaN(date.getTime()) ? "—" : format(date, "MMM d, yyyy");
     },
   },
-];
+  ];
+}
 
 export function MenusSection() {
   const [rows, setRows] = React.useState<MenuRow[]>([]);
@@ -173,6 +196,36 @@ export function MenusSection() {
       cancelled = true;
     };
   }, [page, debouncedSearch, menuType, linkType, status, refreshKey]);
+
+  const handleToggleStatus = async (row: MenuRow, next: boolean) => {
+    try {
+      await updateRecordStatus("menu", row.id, next);
+      toast.success(next ? "Menu activated." : "Menu deactivated.");
+      setRefreshKey((k) => k + 1);
+    } catch (error) {
+      toast.error(apiErrorMessage(error, "Couldn't update status."));
+    }
+  };
+
+  const handleMove = async (row: MenuRow, direction: "up" | "down") => {
+    const index = rows.findIndex((r) => r.id === row.id);
+    const adjacentIndex = direction === "up" ? index - 1 : index + 1;
+    if (index < 0 || adjacentIndex < 0 || adjacentIndex >= rows.length) return;
+    const adjacent = rows[adjacentIndex];
+    const rowOrder = row.sort_order ?? index;
+    const adjacentOrder = adjacent.sort_order ?? adjacentIndex;
+    try {
+      await updateSortOrder("menu", [
+        { id: row.id, sort_order: adjacentOrder },
+        { id: adjacent.id, sort_order: rowOrder },
+      ]);
+      setRefreshKey((k) => k + 1);
+    } catch (error) {
+      toast.error(apiErrorMessage(error, "Couldn't reorder menus."));
+    }
+  };
+
+  const columns = React.useMemo(() => getColumns(handleToggleStatus, handleMove), [rows]);
 
   return (
     <div className="flex flex-col gap-3">
