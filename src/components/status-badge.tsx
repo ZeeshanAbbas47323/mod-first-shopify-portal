@@ -1,3 +1,5 @@
+import * as React from "react";
+import { Loader2 } from "lucide-react";
 import { cn } from "@/lib/utils";
 
 /** Shopify Polaris badge tones */
@@ -84,5 +86,42 @@ export function StatusBadge({
     >
       {capitalize(status)}
     </span>
+  );
+}
+
+/** Clickable Active/Inactive badge — toggles is_active without opening the row's edit dialog. */
+export function StatusToggle({
+  isActive,
+  onToggle,
+  disabled,
+}: {
+  isActive: boolean;
+  onToggle: (next: boolean) => Promise<void> | void;
+  disabled?: boolean;
+}) {
+  const [loading, setLoading] = React.useState(false);
+  return (
+    <button
+      type="button"
+      disabled={disabled || loading}
+      onClick={async (e) => {
+        e.stopPropagation();
+        setLoading(true);
+        try {
+          await onToggle(!isActive);
+        } finally {
+          setLoading(false);
+        }
+      }}
+      className="cursor-pointer disabled:cursor-not-allowed disabled:opacity-60"
+    >
+      {loading ? (
+        <span className="inline-flex items-center gap-1 rounded-lg bg-muted px-2 py-0.5 text-xs font-medium">
+          <Loader2 className="size-3 animate-spin" />
+        </span>
+      ) : (
+        <StatusBadge status={isActive ? "Active" : "Inactive"} tone={isActive ? "success" : "neutral"} />
+      )}
+    </button>
   );
 }

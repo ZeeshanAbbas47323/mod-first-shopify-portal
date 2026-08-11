@@ -3,7 +3,7 @@
 import * as React from "react";
 import { type ColumnDef } from "@tanstack/react-table";
 import { format } from "date-fns";
-import { Check, Loader2, Minus, Plus } from "lucide-react";
+import { Check, Loader2, Minus, Plus, Trash2 } from "lucide-react";
 import { useForm, Controller } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
@@ -18,6 +18,7 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
+import { ConfirmDeleteDialog } from "@/components/confirm-delete-dialog";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import {
@@ -32,6 +33,7 @@ import { StatusBadge } from "@/components/status-badge";
 import { apiErrorMessage } from "@/lib/auth-api";
 import {
   createMenuRight,
+  deleteRecord,
   listMenuRights,
   updateMenuRight,
   USER_ROLES,
@@ -315,6 +317,25 @@ function MenuRightDialog({
     }
   };
 
+  const [confirmOpen, setConfirmOpen] = React.useState(false);
+  const [deleting, setDeleting] = React.useState(false);
+
+  const handleDelete = async () => {
+    if (!editing) return;
+    setDeleting(true);
+    try {
+      const message = await deleteRecord("menuRight", editing.id);
+      toast.success(message);
+      setConfirmOpen(false);
+      onOpenChange(false);
+      onSaved();
+    } catch (error) {
+      toast.error(apiErrorMessage(error, "Couldn't delete the menu right."));
+    } finally {
+      setDeleting(false);
+    }
+  };
+
   const perm = (
     id: "can_view" | "can_create" | "can_edit" | "can_delete",
     label: string
@@ -387,7 +408,18 @@ function MenuRightDialog({
             </div>
           </div>
 
-          <DialogFooter>
+          <DialogFooter className="gap-2">
+            {editing && (
+              <Button
+                type="button"
+                variant="destructive"
+                className="mr-auto"
+                onClick={() => setConfirmOpen(true)}
+              >
+                <Trash2 className="size-4" />
+                Delete
+              </Button>
+            )}
             <Button type="button" variant="outline" onClick={() => onOpenChange(false)}>
               Cancel
             </Button>
@@ -398,6 +430,14 @@ function MenuRightDialog({
           </DialogFooter>
         </form>
       </DialogContent>
+      <ConfirmDeleteDialog
+        open={confirmOpen}
+        onOpenChange={setConfirmOpen}
+        loading={deleting}
+        onConfirm={handleDelete}
+        title="Delete this menu right?"
+        description="This can't be undone."
+      />
     </Dialog>
   );
 }

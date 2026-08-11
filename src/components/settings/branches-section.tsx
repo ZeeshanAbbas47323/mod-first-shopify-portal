@@ -3,7 +3,7 @@
 import * as React from "react";
 import { type ColumnDef } from "@tanstack/react-table";
 import { format } from "date-fns";
-import { Loader2, Plus, Search } from "lucide-react";
+import { Loader2, Plus, Search, Trash2 } from "lucide-react";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
@@ -17,6 +17,7 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
+import { ConfirmDeleteDialog } from "@/components/confirm-delete-dialog";
 
 import type { DateRange } from "react-day-picker";
 import { toast } from "sonner";
@@ -33,7 +34,7 @@ import { DataTable } from "@/components/data-table";
 import { DateRangePicker } from "@/components/date-range-picker";
 import { StatusBadge } from "@/components/status-badge";
 import { apiErrorMessage } from "@/lib/auth-api";
-import { createBranch, listBranches, updateBranch, type BranchRow } from "@/lib/admin-api";
+import { createBranch, deleteRecord, listBranches, updateBranch, type BranchRow } from "@/lib/admin-api";
 
 const PAGE_SIZE = 10;
 
@@ -281,6 +282,8 @@ function BranchDialog({
       manager_name: "",
     },
   });
+  const [confirmOpen, setConfirmOpen] = React.useState(false);
+  const [deleting, setDeleting] = React.useState(false);
 
   React.useEffect(() => {
     if (open) {
@@ -312,6 +315,22 @@ function BranchDialog({
       toast.error(
         apiErrorMessage(error, `Couldn't ${editing ? "update" : "create"} the branch.`)
       );
+    }
+  };
+
+  const handleDelete = async () => {
+    if (!editing) return;
+    setDeleting(true);
+    try {
+      const message = await deleteRecord("branch", editing.id);
+      toast.success(message);
+      setConfirmOpen(false);
+      onOpenChange(false);
+      onCreated();
+    } catch (error) {
+      toast.error(apiErrorMessage(error, "Couldn't delete the branch."));
+    } finally {
+      setDeleting(false);
     }
   };
 
@@ -360,7 +379,18 @@ function BranchDialog({
             {field("email", "Email", "branch@store.com")}
           </div>
           {field("manager_name", "Manager name", "Ammar Ali")}
-          <DialogFooter>
+          <DialogFooter className="gap-2">
+            {editing && (
+              <Button
+                type="button"
+                variant="destructive"
+                className="mr-auto"
+                onClick={() => setConfirmOpen(true)}
+              >
+                <Trash2 className="size-4" />
+                Delete
+              </Button>
+            )}
             <Button type="button" variant="outline" onClick={() => onOpenChange(false)}>
               Cancel
             </Button>
@@ -371,6 +401,14 @@ function BranchDialog({
           </DialogFooter>
         </form>
       </DialogContent>
+      <ConfirmDeleteDialog
+        open={confirmOpen}
+        onOpenChange={setConfirmOpen}
+        loading={deleting}
+        onConfirm={handleDelete}
+        title={`Delete "${editing?.name}"?`}
+        description="This can't be undone."
+      />
     </Dialog>
   );
 }

@@ -375,6 +375,48 @@ export async function listMenus(params: ListParams): Promise<ListResult<MenuRow>
   return parseList<MenuRow>(data, params.limit);
 }
 
+// ─── Generic delete ───────────────────────────────────────────────────────────
+
+export const DELETE_TABLES = [
+  "websiteSetting", "user", "homeSection", "footerSection", "menu", "menuRight",
+  "category", "color", "contentPage", "product", "productVariant",
+  "productDescription", "productImage", "productFaq", "size", "productCategory",
+  "blog", "popup", "newsletter", "orderComment", "coupon", "courier",
+  "pickupLocation", "branch",
+] as const;
+export type DeleteTable = (typeof DELETE_TABLES)[number];
+
+export async function deleteRecord(table: DeleteTable, id: number | string): Promise<string> {
+  const { data } = await api.post("common/delete", { id, table });
+  return (data?.message as string) ?? "Deleted.";
+}
+
+export async function updateRecordStatus(
+  table: DeleteTable,
+  id: number | string,
+  is_active: boolean
+): Promise<string> {
+  const { data } = await api.patch("common/update-status", { id, table, is_active });
+  return (data?.message as string) ?? "Status updated.";
+}
+
+// ─── Generic sort order ────────────────────────────────────────────────────────
+
+export const SORT_ORDER_TABLES = [
+  "menu", "category", "generalFaq", "productDescription", "productImage",
+  "productFaq", "homeBanner", "homeSection", "homeSectionItem",
+  "footerSection", "footerLink",
+] as const;
+export type SortOrderTable = (typeof SORT_ORDER_TABLES)[number];
+
+export async function updateSortOrder(
+  table: SortOrderTable,
+  items: { id: number | string; sort_order: number }[]
+): Promise<string> {
+  const { data } = await api.post("common/sort-order", { table, items });
+  return (data?.message as string) ?? "Order updated.";
+}
+
 /** Create endpoints — return the API's success message. */
 async function createRecord(path: string, body: Json, fallback: string) {
   const { data } = await api.post(path, body);
@@ -1351,14 +1393,19 @@ export async function deleteCourier(id: number | string): Promise<string> {
 
 // ─── Popups ───────────────────────────────────────────────────────────────────
 
+export const POPUP_TYPES = ["announcement", "coupon", "newsletter"] as const;
+export type PopupType = (typeof POPUP_TYPES)[number];
+
 export interface PopupRow {
   id: number | string;
   title: string;
-  description?: string | null;
+  message?: string | null;
   image_url?: string | null;
+  link_url?: string | null;
   button_text?: string | null;
-  button_url?: string | null;
-  position?: "center" | "bottom-left" | "bottom-right" | string;
+  popup_type?: PopupType | string;
+  coupon_code?: string | null;
+  display_priority?: number;
   is_active?: boolean;
   start_date?: string | null;
   end_date?: string | null;

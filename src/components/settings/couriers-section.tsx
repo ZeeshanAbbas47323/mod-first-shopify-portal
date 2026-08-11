@@ -17,6 +17,7 @@ import {
   Dialog, DialogContent, DialogDescription,
   DialogFooter, DialogHeader, DialogTitle,
 } from "@/components/ui/dialog";
+import { ConfirmDeleteDialog } from "@/components/confirm-delete-dialog";
 import {
   Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
 } from "@/components/ui/select";
@@ -177,6 +178,7 @@ function CourierDialog({
     });
 
   const [deleting, setDeleting] = React.useState(false);
+  const [confirmOpen, setConfirmOpen] = React.useState(false);
 
   React.useEffect(() => {
     if (open) reset({
@@ -215,11 +217,12 @@ function CourierDialog({
   };
 
   const handleDelete = async () => {
-    if (!editing || !confirm(`Delete "${editing.name}"?`)) return;
+    if (!editing) return;
     setDeleting(true);
     try {
       const msg = await deleteCourier(editing.id);
       toast.success(msg);
+      setConfirmOpen(false);
       onOpenChange(false);
       onSaved();
     } catch (err) {
@@ -308,10 +311,10 @@ function CourierDialog({
 
           <DialogFooter className="gap-2">
             {editing && (
-              <Button type="button" variant="outline" disabled={deleting}
-                className="text-destructive border-destructive/40 hover:bg-destructive/10 mr-auto"
-                onClick={handleDelete}>
-                {deleting ? <Loader2 className="size-4 animate-spin" /> : <Trash2 className="size-4" />}
+              <Button type="button" variant="destructive" disabled={deleting}
+                className="mr-auto"
+                onClick={() => setConfirmOpen(true)}>
+                <Trash2 className="size-4" />
                 Delete
               </Button>
             )}
@@ -323,6 +326,14 @@ function CourierDialog({
           </DialogFooter>
         </form>
       </DialogContent>
+      <ConfirmDeleteDialog
+        open={confirmOpen}
+        onOpenChange={setConfirmOpen}
+        loading={deleting}
+        onConfirm={handleDelete}
+        title={`Delete "${editing?.name}"?`}
+        description="This can't be undone."
+      />
     </Dialog>
   );
 }

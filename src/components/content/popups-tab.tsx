@@ -4,7 +4,7 @@ import * as React from "react";
 import { type ColumnDef } from "@tanstack/react-table";
 import { format } from "date-fns";
 import { Loader2, Plus, Search, Trash2 } from "lucide-react";
-import { useForm, Controller } from "react-hook-form";
+import { useForm, Controller, useWatch } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
 import { toast } from "sonner";
@@ -17,32 +17,49 @@ import {
   Dialog, DialogContent, DialogDescription,
   DialogFooter, DialogHeader, DialogTitle,
 } from "@/components/ui/dialog";
+import { ConfirmDeleteDialog } from "@/components/confirm-delete-dialog";
 import {
   Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
 } from "@/components/ui/select";
 import { DataTable } from "@/components/data-table";
-import { StatusBadge } from "@/components/status-badge";
+import { StatusBadge, StatusToggle } from "@/components/status-badge";
 import { apiErrorMessage } from "@/lib/auth-api";
 import {
-  listPopups, createPopup, updatePopup, deletePopup,
-  type PopupRow,
+  listPopups, createPopup, updatePopup, deletePopup, updateRecordStatus,
+  POPUP_TYPES, type PopupRow,
 } from "@/lib/admin-api";
 
 const PAGE_SIZE = 10;
 
-const POSITIONS = ["center", "bottom-left", "bottom-right"] as const;
+const popupTypeLabel: Record<string, string> = {
+  announcement: "Announcement",
+  coupon: "Coupon",
+  newsletter: "Newsletter",
+};
 
-const columns: ColumnDef<PopupRow>[] = [
+function getColumns(
+  onToggleStatus: (row: PopupRow, next: boolean) => Promise<void>
+): ColumnDef<PopupRow>[] {
+  return [
   {
     accessorKey: "title",
     header: "Title",
     cell: ({ row }) => <span className="font-medium">{row.original.title}</span>,
   },
   {
-    accessorKey: "position",
-    header: "Position",
+    accessorKey: "popup_type",
+    header: "Type",
+    cell: ({ row }) => {
+      const t = row.original.popup_type;
+      if (!t) return "—";
+      return <StatusBadge status={popupTypeLabel[t] ?? t} tone="info" />;
+    },
+  },
+  {
+    accessorKey: "display_priority",
+    header: () => <div className="text-right">Priority</div>,
     cell: ({ row }) => (
-      <span className="capitalize text-sm">{row.original.position?.replace(/-/g, " ") ?? "—"}</span>
+      <div className="text-right">{row.original.display_priority ?? "—"}</div>
     ),
   },
   {
@@ -62,10 +79,12 @@ const columns: ColumnDef<PopupRow>[] = [
   {
     id: "status",
     header: "Status",
-    cell: ({ row }) =>
-      row.original.is_active === false
-        ? <StatusBadge status="Inactive" tone="neutral" />
-        : <StatusBadge status="Active" tone="success" />,
+    cell: ({ row }) => (
+      <StatusToggle
+        isActive={row.original.is_active !== false}
+        onToggle={(next) => onToggleStatus(row.original, next)}
+      />
+    ),
   },
   {
     accessorKey: "created_at",
@@ -77,7 +96,8 @@ const columns: ColumnDef<PopupRow>[] = [
       return isNaN(date.getTime()) ? "—" : format(date, "MMM d, yyyy");
     },
   },
-];
+  ];
+}
 
 export function PopupsTab() {
   const [rows, setRows] = React.useState<PopupRow[]>([]);
@@ -111,6 +131,17 @@ export function PopupsTab() {
     return () => { cancelled = true; };
   }, [page, debounced, refreshKey]);
 
+  const handleToggleStatus = async (row: PopupRow, next: boolean) => {
+    try {
+      await updateRecordStatus("popup", row.id, next);
+      toast.success(next ? "Popup activated." : "Popup deactivated.");
+      setRefreshKey((k) => k + 1);
+    } catch (err) {
+      toast.error(apiErrorMessage(err, "Couldn't update status."));
+    }
+  };
+  const columns = React.useMemo(() => getColumns(handleToggleStatus), []);
+
   return (
     <div className="flex flex-col gap-3">
       <div className="flex flex-wrap items-center gap-2">
@@ -141,10 +172,12 @@ export function PopupsTab() {
 
 const popupSchema = z.object({
   title: z.string().min(1, "Title is required"),
-  description: z.string().optional(),
+  message: z.string().optional(),
   button_text: z.string().optional(),
-  button_url: z.string().url("Must be a valid URL").optional().or(z.literal("")),
-  position: z.enum(POSITIONS),
+  link_url: z.string().optional(),
+  popup_type: z.enum(POPUP_TYPES),
+  coupon_code: z.string().optional(),
+  display_priority: z.number().int().optional(),
   start_date: z.string().optional(),
   end_date: z.string().optional(),
   status: z.enum(["active", "inactive"]),
@@ -163,20 +196,25 @@ function PopupDialog({
     useForm<PopupValues>({
       resolver: zodResolver(popupSchema),
       defaultValues: {
-        title: "", description: "", button_text: "", button_url: "",
-        position: "center", start_date: "", end_date: "", status: "active",
+        title: "", message: "", button_text: "", link_url: "",
+        popup_type: "announcement", coupon_code: "", display_priority: undefined,
+        start_date: "", end_date: "", status: "active",
       },
     });
 
   const [deleting, setDeleting] = React.useState(false);
+  const [confirmOpen, setConfirmOpen] = React.useState(false);
+  const popupType = useWatch({ control, name: "popup_type" });
 
   React.useEffect(() => {
     if (open) reset({
       title: editing?.title ?? "",
-      description: editing?.description ?? "",
+      message: editing?.message ?? "",
       button_text: editing?.button_text ?? "",
-      button_url: editing?.button_url ?? "",
-      position: (editing?.position as typeof POSITIONS[number]) ?? "center",
+      link_url: editing?.link_url ?? "",
+      popup_type: (editing?.popup_type as typeof POPUP_TYPES[number]) ?? "announcement",
+      coupon_code: editing?.coupon_code ?? "",
+      display_priority: editing?.display_priority,
       start_date: editing?.start_date?.slice(0, 10) ?? "",
       end_date: editing?.end_date?.slice(0, 10) ?? "",
       status: editing?.is_active === false ? "inactive" : "active",
@@ -186,10 +224,12 @@ function PopupDialog({
   const onSubmit = async (values: PopupValues) => {
     const body: Partial<PopupRow> = {
       title: values.title,
-      description: values.description || undefined,
+      message: values.message || undefined,
       button_text: values.button_text || undefined,
-      button_url: values.button_url || undefined,
-      position: values.position,
+      link_url: values.link_url || undefined,
+      popup_type: values.popup_type,
+      coupon_code: values.popup_type === "coupon" ? (values.coupon_code || undefined) : undefined,
+      display_priority: values.display_priority,
       start_date: values.start_date || undefined,
       end_date: values.end_date || undefined,
       is_active: values.status === "active",
@@ -205,11 +245,12 @@ function PopupDialog({
   };
 
   const handleDelete = async () => {
-    if (!editing || !confirm(`Delete "${editing.title}"?`)) return;
+    if (!editing) return;
     setDeleting(true);
     try {
       const msg = await deletePopup(editing.id);
       toast.success(msg);
+      setConfirmOpen(false);
       onOpenChange(false);
       onSaved();
     } catch (err) {
@@ -236,8 +277,8 @@ function PopupDialog({
           </div>
 
           <div className="space-y-1.5">
-            <Label htmlFor="popup-desc">Description</Label>
-            <Textarea id="popup-desc" rows={3} placeholder="Popup body text…" {...register("description")} />
+            <Label htmlFor="popup-message">Message</Label>
+            <Textarea id="popup-message" rows={3} placeholder="Popup body text…" {...register("message")} />
           </div>
 
           <div className="grid grid-cols-2 gap-3">
@@ -246,38 +287,50 @@ function PopupDialog({
               <Input id="popup-btn-text" placeholder="Shop now" {...register("button_text")} />
             </div>
             <div className="space-y-1.5">
-              <Label htmlFor="popup-btn-url">Button URL</Label>
-              <Input id="popup-btn-url" placeholder="https://…" aria-invalid={!!errors.button_url} {...register("button_url")} />
-              {errors.button_url && <p className="text-sm text-destructive">{errors.button_url.message}</p>}
+              <Label htmlFor="popup-link-url">Link URL</Label>
+              <Input id="popup-link-url" placeholder="/shop/summer-sale" {...register("link_url")} />
             </div>
           </div>
 
           <div className="grid grid-cols-2 gap-3">
             <div className="space-y-1.5">
-              <Label>Position</Label>
-              <Controller control={control} name="position" render={({ field }) => (
+              <Label>Popup type</Label>
+              <Controller control={control} name="popup_type" render={({ field }) => (
                 <Select value={field.value} onValueChange={field.onChange}>
                   <SelectTrigger className="w-full"><SelectValue /></SelectTrigger>
                   <SelectContent>
-                    <SelectItem value="center">Center</SelectItem>
-                    <SelectItem value="bottom-left">Bottom left</SelectItem>
-                    <SelectItem value="bottom-right">Bottom right</SelectItem>
+                    <SelectItem value="announcement">Announcement</SelectItem>
+                    <SelectItem value="coupon">Coupon</SelectItem>
+                    <SelectItem value="newsletter">Newsletter</SelectItem>
                   </SelectContent>
                 </Select>
               )} />
             </div>
             <div className="space-y-1.5">
-              <Label>Status</Label>
-              <Controller control={control} name="status" render={({ field }) => (
-                <Select value={field.value} onValueChange={field.onChange}>
-                  <SelectTrigger className="w-full"><SelectValue /></SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="active">Active</SelectItem>
-                    <SelectItem value="inactive">Inactive</SelectItem>
-                  </SelectContent>
-                </Select>
-              )} />
+              <Label htmlFor="popup-priority">Display priority</Label>
+              <Input id="popup-priority" type="number" placeholder="Higher = show first"
+                {...register("display_priority", { valueAsNumber: true })} />
             </div>
+          </div>
+
+          {popupType === "coupon" && (
+            <div className="space-y-1.5">
+              <Label htmlFor="popup-coupon-code">Coupon code</Label>
+              <Input id="popup-coupon-code" placeholder="SUMMER35" className="font-mono uppercase" {...register("coupon_code")} />
+            </div>
+          )}
+
+          <div className="space-y-1.5">
+            <Label>Status</Label>
+            <Controller control={control} name="status" render={({ field }) => (
+              <Select value={field.value} onValueChange={field.onChange}>
+                <SelectTrigger className="w-full"><SelectValue /></SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="active">Active</SelectItem>
+                  <SelectItem value="inactive">Inactive</SelectItem>
+                </SelectContent>
+              </Select>
+            )} />
           </div>
 
           <div className="grid grid-cols-2 gap-3">
@@ -293,10 +346,10 @@ function PopupDialog({
 
           <DialogFooter className="gap-2">
             {editing && (
-              <Button type="button" variant="outline" disabled={deleting}
-                className="text-destructive border-destructive/40 hover:bg-destructive/10 mr-auto"
-                onClick={handleDelete}>
-                {deleting ? <Loader2 className="size-4 animate-spin" /> : <Trash2 className="size-4" />}
+              <Button type="button" variant="destructive" disabled={deleting}
+                className="mr-auto"
+                onClick={() => setConfirmOpen(true)}>
+                <Trash2 className="size-4" />
                 Delete
               </Button>
             )}
@@ -308,6 +361,14 @@ function PopupDialog({
           </DialogFooter>
         </form>
       </DialogContent>
+      <ConfirmDeleteDialog
+        open={confirmOpen}
+        onOpenChange={setConfirmOpen}
+        loading={deleting}
+        onConfirm={handleDelete}
+        title={`Delete "${editing?.title}"?`}
+        description="This can't be undone."
+      />
     </Dialog>
   );
 }

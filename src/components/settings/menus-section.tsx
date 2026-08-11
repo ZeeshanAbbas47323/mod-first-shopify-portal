@@ -3,7 +3,7 @@
 import * as React from "react";
 import { type ColumnDef } from "@tanstack/react-table";
 import { format } from "date-fns";
-import { Loader2, Plus, Search } from "lucide-react";
+import { Loader2, Plus, Search, Trash2 } from "lucide-react";
 import { useForm, Controller, useWatch } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
@@ -18,6 +18,7 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
+import { ConfirmDeleteDialog } from "@/components/confirm-delete-dialog";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import {
@@ -32,6 +33,7 @@ import { StatusBadge } from "@/components/status-badge";
 import { apiErrorMessage } from "@/lib/auth-api";
 import {
   createMenu,
+  deleteRecord,
   listMenus,
   updateMenu,
   MENU_LINK_TYPES,
@@ -348,6 +350,24 @@ function MenuDialog({
   }, [watchedName, editing, setValue]);
 
   const linkType = watch("link_type");
+  const [confirmOpen, setConfirmOpen] = React.useState(false);
+  const [deleting, setDeleting] = React.useState(false);
+
+  const handleDelete = async () => {
+    if (!editing) return;
+    setDeleting(true);
+    try {
+      const message = await deleteRecord("menu", editing.id);
+      toast.success(message);
+      setConfirmOpen(false);
+      onOpenChange(false);
+      onSaved();
+    } catch (error) {
+      toast.error(apiErrorMessage(error, "Couldn't delete the menu."));
+    } finally {
+      setDeleting(false);
+    }
+  };
 
   const onSubmit = async (values: MenuValues) => {
     const body = {
@@ -529,7 +549,18 @@ function MenuDialog({
             </div>
           </div>
 
-          <DialogFooter>
+          <DialogFooter className="gap-2">
+            {editing && (
+              <Button
+                type="button"
+                variant="destructive"
+                className="mr-auto"
+                onClick={() => setConfirmOpen(true)}
+              >
+                <Trash2 className="size-4" />
+                Delete
+              </Button>
+            )}
             <Button type="button" variant="outline" onClick={() => onOpenChange(false)}>
               Cancel
             </Button>
@@ -540,6 +571,14 @@ function MenuDialog({
           </DialogFooter>
         </form>
       </DialogContent>
+      <ConfirmDeleteDialog
+        open={confirmOpen}
+        onOpenChange={setConfirmOpen}
+        loading={deleting}
+        onConfirm={handleDelete}
+        title={`Delete "${editing?.name}"?`}
+        description="This can't be undone."
+      />
     </Dialog>
   );
 }

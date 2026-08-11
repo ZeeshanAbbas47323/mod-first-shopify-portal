@@ -19,9 +19,11 @@ import {
 } from "@/components/ui/select";
 import { apiErrorMessage } from "@/lib/auth-api";
 import { uploadImage } from "@/lib/upload-api";
+import { ConfirmDeleteDialog } from "@/components/confirm-delete-dialog";
 import {
   createProductCategory,
   updateProductCategory,
+  deleteRecord,
   fetchAllProductCategories,
   type ProductCategoryRow,
 } from "@/lib/admin-api";
@@ -134,6 +136,8 @@ export function CategoryForm({ category }: { category?: ProductCategoryRow }) {
   );
   const [parents, setParents] = React.useState<ProductCategoryRow[]>([]);
   const [saving, setSaving] = React.useState(false);
+  const [confirmOpen, setConfirmOpen] = React.useState(false);
+  const [deleting, setDeleting] = React.useState(false);
 
   const {
     register,
@@ -197,7 +201,23 @@ export function CategoryForm({ category }: { category?: ProductCategoryRow }) {
     }
   };
 
+  const handleDelete = async () => {
+    if (!category) return;
+    setDeleting(true);
+    try {
+      const msg = await deleteRecord("productCategory", category.id);
+      toast.success(msg);
+      router.push("/products/categories");
+    } catch (e) {
+      toast.error(apiErrorMessage(e, "Couldn't delete the category."));
+    } finally {
+      setDeleting(false);
+      setConfirmOpen(false);
+    }
+  };
+
   return (
+    <>
     <form onSubmit={handleSubmit(onSubmit)} noValidate>
       <div className="flex flex-col gap-5">
         {/* Header */}
@@ -218,13 +238,8 @@ export function CategoryForm({ category }: { category?: ProductCategoryRow }) {
             {isEdit && (
               <Button
                 type="button"
-                variant="outline"
-                className="text-destructive border-destructive/40 hover:bg-destructive/10"
-                onClick={async () => {
-                  if (!confirm(`Delete "${category.name}"?`)) return;
-                  // No delete API in collection — show info
-                  toast.info("Delete is not available via API. Deactivate instead.");
-                }}
+                variant="destructive"
+                onClick={() => setConfirmOpen(true)}
               >
                 <Trash2 className="size-4" />
                 Delete
@@ -395,6 +410,15 @@ export function CategoryForm({ category }: { category?: ProductCategoryRow }) {
         </div>
       </div>
     </form>
+    <ConfirmDeleteDialog
+      open={confirmOpen}
+      onOpenChange={setConfirmOpen}
+      loading={deleting}
+      onConfirm={handleDelete}
+      title={`Delete "${category?.name}"?`}
+      description="This can't be undone."
+    />
+    </>
   );
 }
 

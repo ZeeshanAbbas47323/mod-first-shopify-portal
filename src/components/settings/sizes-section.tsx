@@ -3,7 +3,7 @@
 import * as React from "react";
 import { type ColumnDef } from "@tanstack/react-table";
 import { format } from "date-fns";
-import { Loader2, Plus, Search } from "lucide-react";
+import { Loader2, Plus, Search, Trash2 } from "lucide-react";
 import { useForm, Controller } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
@@ -17,6 +17,7 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
+import { ConfirmDeleteDialog } from "@/components/confirm-delete-dialog";
 
 import { toast } from "sonner";
 
@@ -31,7 +32,7 @@ import {
 import { DataTable } from "@/components/data-table";
 import { StatusBadge } from "@/components/status-badge";
 import { apiErrorMessage } from "@/lib/auth-api";
-import { createSize, listSizes, updateSize, type SizeRow } from "@/lib/admin-api";
+import { createSize, deleteRecord, listSizes, updateSize, type SizeRow } from "@/lib/admin-api";
 
 const PAGE_SIZE = 10;
 
@@ -209,6 +210,8 @@ function SizeDialog({
     resolver: zodResolver(sizeSchema),
     defaultValues: { name: "", display_name: "", status: "active" },
   });
+  const [confirmOpen, setConfirmOpen] = React.useState(false);
+  const [deleting, setDeleting] = React.useState(false);
 
   React.useEffect(() => {
     if (open) {
@@ -237,6 +240,22 @@ function SizeDialog({
       toast.error(
         apiErrorMessage(error, `Couldn't ${editing ? "update" : "create"} the size.`)
       );
+    }
+  };
+
+  const handleDelete = async () => {
+    if (!editing) return;
+    setDeleting(true);
+    try {
+      const message = await deleteRecord("size", editing.id);
+      toast.success(message);
+      setConfirmOpen(false);
+      onOpenChange(false);
+      onCreated();
+    } catch (error) {
+      toast.error(apiErrorMessage(error, "Couldn't delete the size."));
+    } finally {
+      setDeleting(false);
     }
   };
 
@@ -278,7 +297,18 @@ function SizeDialog({
               )}
             />
           </div>
-          <DialogFooter>
+          <DialogFooter className="gap-2">
+            {editing && (
+              <Button
+                type="button"
+                variant="destructive"
+                className="mr-auto"
+                onClick={() => setConfirmOpen(true)}
+              >
+                <Trash2 className="size-4" />
+                Delete
+              </Button>
+            )}
             <Button type="button" variant="outline" onClick={() => onOpenChange(false)}>
               Cancel
             </Button>
@@ -289,6 +319,14 @@ function SizeDialog({
           </DialogFooter>
         </form>
       </DialogContent>
+      <ConfirmDeleteDialog
+        open={confirmOpen}
+        onOpenChange={setConfirmOpen}
+        loading={deleting}
+        onConfirm={handleDelete}
+        title={`Delete "${editing?.display_name}"?`}
+        description="This can't be undone."
+      />
     </Dialog>
   );
 }

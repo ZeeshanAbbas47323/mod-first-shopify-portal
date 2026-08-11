@@ -3,7 +3,7 @@
 import * as React from "react";
 import { type ColumnDef } from "@tanstack/react-table";
 import { format } from "date-fns";
-import { CheckCircle2, Loader2, Plus, Search, Tag, XCircle } from "lucide-react";
+import { CheckCircle2, Loader2, Plus, Search, Tag, Trash2, XCircle } from "lucide-react";
 import { useForm, Controller } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
@@ -23,6 +23,7 @@ import {
 import { DataTable } from "@/components/data-table";
 import { DateRangePicker } from "@/components/date-range-picker";
 import { StatusBadge } from "@/components/status-badge";
+import { ConfirmDeleteDialog } from "@/components/confirm-delete-dialog";
 import { apiErrorMessage } from "@/lib/auth-api";
 import { parseServerDate, toLocalDateInput } from "@/lib/utils";
 import {
@@ -31,6 +32,7 @@ import {
   listCoupons,
   createCoupon,
   updateCoupon,
+  deleteRecord,
   validateCoupon,
   type CouponRow,
   type CouponType,
@@ -304,6 +306,24 @@ function CouponDialog({
   }, [open, editing, reset]);
 
   const currentType = watch("type");
+  const [confirmOpen, setConfirmOpen] = React.useState(false);
+  const [deleting, setDeleting] = React.useState(false);
+
+  const handleDelete = async () => {
+    if (!editing) return;
+    setDeleting(true);
+    try {
+      const msg = await deleteRecord("coupon", editing.id);
+      toast.success(msg);
+      setConfirmOpen(false);
+      onOpenChange(false);
+      onSaved();
+    } catch (err) {
+      toast.error(apiErrorMessage(err, "Couldn't delete coupon."));
+    } finally {
+      setDeleting(false);
+    }
+  };
 
   const onSubmit = async (values: CouponValues) => {
     const body: Partial<CouponRow> = {
@@ -426,7 +446,13 @@ function CouponDialog({
             </div>
           </div>
 
-          <DialogFooter>
+          <DialogFooter className="gap-2">
+            {editing && (
+              <Button type="button" variant="destructive" className="mr-auto" onClick={() => setConfirmOpen(true)}>
+                <Trash2 className="size-4" />
+                Delete
+              </Button>
+            )}
             <Button type="button" variant="outline" onClick={() => onOpenChange(false)}>Cancel</Button>
             <Button type="submit" disabled={isSubmitting}>
               {isSubmitting && <Loader2 className="size-4 animate-spin" />}
@@ -435,6 +461,14 @@ function CouponDialog({
           </DialogFooter>
         </form>
       </DialogContent>
+      <ConfirmDeleteDialog
+        open={confirmOpen}
+        onOpenChange={setConfirmOpen}
+        loading={deleting}
+        onConfirm={handleDelete}
+        title={`Delete "${editing?.code}"?`}
+        description="This can't be undone."
+      />
     </Dialog>
   );
 }

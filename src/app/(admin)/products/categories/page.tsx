@@ -10,9 +10,9 @@ import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { DataTable } from "@/components/data-table";
-import { StatusBadge } from "@/components/status-badge";
+import { StatusToggle } from "@/components/status-badge";
 import { apiErrorMessage } from "@/lib/auth-api";
-import { listProductCategories, type ProductCategoryRow } from "@/lib/admin-api";
+import { listProductCategories, updateRecordStatus, type ProductCategoryRow } from "@/lib/admin-api";
 import { imgUrl } from "@/lib/utils";
 
 const PAGE_SIZE = 20;
@@ -20,7 +20,10 @@ const PAGE_SIZE = 20;
 const imgSrc = (row: ProductCategoryRow) =>
   imgUrl(row.image_url ?? row.image ?? row.banner ?? row.icon ?? null) || null;
 
-const columns: ColumnDef<ProductCategoryRow>[] = [
+function getColumns(
+  onToggleStatus: (row: ProductCategoryRow, next: boolean) => Promise<void>
+): ColumnDef<ProductCategoryRow>[] {
+  return [
   {
     accessorKey: "name",
     header: "Category",
@@ -74,12 +77,12 @@ const columns: ColumnDef<ProductCategoryRow>[] = [
   {
     accessorKey: "is_active",
     header: "Status",
-    cell: ({ row }) =>
-      row.original.is_active !== false ? (
-        <StatusBadge status="Active" tone="success" />
-      ) : (
-        <StatusBadge status="Inactive" tone="neutral" />
-      ),
+    cell: ({ row }) => (
+      <StatusToggle
+        isActive={row.original.is_active !== false}
+        onToggle={(next) => onToggleStatus(row.original, next)}
+      />
+    ),
   },
   {
     accessorKey: "created_at",
@@ -91,7 +94,8 @@ const columns: ColumnDef<ProductCategoryRow>[] = [
       return isNaN(date.getTime()) ? "—" : format(date, "MMM d, yyyy");
     },
   },
-];
+  ];
+}
 
 export default function ProductCategoriesPage() {
   const router = useRouter();
@@ -102,6 +106,7 @@ export default function ProductCategoriesPage() {
   const [total, setTotal] = React.useState(0);
   const [search, setSearch] = React.useState("");
   const [debounced, setDebounced] = React.useState("");
+  const [refreshKey, setRefreshKey] = React.useState(0);
 
   React.useEffect(() => {
     const t = setTimeout(() => setDebounced(search), 400);
@@ -131,7 +136,19 @@ export default function ProductCategoriesPage() {
       })
       .finally(() => { if (!cancelled) setLoading(false); });
     return () => { cancelled = true; };
-  }, [page, debounced]);
+  }, [page, debounced, refreshKey]);
+
+  const handleToggleStatus = async (row: ProductCategoryRow, next: boolean) => {
+    try {
+      await updateRecordStatus("productCategory", row.id, next);
+      toast.success(next ? "Category activated." : "Category deactivated.");
+      setRefreshKey((k) => k + 1);
+    } catch (err) {
+      toast.error(apiErrorMessage(err, "Couldn't update status."));
+    }
+  };
+
+  const columns = React.useMemo(() => getColumns(handleToggleStatus), []);
 
   return (
     <div className="flex flex-col gap-4">

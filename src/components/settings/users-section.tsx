@@ -3,7 +3,7 @@
 import * as React from "react";
 import { type ColumnDef } from "@tanstack/react-table";
 import { format } from "date-fns";
-import { Loader2, Plus, Search } from "lucide-react";
+import { Loader2, Plus, Search, Trash2 } from "lucide-react";
 import { useForm, Controller } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
@@ -17,6 +17,7 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
+import { ConfirmDeleteDialog } from "@/components/confirm-delete-dialog";
 
 import type { DateRange } from "react-day-picker";
 import { toast } from "sonner";
@@ -34,7 +35,7 @@ import { DataTable } from "@/components/data-table";
 import { DateRangePicker } from "@/components/date-range-picker";
 import { StatusBadge } from "@/components/status-badge";
 import { apiErrorMessage } from "@/lib/auth-api";
-import { createUser, listUsers, unlockUser, updateUser, USER_ROLES, type UserRow } from "@/lib/admin-api";
+import { createUser, deleteRecord, listUsers, unlockUser, updateUser, USER_ROLES, type UserRow } from "@/lib/admin-api";
 
 const PAGE_SIZE = 10;
 
@@ -277,6 +278,8 @@ function UserDialog({
   onCreated: () => void;
 }) {
   const [unlocking, setUnlocking] = React.useState(false);
+  const [confirmOpen, setConfirmOpen] = React.useState(false);
+  const [deleting, setDeleting] = React.useState(false);
   const {
     register,
     handleSubmit,
@@ -353,6 +356,22 @@ function UserDialog({
       toast.error(apiErrorMessage(error, "Couldn't unlock the user."));
     } finally {
       setUnlocking(false);
+    }
+  };
+
+  const handleDelete = async () => {
+    if (!editing) return;
+    setDeleting(true);
+    try {
+      const message = await deleteRecord("user", editing.id);
+      toast.success(message);
+      setConfirmOpen(false);
+      onOpenChange(false);
+      onCreated();
+    } catch (error) {
+      toast.error(apiErrorMessage(error, "Couldn't delete the user."));
+    } finally {
+      setDeleting(false);
     }
   };
 
@@ -442,11 +461,21 @@ function UserDialog({
             </div>
           )}
           <DialogFooter className="gap-2">
-            {editing?.is_locked && (
+            {editing && (
               <Button
                 type="button"
                 variant="destructive"
                 className="mr-auto"
+                onClick={() => setConfirmOpen(true)}
+              >
+                <Trash2 className="size-4" />
+                Delete
+              </Button>
+            )}
+            {editing?.is_locked && (
+              <Button
+                type="button"
+                variant="outline"
                 onClick={unlock}
                 disabled={unlocking}
               >
@@ -464,6 +493,14 @@ function UserDialog({
           </DialogFooter>
         </form>
       </DialogContent>
+      <ConfirmDeleteDialog
+        open={confirmOpen}
+        onOpenChange={setConfirmOpen}
+        loading={deleting}
+        onConfirm={handleDelete}
+        title={`Delete "${editing?.full_name}"?`}
+        description="This will permanently remove the user's account. This can't be undone."
+      />
     </Dialog>
   );
 }
