@@ -4,7 +4,7 @@ import * as React from "react";
 import { toast } from "sonner";
 import {
   ChevronDown, ChevronUp, GripVertical, Loader2,
-  Plus, Save, X,
+  Plus, Save, Trash2, X,
 } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
@@ -22,12 +22,15 @@ import {
   Dialog, DialogContent, DialogDescription,
   DialogFooter, DialogHeader, DialogTitle,
 } from "@/components/ui/dialog";
+import { ConfirmDeleteDialog } from "@/components/confirm-delete-dialog";
 import { apiErrorMessage } from "@/lib/auth-api";
 import {
   listFooterSections,
   createFooterSection,
   updateFooterSection,
   manageFooterLinks,
+  deleteRecord,
+  updateSortOrder,
   type FooterSectionRow,
   type FooterLinkRow,
 } from "@/lib/admin-api";
@@ -113,6 +116,22 @@ type LocalLink = FooterLinkRow & { _localId: string; _isNew?: boolean; _deleted?
 function SectionCard({ section, onSaved }: { section: FooterSectionRow; onSaved: () => void }) {
   const [open, setOpen] = React.useState(false);
   const [saving, setSaving] = React.useState(false);
+  const [confirmOpen, setConfirmOpen] = React.useState(false);
+  const [deleting, setDeleting] = React.useState(false);
+
+  const handleDelete = async () => {
+    setDeleting(true);
+    try {
+      const msg = await deleteRecord("footerSection", section.id);
+      toast.success(msg);
+      setConfirmOpen(false);
+      onSaved();
+    } catch (e) {
+      toast.error(apiErrorMessage(e, "Couldn't delete footer section."));
+    } finally {
+      setDeleting(false);
+    }
+  };
 
   // Section fields
   const [title, setTitle] = React.useState(section.title ?? "");
@@ -266,13 +285,25 @@ function SectionCard({ section, onSaved }: { section: FooterSectionRow; onSaved:
               )}
             </div>
 
-            {/* Save */}
-            <div className="flex justify-end">
+            {/* Actions */}
+            <div className="flex justify-between">
+              <Button variant="destructive" onClick={() => setConfirmOpen(true)} disabled={deleting}>
+                <Trash2 className="size-4" /> Delete section
+              </Button>
               <Button onClick={save} disabled={saving}>
                 {saving ? <Loader2 className="size-4 animate-spin" /> : <Save className="size-4" />}
                 {saving ? "Saving…" : "Save section"}
               </Button>
             </div>
+
+            <ConfirmDeleteDialog
+              open={confirmOpen}
+              onOpenChange={setConfirmOpen}
+              loading={deleting}
+              onConfirm={handleDelete}
+              title={`Delete "${section.title || section.section_key}"?`}
+              description="This will permanently remove this footer section and all its links."
+            />
           </CardContent>
         </>
       )}
@@ -390,6 +421,27 @@ export function FooterSectionsTab() {
 
   React.useEffect(() => { load(); }, [load]);
 
+  const sorted = React.useMemo(
+    () => sections.slice().sort((a, b) => (a.sort_order ?? 0) - (b.sort_order ?? 0)),
+    [sections]
+  );
+
+  const handleMove = async (index: number, direction: "up" | "down") => {
+    const target = direction === "up" ? index - 1 : index + 1;
+    if (target < 0 || target >= sorted.length) return;
+    const a = sorted[index];
+    const b = sorted[target];
+    try {
+      await updateSortOrder("footerSection", [
+        { id: a.id, sort_order: b.sort_order ?? target },
+        { id: b.id, sort_order: a.sort_order ?? index },
+      ]);
+      load();
+    } catch (e) {
+      toast.error(apiErrorMessage(e, "Couldn't update order."));
+    }
+  };
+
   return (
     <div className="flex flex-col gap-3">
       <div className="flex justify-end">
@@ -409,11 +461,24 @@ export function FooterSectionsTab() {
           No footer sections found.
         </div>
       ) : (
-        sections
-          .slice()
-          .sort((a, b) => (a.sort_order ?? 0) - (b.sort_order ?? 0))
-          .map((s) => (
-            <SectionCard key={s.id} section={s} onSaved={load} />
+        sorted.map((s, i) => (
+            <div key={s.id} className="flex items-start gap-2">
+              <div className="flex flex-col gap-0.5 pt-3">
+                <button type="button" disabled={i === 0}
+                  onClick={() => handleMove(i, "up")}
+                  className="rounded p-0.5 text-muted-foreground hover:text-foreground disabled:opacity-30">
+                  <ChevronUp className="size-4" />
+                </button>
+                <button type="button" disabled={i === sorted.length - 1}
+                  onClick={() => handleMove(i, "down")}
+                  className="rounded p-0.5 text-muted-foreground hover:text-foreground disabled:opacity-30">
+                  <ChevronDown className="size-4" />
+                </button>
+              </div>
+              <div className="flex-1">
+                <SectionCard section={s} onSaved={load} />
+              </div>
+            </div>
           ))
       )}
     </div>

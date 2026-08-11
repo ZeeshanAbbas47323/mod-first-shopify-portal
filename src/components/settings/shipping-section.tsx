@@ -25,6 +25,7 @@ import {
   Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
 } from "@/components/ui/select";
 import { DataTable } from "@/components/data-table";
+import { ConfirmDeleteDialog } from "@/components/confirm-delete-dialog";
 import { StatusBadge } from "@/components/status-badge";
 import { apiErrorMessage } from "@/lib/auth-api";
 import {
@@ -67,6 +68,8 @@ export function ShippingSection() {
   const [selected, setSelected] = React.useState<ShipmentRow | null>(null);
   const [trackData, setTrackData] = React.useState<Record<string, unknown> | null>(null);
   const [detailLoading, setDetailLoading] = React.useState(false);
+  const [confirmAction, setConfirmAction] = React.useState<{ type: "void" | "cancel_pickup"; id: number | string } | null>(null);
+  const [confirmLoading, setConfirmLoading] = React.useState(false);
 
   React.useEffect(() => {
     const t = setTimeout(() => setDebounced(search), 400);
@@ -107,27 +110,21 @@ export function ShippingSection() {
     }
   };
 
-  const handleVoid = async (id: number | string) => {
-    if (!confirm("Void / cancel this shipment?")) return;
+  const handleConfirmAction = async () => {
+    if (!confirmAction) return;
+    setConfirmLoading(true);
     try {
-      const msg = await voidShipment(id);
+      const msg = confirmAction.type === "void"
+        ? await voidShipment(confirmAction.id)
+        : await cancelPickup(confirmAction.id);
       toast.success(msg);
+      setConfirmAction(null);
       setDetailOpen(false);
       setRefreshKey((k) => k + 1);
     } catch (err) {
-      toast.error(apiErrorMessage(err, "Couldn't void shipment."));
-    }
-  };
-
-  const handleCancelPickup = async (id: number | string) => {
-    if (!confirm("Cancel the pickup for this shipment?")) return;
-    try {
-      const msg = await cancelPickup(id);
-      toast.success(msg);
-      setDetailOpen(false);
-      setRefreshKey((k) => k + 1);
-    } catch (err) {
-      toast.error(apiErrorMessage(err, "Couldn't cancel pickup."));
+      toast.error(apiErrorMessage(err, confirmAction.type === "void" ? "Couldn't void shipment." : "Couldn't cancel pickup."));
+    } finally {
+      setConfirmLoading(false);
     }
   };
 
@@ -298,7 +295,7 @@ export function ShippingSection() {
                   variant="outline"
                   size="sm"
                   className="text-destructive border-destructive/40 hover:bg-destructive/10"
-                  onClick={() => handleVoid(selected.id)}
+                  onClick={() => setConfirmAction({ type: "void", id: selected.id })}
                 >
                   <Trash2 className="size-3.5" />
                   Void shipment
@@ -307,7 +304,7 @@ export function ShippingSection() {
                   variant="outline"
                   size="sm"
                   className="text-destructive border-destructive/40 hover:bg-destructive/10"
-                  onClick={() => handleCancelPickup(selected.id)}
+                  onClick={() => setConfirmAction({ type: "cancel_pickup", id: selected.id })}
                 >
                   <X className="size-3.5" />
                   Cancel pickup
@@ -323,6 +320,17 @@ export function ShippingSection() {
         onOpenChange={setPickupOpen}
         shipmentId={selected?.id ?? null}
         onScheduled={() => setRefreshKey((k) => k + 1)}
+      />
+
+      <ConfirmDeleteDialog
+        open={!!confirmAction}
+        onOpenChange={(v) => { if (!v) setConfirmAction(null); }}
+        loading={confirmLoading}
+        onConfirm={handleConfirmAction}
+        title={confirmAction?.type === "void" ? "Void this shipment?" : "Cancel pickup?"}
+        description={confirmAction?.type === "void"
+          ? "This will void / cancel the shipment. This action cannot be undone."
+          : "This will cancel the scheduled pickup for this shipment."}
       />
     </div>
   );
