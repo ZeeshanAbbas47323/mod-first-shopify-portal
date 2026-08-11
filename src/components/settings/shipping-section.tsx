@@ -181,7 +181,7 @@ export function ShippingSection() {
           size="sm"
           variant="ghost"
           className="size-8 p-0"
-          onClick={(e) => { e.stopPropagation(); openDetail(row.original); }}
+          onClick={(e: React.MouseEvent) => { e.stopPropagation(); openDetail(row.original); }}
         >
           <Eye className="size-4" />
         </Button>
