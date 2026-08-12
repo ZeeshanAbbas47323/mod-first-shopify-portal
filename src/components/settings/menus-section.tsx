@@ -197,7 +197,7 @@ export function MenusSection() {
     };
   }, [page, debouncedSearch, menuType, linkType, status, refreshKey]);
 
-  const handleToggleStatus = async (row: MenuRow, next: boolean) => {
+  const handleToggleStatus = React.useCallback(async (row: MenuRow, next: boolean) => {
     try {
       await updateRecordStatus("menu", row.id, next);
       toast.success(next ? "Menu activated." : "Menu deactivated.");
@@ -205,9 +205,9 @@ export function MenusSection() {
     } catch (error) {
       toast.error(apiErrorMessage(error, "Couldn't update status."));
     }
-  };
+  }, []);
 
-  const handleMove = async (row: MenuRow, direction: "up" | "down") => {
+  const handleMove = React.useCallback(async (row: MenuRow, direction: "up" | "down") => {
     const index = rows.findIndex((r) => r.id === row.id);
     const adjacentIndex = direction === "up" ? index - 1 : index + 1;
     if (index < 0 || adjacentIndex < 0 || adjacentIndex >= rows.length) return;
@@ -223,9 +223,9 @@ export function MenusSection() {
     } catch (error) {
       toast.error(apiErrorMessage(error, "Couldn't reorder menus."));
     }
-  };
+  }, [rows]);
 
-  const columns = React.useMemo(() => getColumns(handleToggleStatus, handleMove), [rows]);
+  const columns = React.useMemo(() => getColumns(handleToggleStatus, handleMove), [handleToggleStatus, handleMove]);
 
   return (
     <div className="flex flex-col gap-3">

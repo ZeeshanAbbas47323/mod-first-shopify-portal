@@ -87,7 +87,7 @@ export default function ShippingLabelsPage() {
 
   const load = React.useCallback(() => {
     setLoading(true);
-    listShipments({ page, limit: PAGE_LIMIT, search: search || undefined })
+    listShipments({ page, limit: PAGE_LIMIT, filters: search ? { search } : undefined })
       .then(({ rows: r, total: t, totalPages: tp }) => {
         setRows(r); setTotal(t); setTotalPages(tp);
       })

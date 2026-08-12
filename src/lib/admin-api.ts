@@ -119,11 +119,11 @@ export interface OrderRow {
   status?: string;
   payment_status?: string;
   delivery_type?: string;
-  total?: number;
-  subtotal?: number;
-  discount?: number;
-  tax?: number;
-  shipping?: number;
+  total?: number | string;
+  subtotal?: number | string;
+  discount?: number | string;
+  tax?: number | string;
+  shipping?: number | string;
   items_count?: number;
   customer?: OrderCustomer | string | null;
   email?: string;

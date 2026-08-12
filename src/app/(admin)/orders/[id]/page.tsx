@@ -247,6 +247,7 @@ export default function OrderDetailPage() {
                     <div key={String(item.id)} className="flex items-center gap-4 px-6 py-3">
                       <div className="flex size-12 shrink-0 items-center justify-center overflow-hidden rounded-lg border bg-muted">
                         {img ? (
+                          // eslint-disable-next-line @next/next/no-img-element
                           <img src={img} alt={title} className="size-full object-cover" />
                         ) : (
                           <Package className="size-5 text-muted-foreground" />
