@@ -21,6 +21,7 @@ export const USER_ROLES = [
   "content_writer",
   "production",
   "accountant",
+  "pos_user",
   "customer",
 ] as const;
 
@@ -260,9 +261,10 @@ export async function getOrder(id: number | string): Promise<OrderDetail> {
 
 export async function updateOrderStatus(
   id: number | string,
-  status: string
+  status: string,
+  notes?: string
 ): Promise<string> {
-  const { data } = await api.put(`orders/update-status/${id}`, { status });
+  const { data } = await api.put(`orders/${id}/status`, { status, notes });
   return (data?.message as string) ?? "Status updated.";
 }
 
@@ -351,11 +353,22 @@ export interface MenuRow {
   sort_order?: number;
   icon?: string | null;
   link_type?: string;
+  link_value?: string | null;
+  target_category_id?: number | null;
+  target_product_id?: number | null;
+  target_page_id?: number | null;
   external_url?: string | null;
   open_in_new_tab?: boolean;
   visibility?: boolean;
   is_active?: boolean;
   created_at?: string;
+}
+
+/** A menu with its sub-menus resolved, as rendered by the tree view. */
+export interface MenuTreeNode extends MenuRow {
+  children: MenuTreeNode[];
+  /** Nesting level, 0 for top-level menus. */
+  depth: number;
 }
 
 export interface MenuRightRow {
@@ -373,6 +386,85 @@ export interface MenuRightRow {
 export async function listMenus(params: ListParams): Promise<ListResult<MenuRow>> {
   const { data } = await api.post("menus/list", buildBody(params));
   return parseList<MenuRow>(data, params.limit);
+}
+
+/** Children can arrive under any of these keys depending on the endpoint. */
+function pickChildren(node: Json): Json[] {
+  const kids =
+    node?.children ?? node?.sub_menus ?? node?.subMenus ?? node?.submenus ?? node?.items;
+  return Array.isArray(kids) ? kids : [];
+}
+
+/** Sort siblings by sort_order, falling back to name. */
+function sortSiblings<T extends MenuRow>(nodes: T[]): T[] {
+  return [...nodes].sort((a, b) => {
+    const ao = a.sort_order ?? Number.MAX_SAFE_INTEGER;
+    const bo = b.sort_order ?? Number.MAX_SAFE_INTEGER;
+    return ao !== bo ? ao - bo : (a.name ?? "").localeCompare(b.name ?? "");
+  });
+}
+
+/** Attach depth to an already-nested payload. */
+function normalizeTree(nodes: Json[], depth = 0): MenuTreeNode[] {
+  return sortSiblings(
+    nodes.map((n) => ({
+      ...(n as MenuRow),
+      depth,
+      children: normalizeTree(pickChildren(n), depth + 1),
+    })) as MenuTreeNode[]
+  );
+}
+
+/** Build a tree from a flat list using parent_id. Orphans are kept at the root. */
+export function buildMenuTree(rows: MenuRow[]): MenuTreeNode[] {
+  const byId = new Map<string, MenuTreeNode>();
+  rows.forEach((r) => byId.set(String(r.id), { ...r, depth: 0, children: [] }));
+
+  const roots: MenuTreeNode[] = [];
+  byId.forEach((node) => {
+    const parent =
+      node.parent_id != null ? byId.get(String(node.parent_id)) : undefined;
+    if (parent && parent !== node) parent.children.push(node);
+    else roots.push(node);
+  });
+
+  const applyDepth = (nodes: MenuTreeNode[], depth: number): MenuTreeNode[] =>
+    sortSiblings(nodes).map((n) => ({
+      ...n,
+      depth,
+      children: applyDepth(n.children, depth + 1),
+    }));
+
+  return applyDepth(roots, 0);
+}
+
+/**
+ * Menus as a hierarchy. Uses POST menus/tree; if that endpoint is unavailable
+ * or returns a flat list, the tree is assembled client-side from parent_id.
+ */
+export async function fetchMenuTree(filters: Json = {}): Promise<MenuTreeNode[]> {
+  const clean = Object.fromEntries(
+    Object.entries(filters).filter(([, v]) => v !== undefined && v !== null && v !== "")
+  );
+
+  try {
+    const { data } = await api.post("menus/tree", { filters: clean });
+    const p: Json = data?.payload ?? data?.data ?? data ?? {};
+    const nodes: Json[] = Array.isArray(p) ? p : p.rows ?? p.menus ?? p.items ?? p.tree ?? [];
+    if (nodes.length) {
+      // Nested payload → use as-is; flat payload → assemble from parent_id.
+      const nested = nodes.some((n) => pickChildren(n).length > 0);
+      return nested
+        ? normalizeTree(nodes)
+        : buildMenuTree(nodes as unknown as MenuRow[]);
+    }
+    if (Array.isArray(nodes)) return [];
+  } catch {
+    // fall through to the flat list below
+  }
+
+  const flat = await listMenus({ page: 1, limit: 500, filters: clean });
+  return buildMenuTree(flat.rows);
 }
 
 // ─── Generic delete ───────────────────────────────────────────────────────────
@@ -911,9 +1003,104 @@ function dashParse<T>(data: Json): T {
   return (data?.payload ?? data?.data ?? data) as T;
 }
 
+/** Containers the overview numbers may be nested inside. */
+const OVERVIEW_CONTAINERS = [
+  "summary", "overview", "metrics", "stats", "statistics", "totals", "kpis", "cards",
+];
+
+/** Value keys used when a metric arrives as an object rather than a number. */
+const METRIC_VALUE_KEYS = ["value", "total", "amount", "count", "current"];
+const METRIC_CHANGE_KEYS = [
+  "change_pct", "changePct", "change_percentage", "changePercentage",
+  "percent_change", "percentChange", "growth_pct", "growth", "change",
+];
+
+/** Coerce whatever shape a metric arrives in into { value, change_pct }. */
+function toMetric(raw: unknown): OverviewMetric | undefined {
+  if (raw == null) return undefined;
+  if (typeof raw === "number") return { value: raw };
+  if (typeof raw === "string") {
+    const n = Number(raw.replace(/[^0-9.-]/g, ""));
+    return isNaN(n) ? undefined : { value: n };
+  }
+  if (typeof raw !== "object") return undefined;
+
+  const obj = raw as Json;
+  const valueKey = METRIC_VALUE_KEYS.find((k) => typeof obj[k] === "number" || typeof obj[k] === "string");
+  if (!valueKey) return undefined;
+  const value = Number(String(obj[valueKey]).replace(/[^0-9.-]/g, ""));
+  if (isNaN(value)) return undefined;
+
+  const changeKey = METRIC_CHANGE_KEYS.find((k) => obj[k] != null);
+  const change = changeKey != null ? Number(obj[changeKey]) : undefined;
+
+  return {
+    value,
+    change_pct: change != null && !isNaN(change) ? change : undefined,
+    change_direction: (obj.change_direction ?? obj.direction ?? null) as OverviewMetric["change_direction"],
+  };
+}
+
+/**
+ * Find a metric by any of its known aliases, at the top level or inside one of
+ * the usual container objects. Key naming varies between endpoints, so the
+ * dashboard resolves values by alias instead of assuming one exact shape.
+ */
+function findMetric(payload: Json, aliases: string[]): OverviewMetric | undefined {
+  const sources: Json[] = [
+    payload,
+    ...OVERVIEW_CONTAINERS.map((k) => payload?.[k]).filter(
+      (v): v is Json => !!v && typeof v === "object" && !Array.isArray(v)
+    ),
+  ];
+  for (const source of sources) {
+    for (const alias of aliases) {
+      const metric = toMetric(source?.[alias]);
+      if (metric) return metric;
+    }
+  }
+  return undefined;
+}
+
+const OVERVIEW_ALIASES = {
+  revenue: ["revenue", "total_revenue", "totalRevenue", "revenue_total", "sales", "total_sales", "totalSales", "gross_revenue", "net_revenue", "grand_total"],
+  orders: ["orders", "total_orders", "totalOrders", "order_count", "orders_count", "ordersCount", "total_order"],
+  new_customers: ["new_customers", "newCustomers", "new_customer_count", "customers", "total_customers", "totalCustomers", "customers_count", "new_users", "new_user_count"],
+  aov: ["aov", "average_order_value", "averageOrderValue", "avg_order_value", "avgOrderValue", "average_order", "avg_order"],
+  pending_orders: ["pending_orders", "pendingOrders", "pending_order_count"],
+  low_stock_count: ["low_stock_count", "lowStockCount", "low_stock", "low_stock_products", "lowStockProducts"],
+  active_customers: ["active_customers", "activeCustomers", "total_customers"],
+  active_products: ["active_products", "activeProducts", "total_products", "totalProducts", "products"],
+} as const;
+
+/**
+ * Store overview KPIs. The raw payload is preserved so nothing is lost, with
+ * the four headline metrics normalized onto stable keys for the dashboard.
+ */
 export async function getDashboardOverview(body: DashboardBody = {}): Promise<DashboardOverview> {
   const { data } = await api.post("dashboard/overview", body);
-  return dashParse<DashboardOverview>(data);
+  const payload = dashParse<Json>(data) ?? {};
+
+  const resolved: DashboardOverview = { ...payload };
+  let found = 0;
+
+  const headline = ["revenue", "orders", "new_customers", "aov"];
+  (Object.keys(OVERVIEW_ALIASES) as (keyof typeof OVERVIEW_ALIASES)[]).forEach((key) => {
+    const metric = findMetric(payload, [...OVERVIEW_ALIASES[key]]);
+    if (!metric) return;
+    found += 1;
+    // Counters stay plain numbers; the headline metrics keep their change_pct.
+    (resolved as Json)[key] = headline.includes(key) ? metric : metric.value;
+  });
+
+  if (!found && Object.keys(payload).length) {
+    console.warn(
+      "[dashboard/overview] no known metrics in payload — keys were:",
+      Object.keys(payload)
+    );
+  }
+
+  return resolved;
 }
 
 export async function getRevenueTrend(body: DashboardBody = {}): Promise<TrendPoint[]> {
@@ -1660,4 +1847,418 @@ export async function manageFooterLinks(
 ): Promise<string> {
   const { data } = await api.post(`footer-sections/${sectionId}/links`, { links });
   return (data?.message as string) ?? "Links saved.";
+}
+
+// ─── Content Pages ────────────────────────────────────────────────────────────
+
+export const CONTENT_TYPES = [
+  "page", "blog_post", "faq", "policy", "privacy", "terms",
+] as const;
+export type ContentType = (typeof CONTENT_TYPES)[number];
+
+export const CONTENT_TYPE_LABELS: Record<ContentType, string> = {
+  page: "Page",
+  blog_post: "Blog post",
+  faq: "FAQ",
+  policy: "Policy",
+  privacy: "Privacy",
+  terms: "Terms",
+};
+
+export interface ContentPageRow {
+  id: number | string;
+  title: string;
+  slug: string;
+  content: string;
+  content_type: ContentType;
+  meta_title?: string | null;
+  meta_desc?: string | null;
+  meta_keywords?: string | null;
+  canonical_url?: string | null;
+  featured_image?: string | null;
+  is_active?: boolean;
+  is_deleted?: boolean;
+  created_by?: number | null;
+  updated_by?: number | null;
+  created_at?: string;
+  updated_at?: string;
+  humanize_content_type?: string;
+}
+
+export interface ContentPageInput {
+  title: string;
+  content: string;
+  content_type: ContentType;
+  meta_title?: string | null;
+  meta_desc?: string | null;
+  meta_keywords?: string | null;
+  canonical_url?: string | null;
+  featured_image?: string | null;
+  is_active?: boolean;
+}
+
+export async function listContentPages(
+  params: ListParams
+): Promise<ListResult<ContentPageRow>> {
+  const { data } = await api.post("content-pages/list", buildBody(params));
+  return parseList<ContentPageRow>(data, params.limit);
+}
+
+export async function getContentPage(
+  id: number | string
+): Promise<ContentPageRow> {
+  const { data } = await api.get(`content-pages/get/${id}`);
+  return (data?.payload ?? data?.data ?? data) as ContentPageRow;
+}
+
+export const createContentPage = (body: ContentPageInput) =>
+  createRecord("content-pages", body, "Content page created.");
+
+export const updateContentPage = (id: number | string, body: Partial<ContentPageInput>) =>
+  updateRecord(`content-pages/${id}`, body, "Content page updated.");
+
+// ─── Order Comments ───────────────────────────────────────────────────────────
+
+export const ORDER_COMMENT_TYPES = [
+  "note", "status_update", "customer_message", "internal_flag",
+] as const;
+export type OrderCommentType = (typeof ORDER_COMMENT_TYPES)[number];
+
+export const ORDER_COMMENT_TYPE_LABELS: Record<OrderCommentType, string> = {
+  note: "Note",
+  status_update: "Status update",
+  customer_message: "Customer message",
+  internal_flag: "Internal flag",
+};
+
+export interface OrderCommentRow {
+  id: number | string;
+  order_id: number | string;
+  comment: string;
+  comment_type?: OrderCommentType;
+  is_internal?: boolean;
+  attachment_url?: string | null;
+  user_id?: number | string | null;
+  user?: { full_name?: string; name?: string; email?: string } | null;
+  created_by?: number | string | null;
+  creator?: { full_name?: string; name?: string; email?: string } | null;
+  is_active?: boolean;
+  created_at?: string;
+  updated_at?: string;
+  [k: string]: unknown;
+}
+
+export interface OrderCommentInput {
+  order_id: number | string;
+  comment: string;
+  comment_type?: OrderCommentType;
+  is_internal?: boolean;
+  attachment_url?: string | null;
+  is_active?: boolean;
+}
+
+/** The timeline for one order, oldest first. */
+export async function listOrderComments(
+  orderId: number | string
+): Promise<OrderCommentRow[]> {
+  const { data } = await api.get(`order-comments/order/${orderId}`);
+  const p: Json = data?.payload ?? data?.data ?? data ?? {};
+  const rows: OrderCommentRow[] = Array.isArray(p)
+    ? p
+    : p.rows ?? p.comments ?? p.items ?? p.data ?? [];
+  return [...rows].sort((a, b) => {
+    const at = a.created_at ? new Date(a.created_at).getTime() : 0;
+    const bt = b.created_at ? new Date(b.created_at).getTime() : 0;
+    return at - bt;
+  });
+}
+
+export async function listAllOrderComments(
+  params: ListParams
+): Promise<ListResult<OrderCommentRow>> {
+  const { data } = await api.post("order-comments/list", buildBody(params));
+  return parseList<OrderCommentRow>(data, params.limit);
+}
+
+export async function createOrderComment(body: OrderCommentInput): Promise<string> {
+  const { data } = await api.post("order-comments", body);
+  return (data?.message as string) ?? "Comment added.";
+}
+
+export async function updateOrderComment(
+  id: number | string,
+  body: Partial<Omit<OrderCommentInput, "order_id">>
+): Promise<string> {
+  const { data } = await api.put(`order-comments/${id}`, body);
+  return (data?.message as string) ?? "Comment updated.";
+}
+
+// ─── Payments ─────────────────────────────────────────────────────────────────
+
+export const PAYMENT_METHODS = [
+  "stripe", "paypal", "cash", "bank_transfer",
+  "stripe_and_cash", "paypal_and_cash", "without_payment",
+] as const;
+
+export const PAYMENT_RECORD_STATUSES = [
+  "pending", "paid", "failed", "refunded", "partially_refunded", "cancelled",
+] as const;
+
+export interface PaymentRow {
+  id: number | string;
+  order_id?: number | string;
+  amount?: string | number;
+  gateway_fee?: string | number | null;
+  net_received?: string | number | null;
+  refunded_amount?: string | number | null;
+  currency?: string;
+  payment_reference?: string | null;
+  payment_method?: string;
+  status?: string;
+  receipt_url?: string | null;
+  failure_reason?: string | null;
+  captured_at?: string | null;
+  created_at?: string;
+  [k: string]: unknown;
+}
+
+export async function listPayments(params: ListParams): Promise<ListResult<PaymentRow>> {
+  const { data } = await api.post("payments/list", buildBody(params));
+  return parseList<PaymentRow>(data, params.limit);
+}
+
+/** Every payment recorded against one order. */
+export async function listOrderPayments(
+  orderId: number | string
+): Promise<PaymentRow[]> {
+  const res = await listPayments({ page: 1, limit: 100, filters: { order_id: orderId } });
+  return res.rows;
+}
+
+export async function listPaymentLogs(params: ListParams): Promise<ListResult<Json>> {
+  const { data } = await api.post("payments/logs", buildBody(params));
+  return parseList<Json>(data, params.limit);
+}
+
+// ─── Payment Refunds ──────────────────────────────────────────────────────────
+
+export interface RefundRow {
+  id: number | string;
+  payment_id: number | string;
+  amount?: string | number;
+  reason?: string | null;
+  status?: string;
+  metadata?: Json | null;
+  created_at?: string;
+  [k: string]: unknown;
+}
+
+function refundParse(data: Json): Json {
+  return (data?.payload ?? data?.data ?? data ?? {}) as Json;
+}
+
+export async function createRefund(body: {
+  payment_id: number | string;
+  amount: number;
+  reason?: string;
+  metadata?: Json;
+}): Promise<string> {
+  const { data } = await api.post("payment-refunds", body);
+  return (data?.message as string) ?? "Refund created.";
+}
+
+export async function getRefundById(id: number | string): Promise<RefundRow> {
+  const { data } = await api.get(`payment-refunds/${id}`);
+  return refundParse(data) as RefundRow;
+}
+
+export async function listRefundsByPayment(
+  paymentId: number | string
+): Promise<RefundRow[]> {
+  const { data } = await api.get(`payment-refunds/payment/${paymentId}`);
+  const p = refundParse(data);
+  return (Array.isArray(p) ? p : p.rows ?? p.refunds ?? p.items ?? p.data ?? []) as RefundRow[];
+}
+
+export async function cancelRefund(id: number | string): Promise<string> {
+  const { data } = await api.put(`payment-refunds/${id}/cancel`);
+  return (data?.message as string) ?? "Refund cancelled.";
+}
+
+/** Refunds that still count against a payment's balance. */
+export function refundedTotal(refunds: RefundRow[]): number {
+  return refunds
+    .filter((r) => !["cancelled", "canceled", "failed"].includes(String(r.status ?? "").toLowerCase()))
+    .reduce((sum, r) => sum + Number(r.amount ?? 0), 0);
+}
+
+// ─── Home Sections (storefront theme) ─────────────────────────────────────────
+
+export interface HomeSectionItemRow {
+  id: number | string;
+  home_section_id?: number | string;
+  title: string;
+  subtitle?: string | null;
+  description?: string | null;
+  image_url?: string | null;
+  mobile_image_url?: string | null;
+  button_text?: string | null;
+  button_url?: string | null;
+  badge?: string | null;
+  sort_order?: number;
+  is_active?: boolean;
+  [k: string]: unknown;
+}
+
+export interface HomeSectionRow {
+  id: number | string;
+  section_key: string;
+  section_name?: string | null;
+  title?: string | null;
+  subtitle?: string | null;
+  description?: string | null;
+  background_image?: string | null;
+  background_color?: string | null;
+  layout_type?: string | null;
+  sort_order?: number;
+  is_active?: boolean;
+  section_settings?: Json | null;
+  items?: HomeSectionItemRow[];
+  created_at?: string;
+  updated_at?: string;
+  [k: string]: unknown;
+}
+
+export interface HomeSectionInput {
+  section_key: string;
+  section_name?: string;
+  title?: string;
+  subtitle?: string;
+  description?: string;
+  background_image?: string | null;
+  background_color?: string;
+  layout_type?: string;
+  sort_order?: number;
+  is_active?: boolean;
+  section_settings?: Json | null;
+  items?: Partial<HomeSectionItemRow>[];
+}
+
+/** Items are managed in one batched call, each tagged with what to do. */
+export type HomeSectionItemAction =
+  | ({ _action: "add" } & Partial<HomeSectionItemRow>)
+  | ({ _action: "update"; id: number | string } & Partial<HomeSectionItemRow>)
+  | { _action: "delete"; id: number | string };
+
+const normalizeSection = (s: Json): HomeSectionRow => ({
+  ...(s as HomeSectionRow),
+  items: (Array.isArray(s.items)
+    ? s.items
+    : (s.homeSectionItems ?? s.sectionItems ?? [])) as HomeSectionItemRow[],
+});
+
+export async function listHomeSections(
+  params: ListParams
+): Promise<ListResult<HomeSectionRow>> {
+  const { data } = await api.post("home-sections/list", buildBody(params));
+  const result = parseList<Json>(data, params.limit);
+  return { ...result, rows: result.rows.map(normalizeSection) };
+}
+
+/** Every section with its items, ordered — used by the theme editor. */
+export async function fetchAllHomeSections(): Promise<HomeSectionRow[]> {
+  const res = await listHomeSections({ page: 1, limit: 100 });
+  return [...res.rows].sort(
+    (a, b) => (a.sort_order ?? 0) - (b.sort_order ?? 0)
+  );
+}
+
+export async function getHomeSection(id: number | string): Promise<HomeSectionRow> {
+  const { data } = await api.get(`home-sections/get/${id}`);
+  return normalizeSection((data?.payload ?? data?.data ?? data ?? {}) as Json);
+}
+
+export async function getHomeSectionByKey(key: string): Promise<HomeSectionRow> {
+  const { data } = await api.get(`home-sections/frontend/${key}`);
+  return normalizeSection((data?.payload ?? data?.data ?? data ?? {}) as Json);
+}
+
+export const createHomeSection = (body: HomeSectionInput) =>
+  createRecord("home-sections", body, "Section created.");
+
+export const updateHomeSection = (
+  id: number | string,
+  body: Partial<HomeSectionInput>
+) => updateRecord(`home-sections/${id}`, body, "Section updated.");
+
+export async function manageHomeSectionItems(
+  sectionId: number | string,
+  items: HomeSectionItemAction[]
+): Promise<string> {
+  const { data } = await api.post(`home-sections/${sectionId}/items`, { items });
+  return (data?.message as string) ?? "Items updated.";
+}
+
+// ─── User PIN / Screen lock ───────────────────────────────────────────────────
+
+export interface PinStatus {
+  is_pin_set?: boolean;
+  pin_enabled?: boolean;
+  auto_lock_minutes?: number | null;
+  pin_updated_at?: string | null;
+  [k: string]: unknown;
+}
+
+/** Whether the signed-in user has a screen-lock PIN, and its auto-lock delay. */
+export async function getPinStatus(): Promise<PinStatus> {
+  const { data } = await api.get("users/pin/status");
+  const p: Json = data?.payload ?? data?.data ?? data ?? {};
+  return {
+    ...p,
+    is_pin_set: p.is_pin_set ?? p.pin_enabled ?? p.has_pin ?? p.isPinSet ?? false,
+    auto_lock_minutes: p.auto_lock_minutes ?? p.autoLockMinutes ?? null,
+  };
+}
+
+export async function setPin(pin: string, confirmPin: string): Promise<string> {
+  const { data } = await api.post("users/pin/set", { pin, confirmPin });
+  return (data?.message as string) ?? "PIN set.";
+}
+
+/** Returns true when the PIN matches — used by the lock screen. */
+export async function verifyPin(pin: string): Promise<boolean> {
+  const { data } = await api.post("users/pin/verify", { pin });
+  const p: Json = data?.payload ?? data?.data ?? data ?? {};
+  return (data?.success ?? p?.valid ?? p?.verified ?? true) !== false;
+}
+
+export async function changePin(body: {
+  currentPin: string;
+  newPin: string;
+  confirmNewPin: string;
+}): Promise<string> {
+  const { data } = await api.put("users/pin/change", body);
+  return (data?.message as string) ?? "PIN changed.";
+}
+
+export async function disablePin(currentPin: string): Promise<string> {
+  const { data } = await api.delete("users/pin", { data: { currentPin } });
+  return (data?.message as string) ?? "PIN disabled.";
+}
+
+export async function updateAutoLock(minutes: number): Promise<string> {
+  const { data } = await api.put("users/pin/auto-lock", {
+    auto_lock_minutes: minutes,
+  });
+  return (data?.message as string) ?? "Auto-lock updated.";
+}
+
+/** Admin action — set a new PIN for another user who has been locked out. */
+export async function resetUserPin(body: {
+  userId: number | string;
+  newPin: string;
+  confirmNewPin: string;
+}): Promise<string> {
+  const { data } = await api.put("users/pin/reset", body);
+  return (data?.message as string) ?? "PIN reset.";
 }

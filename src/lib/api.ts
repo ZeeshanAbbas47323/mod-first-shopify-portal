@@ -38,17 +38,19 @@ export async function silentRefresh(): Promise<string | null> {
   if (!refreshToken) return null;
 
   try {
-    const { data } = await axios.post(
-      `${process.env.NEXT_PUBLIC_API_URL}/auth/refresh-token`,
+    const { data } = await axios.patch(
+      `${process.env.NEXT_PUBLIC_API_URL}auth/refresh-token`,
       { refreshToken },
       { headers: { "Content-Type": "application/json" }, timeout: 10000 }
     );
 
+    // Tokens may sit directly on the payload or inside a `tokens` container.
     const payload = data?.payload ?? data?.data ?? data;
+    const tokens = payload?.tokens ?? payload?.token_data ?? payload;
     const newAccessToken: string | null =
-      payload?.token ?? payload?.accessToken ?? payload?.access_token ?? null;
+      tokens?.accessToken ?? tokens?.access_token ?? tokens?.token ?? null;
     const newRefreshToken: string | null =
-      payload?.refreshToken ?? payload?.refresh_token ?? null;
+      tokens?.refreshToken ?? tokens?.refresh_token ?? null;
 
     if (!newAccessToken) return null;
 

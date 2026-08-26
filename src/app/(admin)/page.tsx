@@ -219,9 +219,15 @@ export default function HomePage() {
     setKpiLoading(true);
     setChartsLoading(true);
 
-    Promise.all([getDashboardOverview(body)])
-      .then(([ov]) => { if (!cancelled) { setOverview(ov); setKpiLoading(false); } })
-      .catch(() => { if (!cancelled) setKpiLoading(false); });
+    getDashboardOverview(body)
+      .then((ov) => { if (!cancelled) { setOverview(ov); setKpiLoading(false); } })
+      .catch((e) => {
+        if (!cancelled) {
+          setOverview({});
+          toast.error(apiErrorMessage(e, "Couldn't load the overview."));
+          setKpiLoading(false);
+        }
+      });
 
     Promise.all([
       getRevenueTrend(body), getCustomerGrowthTrend(body),
@@ -256,7 +262,12 @@ export default function HomePage() {
           setWidgetsLoading(false);
         }
       })
-      .catch(() => { if (!cancelled) setWidgetsLoading(false); });
+      .catch((e) => {
+        if (!cancelled) {
+          toast.error(apiErrorMessage(e, "Couldn't load dashboard widgets."));
+          setWidgetsLoading(false);
+        }
+      });
     return () => { cancelled = true; };
   }, []);
 

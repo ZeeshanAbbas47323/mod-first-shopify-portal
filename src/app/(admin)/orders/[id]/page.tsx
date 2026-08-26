@@ -16,6 +16,8 @@ import {
 } from "@/components/ui/card";
 import { Separator } from "@/components/ui/separator";
 import { StatusBadge } from "@/components/status-badge";
+import { OrderComments } from "@/components/orders/order-comments";
+import { RefundsSection } from "@/components/orders/refunds-section";
 import { apiErrorMessage } from "@/lib/auth-api";
 import {
   getOrder, updateOrderStatus, printOrder,
@@ -351,6 +353,9 @@ export default function OrderDetailPage() {
             </Card>
           )}
 
+          {/* Payments & refunds */}
+          {id && <RefundsSection orderId={id} />}
+
           {/* Shipments */}
           {shipments.length > 0 && (
             <Card>
@@ -404,6 +409,8 @@ export default function OrderDetailPage() {
               </CardContent>
             </Card>
           )}
+          {/* Comments */}
+          {id && <OrderComments orderId={id} />}
         </div>
 
         {/* ── RIGHT COLUMN (sidebar) ── */}

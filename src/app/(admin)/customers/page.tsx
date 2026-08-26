@@ -132,7 +132,8 @@ export default function CustomersPage() {
   const [loading, setLoading] = React.useState(false);
 
   const [dateRange, setDateRange] = React.useState<DateRange | undefined>();
-  const [role, setRole] = React.useState("all");
+  // This page lists store customers; the dropdown can widen it to other roles.
+  const [role, setRole] = React.useState("customer");
   const [isActive, setIsActive] = React.useState("all");
   const [searchInput, setSearchInput] = React.useState("");
   const [search, setSearch] = React.useState("");

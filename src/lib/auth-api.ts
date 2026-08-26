@@ -25,12 +25,18 @@ function unwrap(payload: Json): Json {
   return (payload?.payload ?? payload?.data ?? payload?.result ?? payload) as Json;
 }
 
-function pickToken(payload: Json): string | null {
+/** Tokens may sit directly on the payload or inside a `tokens` container. */
+function tokenSource(payload: Json): Json {
   const d = unwrap(payload);
+  return (d?.tokens ?? d?.token_data ?? d) as Json;
+}
+
+function pickToken(payload: Json): string | null {
+  const t = tokenSource(payload);
   return (
-    d?.token ??
-    d?.accessToken ??
-    d?.access_token ??
+    t?.accessToken ??
+    t?.access_token ??
+    t?.token ??
     payload?.token ??
     payload?.accessToken ??
     null
@@ -38,8 +44,8 @@ function pickToken(payload: Json): string | null {
 }
 
 function pickRefreshToken(payload: Json): string | null {
-  const d = unwrap(payload);
-  return d?.refreshToken ?? d?.refresh_token ?? payload?.refreshToken ?? null;
+  const t = tokenSource(payload);
+  return t?.refreshToken ?? t?.refresh_token ?? payload?.refreshToken ?? null;
 }
 
 function pickUser(payload: Json, fallbackEmail: string): AuthUser | null {

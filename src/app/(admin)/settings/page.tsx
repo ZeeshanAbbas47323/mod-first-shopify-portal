@@ -17,6 +17,8 @@ import {
   Loader2,
   MapPin,
   Package,
+  Layers,
+  LockKeyhole,
   Palette,
   Percent,
   Ruler,
@@ -41,6 +43,8 @@ import { UsersSection } from "@/components/settings/users-section";
 import { BranchesSection } from "@/components/settings/branches-section";
 import { SizesSection } from "@/components/settings/sizes-section";
 import { ColorsSection } from "@/components/settings/colors-section";
+import { ThemeSection } from "@/components/settings/theme-section";
+import { ScreenLockSection } from "@/components/settings/screen-lock-section";
 import { MenusSection } from "@/components/settings/menus-section";
 import { MenuRightsSection } from "@/components/settings/menu-rights-section";
 import { WebsiteSettingsSection } from "@/components/settings/website-settings-section";
@@ -62,10 +66,12 @@ import {
 type SectionKey =
   | "general"
   | "account"
+  | "screen-lock"
   | "users"
   | "branches"
   | "sizes"
   | "colors"
+  | "theme"
   | "menus"
   | "menu-rights"
   | "shipping"
@@ -79,10 +85,12 @@ const settingsNav: {
 }[] = [
   { label: "General", icon: Store, key: "general" },
   { label: "Account", icon: UserRound, key: "account" },
+  { label: "Screen lock", icon: LockKeyhole, key: "screen-lock" },
   { label: "Users", icon: Users, key: "users" },
   { label: "Branches", icon: Building2, key: "branches" },
   { label: "Sizes", icon: Ruler, key: "sizes" },
   { label: "Colors", icon: Palette, key: "colors" },
+  { label: "Theme", icon: Layers, key: "theme" },
   { label: "Menus", icon: ListTree, key: "menus" },
   { label: "Menu rights", icon: ShieldCheck, key: "menu-rights" },
   { label: "Plan", icon: Package },
@@ -110,10 +118,12 @@ const sectionMeta: Record<
 > = {
   general: { title: "General", icon: Store },
   account: { title: "Account", icon: UserRound },
+  "screen-lock": { title: "Screen Lock", icon: LockKeyhole },
   users: { title: "Users", icon: Users },
   branches: { title: "Branches", icon: Building2 },
   sizes: { title: "Sizes", icon: Ruler },
   colors: { title: "Colors", icon: Palette },
+  theme: { title: "Theme", icon: Layers },
   menus: { title: "Menus", icon: ListTree },
   "menu-rights": { title: "Menu rights", icon: ShieldCheck },
   shipping: { title: "Shipping & Delivery", icon: Truck },
@@ -347,10 +357,12 @@ export default function SettingsPage() {
             </div>
 
             {section === "account" && <ChangePasswordSection />}
+            {section === "screen-lock" && <ScreenLockSection />}
             {section === "users" && <UsersSection />}
             {section === "branches" && <BranchesSection />}
             {section === "sizes" && <SizesSection />}
             {section === "colors" && <ColorsSection />}
+            {section === "theme" && <ThemeSection />}
             {section === "menus" && <MenusSection />}
             {section === "menu-rights" && <MenuRightsSection />}
 
