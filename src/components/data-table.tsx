@@ -54,6 +54,10 @@ interface DataTableProps<TData, TValue> {
   toolbar?: React.ReactNode;
   /** Pass when rows are fetched from an API page by page. */
   serverPagination?: ServerPagination;
+  /** Receives the currently selected rows, for bulk actions in the toolbar. */
+  onSelectionChange?: (rows: TData[]) => void;
+  /** Bump this to clear the selection after a bulk action completes. */
+  clearSelectionKey?: number;
   loading?: boolean;
 }
 
@@ -66,6 +70,8 @@ export function DataTable<TData, TValue>({
   toolbar,
   serverPagination,
   loading = false,
+  onSelectionChange,
+  clearSelectionKey,
 }: DataTableProps<TData, TValue>) {
   const [sorting, setSorting] = React.useState<SortingState>([]);
   const [columnFilters, setColumnFilters] = React.useState<ColumnFiltersState>([]);
@@ -87,7 +93,18 @@ export function DataTable<TData, TValue>({
     state: { sorting, columnFilters, columnVisibility, rowSelection },
   });
 
-  const selectedCount = table.getFilteredSelectedRowModel().rows.length;
+  const selectedRows = table.getFilteredSelectedRowModel().rows;
+  const selectedCount = selectedRows.length;
+
+  // Hand the selected originals up so the page can act on them.
+  React.useEffect(() => {
+    onSelectionChange?.(selectedRows.map((r) => r.original));
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [rowSelection]);
+
+  React.useEffect(() => {
+    if (clearSelectionKey !== undefined) setRowSelection({});
+  }, [clearSelectionKey]);
 
   return (
     <div className="flex flex-col gap-3">

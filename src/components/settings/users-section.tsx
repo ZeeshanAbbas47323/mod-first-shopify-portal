@@ -3,7 +3,7 @@
 import * as React from "react";
 import { type ColumnDef } from "@tanstack/react-table";
 import { format } from "date-fns";
-import { Loader2, Plus, Search, Trash2 } from "lucide-react";
+import { Building2, Loader2, LogOut, MoreHorizontal, Pencil, Plus, Search, Trash2, Unlock, UserMinus } from "lucide-react";
 import { useForm, Controller } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
@@ -18,6 +18,13 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { ConfirmDeleteDialog } from "@/components/confirm-delete-dialog";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
 
 import type { DateRange } from "react-day-picker";
 import { toast } from "sonner";
@@ -35,7 +42,23 @@ import { DataTable } from "@/components/data-table";
 import { DateRangePicker } from "@/components/date-range-picker";
 import { StatusBadge, StatusToggle } from "@/components/status-badge";
 import { apiErrorMessage } from "@/lib/auth-api";
-import { createUser, deleteRecord, listUsers, unlockUser, updateRecordStatus, updateUser, USER_ROLES, type UserRow } from "@/lib/admin-api";
+import {
+  assignUserToBranch,
+  createUser,
+  fetchAllDiscountTiers,
+  deleteRecord,
+  listBranches,
+  listUsers,
+  removeUserFromBranch,
+  terminateUserSession,
+  unlockUser,
+  updateRecordStatus,
+  updateUser,
+  USER_ROLES,
+  type BranchRow,
+  type DiscountTierRow,
+  type UserRow,
+} from "@/lib/admin-api";
 
 const PAGE_SIZE = 10;
 
@@ -56,7 +79,15 @@ const humanizeRole = (role?: string) =>
   role ? role.replace(/_/g, " ").replace(/\b\w/g, (c) => c.toUpperCase()) : "—";
 
 function getColumns(
-  onToggleStatus: (row: UserRow, next: boolean) => Promise<void>
+  onToggleStatus: (row: UserRow, next: boolean) => Promise<void>,
+  actions: {
+    onEdit: (row: UserRow) => void;
+    onAssignBranch: (row: UserRow) => void;
+    onRemoveBranch: (row: UserRow) => void;
+    onUnlock: (row: UserRow) => void;
+    onTerminate: (row: UserRow) => void;
+  },
+  branchName: (id?: number | null) => string
 ): ColumnDef<UserRow>[] {
   return [
   {
@@ -105,6 +136,11 @@ function getColumns(
     },
   },
   {
+    accessorKey: "branch_id",
+    header: "Branch",
+    cell: ({ row }) => branchName(row.original.branch_id),
+  },
+  {
     accessorKey: "created_at",
     header: "Created",
     cell: ({ row }) => {
@@ -112,6 +148,52 @@ function getColumns(
       if (!d) return "—";
       const date = new Date(d);
       return isNaN(date.getTime()) ? "—" : format(date, "MMM d, yyyy");
+    },
+  },
+  {
+    id: "actions",
+    header: () => <div className="text-right">Actions</div>,
+    cell: ({ row }) => {
+      const u = row.original;
+      return (
+        <div className="text-right" onClick={(e) => e.stopPropagation()}>
+          <DropdownMenu>
+            <DropdownMenuTrigger
+              aria-label="User actions"
+              className="inline-flex size-8 cursor-pointer items-center justify-center rounded-lg text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
+            >
+              <MoreHorizontal className="size-4" />
+            </DropdownMenuTrigger>
+            <DropdownMenuContent align="end" className="w-52">
+              <DropdownMenuItem onClick={() => actions.onEdit(u)}>
+                <Pencil className="size-4" /> Edit user
+              </DropdownMenuItem>
+              <DropdownMenuSeparator />
+              <DropdownMenuItem onClick={() => actions.onAssignBranch(u)}>
+                <Building2 className="size-4" />
+                {u.branch_id != null ? "Change branch" : "Assign to branch"}
+              </DropdownMenuItem>
+              {u.branch_id != null && (
+                <DropdownMenuItem onClick={() => actions.onRemoveBranch(u)}>
+                  <UserMinus className="size-4" /> Remove from branch
+                </DropdownMenuItem>
+              )}
+              <DropdownMenuSeparator />
+              {u.is_locked && (
+                <DropdownMenuItem onClick={() => actions.onUnlock(u)}>
+                  <Unlock className="size-4" /> Unlock user
+                </DropdownMenuItem>
+              )}
+              <DropdownMenuItem
+                variant="destructive"
+                onClick={() => actions.onTerminate(u)}
+              >
+                <LogOut className="size-4" /> Terminate sessions
+              </DropdownMenuItem>
+            </DropdownMenuContent>
+          </DropdownMenu>
+        </div>
+      );
     },
   },
   ];
@@ -173,6 +255,17 @@ export function UsersSection() {
     };
   }, [page, debouncedSearch, role, status, dateRange, refreshKey]);
 
+  const [branches, setBranches] = React.useState<BranchRow[]>([]);
+  const [branchTarget, setBranchTarget] = React.useState<UserRow | null>(null);
+  const [removeTarget, setRemoveTarget] = React.useState<UserRow | null>(null);
+  const [removing, setRemoving] = React.useState(false);
+
+  React.useEffect(() => {
+    listBranches({ page: 1, limit: 100 })
+      .then((res) => setBranches(res.rows))
+      .catch(() => setBranches([]));
+  }, []);
+
   const handleToggleStatus = async (row: UserRow, next: boolean) => {
     try {
       await updateRecordStatus("user", row.id, next);
@@ -182,7 +275,79 @@ export function UsersSection() {
       toast.error(apiErrorMessage(error, "Couldn't update status."));
     }
   };
-  const columns = React.useMemo(() => getColumns(handleToggleStatus), []);
+
+  const [terminateTarget, setTerminateTarget] = React.useState<UserRow | null>(null);
+  const [terminating, setTerminating] = React.useState(false);
+
+  const handleTerminate = async () => {
+    if (!terminateTarget) return;
+    setTerminating(true);
+    try {
+      toast.success(await terminateUserSession(terminateTarget.id));
+      setTerminateTarget(null);
+      setRefreshKey((k) => k + 1);
+    } catch (error) {
+      toast.error(apiErrorMessage(error, "Couldn't terminate the sessions."));
+    } finally {
+      setTerminating(false);
+    }
+  };
+
+  const handleUnlock = async (row: UserRow) => {
+    try {
+      toast.success(await unlockUser(row.id));
+      setRefreshKey((k) => k + 1);
+    } catch (error) {
+      toast.error(apiErrorMessage(error, "Couldn't unlock the user."));
+    }
+  };
+
+  const handleRemoveBranch = async () => {
+    if (!removeTarget?.branch_id) return;
+    setRemoving(true);
+    try {
+      toast.success(
+        await removeUserFromBranch({
+          user_id: removeTarget.id,
+          branch_id: removeTarget.branch_id,
+        })
+      );
+      setRemoveTarget(null);
+      setRefreshKey((k) => k + 1);
+    } catch (error) {
+      toast.error(apiErrorMessage(error, "Couldn't remove the user from the branch."));
+    } finally {
+      setRemoving(false);
+    }
+  };
+
+  const branchName = React.useCallback(
+    (id?: number | null) =>
+      id == null
+        ? "—"
+        : branches.find((b) => String(b.id) === String(id))?.name ?? `#${id}`,
+    [branches]
+  );
+
+  const columns = React.useMemo(
+    () =>
+      getColumns(
+        handleToggleStatus,
+        {
+          onEdit: (row) => {
+            setEditing(row);
+            setDialogOpen(true);
+          },
+          onAssignBranch: setBranchTarget,
+          onRemoveBranch: setRemoveTarget,
+          onUnlock: handleUnlock,
+          onTerminate: setTerminateTarget,
+        },
+        branchName
+      ),
+     
+    [branchName]
+  );
 
   return (
     <div className="flex flex-col gap-3">
@@ -233,6 +398,34 @@ export function UsersSection() {
         onCreated={() => setRefreshKey((k) => k + 1)}
       />
 
+      <AssignBranchDialog
+        user={branchTarget}
+        branches={branches}
+        branchName={branchName}
+        onClose={() => setBranchTarget(null)}
+        onSaved={() => setRefreshKey((k) => k + 1)}
+      />
+
+      <ConfirmDeleteDialog
+        open={!!terminateTarget}
+        onOpenChange={(next) => !next && setTerminateTarget(null)}
+        loading={terminating}
+        onConfirm={handleTerminate}
+        title={`Sign ${terminateTarget?.full_name ?? "this user"} out everywhere?`}
+        confirmLabel="Terminate sessions"
+        description="Their active tokens are revoked, so they'll have to log in again on every device. Their account stays active."
+      />
+
+      <ConfirmDeleteDialog
+        open={!!removeTarget}
+        onOpenChange={(next) => !next && setRemoveTarget(null)}
+        loading={removing}
+        onConfirm={handleRemoveBranch}
+        title={`Remove ${removeTarget?.full_name ?? ""} from ${branchName(removeTarget?.branch_id)}?`}
+        confirmLabel="Remove"
+        description="They'll keep their account but lose access to that branch's data."
+      />
+
       <DataTable
         columns={columns}
         data={rows}
@@ -259,6 +452,7 @@ const baseUserSchema = z.object({
   email: z.string().min(1, "Email is required").email("Enter a valid email"),
   phone: z.string().min(7, "Enter a valid phone number"),
   role: z.string().min(1, "Role is required"),
+  discount_tier_id: z.string().optional(),
   status: z.enum(["active", "inactive"]),
   password: z.string().optional(),
   confirmPassword: z.string().optional(),
@@ -309,11 +503,21 @@ function UserDialog({
       email: "",
       phone: "",
       role: "manager",
+      discount_tier_id: "none",
       status: "active",
       password: "",
       confirmPassword: "",
     },
   });
+
+  // Tiers are how a standing customer discount gets attached to a user.
+  const [tiers, setTiers] = React.useState<DiscountTierRow[]>([]);
+  React.useEffect(() => {
+    if (!open) return;
+    fetchAllDiscountTiers()
+      .then(setTiers)
+      .catch(() => setTiers([]));
+  }, [open]);
 
   React.useEffect(() => {
     if (open) {
@@ -322,6 +526,10 @@ function UserDialog({
         email: editing?.email ?? "",
         phone: editing?.phone ?? "",
         role: editing?.role ?? "manager",
+        discount_tier_id:
+          editing?.discount_tier_id != null
+            ? String(editing.discount_tier_id)
+            : "none",
         status: editing?.is_active === false ? "inactive" : "active",
         password: "",
         confirmPassword: "",
@@ -338,6 +546,10 @@ function UserDialog({
           full_name: values.full_name,
           phone: values.phone,
           role: values.role,
+          discount_tier_id:
+            values.discount_tier_id && values.discount_tier_id !== "none"
+              ? Number(values.discount_tier_id)
+              : null,
           is_active: values.status === "active",
         });
       } else {
@@ -348,6 +560,10 @@ function UserDialog({
           role: values.role,
           password: values.password,
           confirmPassword: values.confirmPassword,
+          discount_tier_id:
+            values.discount_tier_id && values.discount_tier_id !== "none"
+              ? Number(values.discount_tier_id)
+              : null,
           is_active: values.status === "active",
         });
       }
@@ -470,6 +686,43 @@ function UserDialog({
               />
             </div>
           </div>
+
+          <div className="space-y-1.5">
+            <Label>Discount tier</Label>
+            <Controller
+              control={control}
+              name="discount_tier_id"
+              render={({ field: f }) => (
+                <Select
+                  items={{
+                    none: "No tier",
+                    ...Object.fromEntries(tiers.map((t) => [String(t.id), t.name])),
+                  }}
+                  value={f.value ?? "none"}
+                  onValueChange={f.onChange}
+                >
+                  <SelectTrigger className="w-full">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent className="max-h-64">
+                    <SelectItem value="none">No tier</SelectItem>
+                    {tiers.map((t) => (
+                      <SelectItem key={t.id} value={String(t.id)}>
+                        {t.name} ·{" "}
+                        {t.discount_type === "fixed_amount"
+                          ? `$${Number(t.discount_value ?? 0)}`
+                          : `${Number(t.discount_value ?? 0)}%`}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              )}
+            />
+            <p className="text-xs text-muted-foreground">
+              A standing discount applied to this customer&apos;s orders.
+            </p>
+          </div>
+
           {!editing && (
             <div className="grid gap-3 sm:grid-cols-2">
               {field("password", "Password", "••••••••", "password")}
@@ -517,6 +770,94 @@ function UserDialog({
         title={`Delete "${editing?.full_name}"?`}
         description="This will permanently remove the user's account. This can't be undone."
       />
+    </Dialog>
+  );
+}
+
+
+// ─── Assign to branch ─────────────────────────────────────────────────────────
+
+function AssignBranchDialog({
+  user,
+  branches,
+  branchName,
+  onClose,
+  onSaved,
+}: {
+  user: UserRow | null;
+  branches: BranchRow[];
+  branchName: (id?: number | null) => string;
+  onClose: () => void;
+  onSaved: () => void;
+}) {
+  const [branchId, setBranchId] = React.useState("");
+  const [saving, setSaving] = React.useState(false);
+
+  React.useEffect(() => {
+    if (user) setBranchId(user.branch_id != null ? String(user.branch_id) : "");
+  }, [user]);
+
+  const submit = async () => {
+    if (!user || !branchId) return;
+    setSaving(true);
+    try {
+      toast.success(
+        await assignUserToBranch({ user_id: user.id, branch_id: Number(branchId) })
+      );
+      onClose();
+      onSaved();
+    } catch (error) {
+      toast.error(apiErrorMessage(error, "Couldn't assign the user to that branch."));
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const items = Object.fromEntries(branches.map((b) => [String(b.id), b.name]));
+  const unchanged = !!user && String(user.branch_id ?? "") === branchId;
+
+  return (
+    <Dialog open={!!user} onOpenChange={(next) => !next && onClose()}>
+      <DialogContent className="sm:max-w-md">
+        <DialogHeader>
+          <DialogTitle>Assign to branch</DialogTitle>
+          <DialogDescription>
+            {user
+              ? `${user.full_name} is currently in ${branchName(user.branch_id)}.`
+              : ""}
+          </DialogDescription>
+        </DialogHeader>
+
+        <div className="space-y-1.5">
+          <Label>Branch</Label>
+          <Select items={items} value={branchId} onValueChange={(v) => setBranchId(v as string)}>
+            <SelectTrigger className="w-full">
+              <SelectValue placeholder="Select a branch" />
+            </SelectTrigger>
+            <SelectContent className="max-h-72">
+              {branches.map((b) => (
+                <SelectItem key={b.id} value={String(b.id)}>
+                  {b.name}
+                  {b.city ? ` · ${b.city}` : ""}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+          {branches.length === 0 && (
+            <p className="text-xs text-destructive">No branches configured yet.</p>
+          )}
+        </div>
+
+        <DialogFooter>
+          <Button variant="outline" onClick={onClose}>
+            Cancel
+          </Button>
+          <Button onClick={submit} disabled={saving || !branchId || unchanged}>
+            {saving && <Loader2 className="size-4 animate-spin" />}
+            Assign
+          </Button>
+        </DialogFooter>
+      </DialogContent>
     </Dialog>
   );
 }

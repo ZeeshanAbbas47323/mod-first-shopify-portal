@@ -32,6 +32,8 @@ export interface UserRow {
   phone?: string;
   role?: string;
   branch_id?: number | null;
+  discount_tier_id?: number | null;
+  discountTier?: { id?: number | string; name?: string } | null;
   is_active?: boolean;
   is_locked?: boolean;
   is_admin?: boolean;
@@ -141,6 +143,8 @@ export interface ListOrdersParams {
   delivery_type?: string;
   order_number?: string;
   email?: string;
+  /** Anything else the list endpoint accepts, e.g. user_id. */
+  filters?: Json;
 }
 
 export async function listOrders(params: ListOrdersParams): Promise<ListResult<OrderRow>> {
@@ -153,6 +157,7 @@ export async function listOrders(params: ListOrdersParams): Promise<ListResult<O
   if (params.delivery_type) filters.delivery_type = params.delivery_type;
   if (params.order_number) filters.order_number = params.order_number;
   if (params.email) filters.email = params.email;
+  Object.assign(filters, params.filters ?? {});
   if (Object.keys(filters).length) body.filters = filters;
   const { data } = await api.post("orders/list", body);
   return parseList<OrderRow>(data, params.limit);
@@ -215,6 +220,7 @@ export interface PaymentLog {
 
 export interface OrderDetail extends OrderRow {
   order_number?: string;
+  order_code?: string;
   full_name?: string;
   phone?: string;
   channel?: string;
@@ -283,6 +289,23 @@ export async function printOrder(body: {
     responseType: isRaw ? "blob" : "json",
   });
   return data;
+}
+
+/**
+ * GET variant that streams the file straight back — used for "open in a new
+ * tab", where the browser renders or downloads it itself.
+ */
+export async function printOrderRaw(params: {
+  order_code?: string;
+  order_id?: number | string;
+  print_type?: PrintType;
+  format?: PrintFormat;
+}): Promise<Blob> {
+  const { data } = await api.get("print/order", {
+    params: { ...params, raw: true },
+    responseType: "blob",
+  });
+  return data as Blob;
 }
 
 export async function listUsers(params: ListParams): Promise<ListResult<UserRow>> {
@@ -535,6 +558,12 @@ export const updateUser = (id: number | string, body: Json) =>
 export const unlockUser = async (id: number | string) => {
   const { data } = await api.put(`users/${id}/unlock`);
   return (data?.message as string) ?? "User unlocked.";
+};
+
+/** Invalidate the user's tokens so they are signed out everywhere. */
+export const terminateUserSession = async (id: number | string) => {
+  const { data } = await api.put(`users/${id}/terminate-session`);
+  return (data?.message as string) ?? "Sessions terminated.";
 };
 export const updateBranch = (id: number | string, body: Json) =>
   updateRecord(`branches/${id}`, body, "Branch updated.");
@@ -2261,4 +2290,826 @@ export async function resetUserPin(body: {
 }): Promise<string> {
   const { data } = await api.put("users/pin/reset", body);
   return (data?.message as string) ?? "PIN reset.";
+}
+
+// ─── Wishlists ────────────────────────────────────────────────────────────────
+
+export interface WishlistRow {
+  id: number | string;
+  user_id?: number | string | null;
+  user?: { full_name?: string; name?: string; email?: string } | null;
+  product_id: number | string;
+  product?: {
+    id?: number | string;
+    title?: string;
+    name?: string;
+    price?: number | string | null;
+    featured_image?: string | null;
+    quantity?: number;
+  } | null;
+  is_active?: boolean;
+  created_at?: string;
+  [k: string]: unknown;
+}
+
+export async function listWishlists(
+  params: ListParams
+): Promise<ListResult<WishlistRow>> {
+  const { data } = await api.post("wishlists/list", buildBody(params));
+  return parseList<WishlistRow>(data, params.limit);
+}
+
+export async function getWishlistById(id: number | string): Promise<WishlistRow> {
+  const { data } = await api.get(`wishlists/get/${id}`);
+  return (data?.payload ?? data?.data ?? data) as WishlistRow;
+}
+
+/** Saves the product for the signed-in user. */
+export async function createWishlist(body: {
+  product_id: number | string;
+  is_active?: boolean;
+}): Promise<string> {
+  const { data } = await api.post("wishlists", body);
+  return (data?.message as string) ?? "Added to wishlist.";
+}
+
+// ─── Single-record fetches filling out earlier modules ────────────────────────
+
+export async function getFooterSection(id: number | string): Promise<FooterSectionRow> {
+  const { data } = await api.get(`footer-sections/get/${id}`);
+  return (data?.payload ?? data?.data ?? data) as FooterSectionRow;
+}
+
+export async function getCampaignById(id: number | string): Promise<CampaignRow> {
+  const { data } = await api.get(`newsletters/${id}`);
+  return (data?.payload ?? data?.data ?? data) as CampaignRow;
+}
+
+export async function getSubscriberById(id: number | string): Promise<SubscriberRow> {
+  const { data } = await api.get(`newsletters/subscribers/${id}`);
+  return (data?.payload ?? data?.data ?? data) as SubscriberRow;
+}
+
+// ─── Branch membership ────────────────────────────────────────────────────────
+
+export async function assignUserToBranch(body: {
+  user_id: number | string;
+  branch_id: number | string;
+}): Promise<string> {
+  const { data } = await api.post("branches/assign-user", body);
+  return (data?.message as string) ?? "User assigned to branch.";
+}
+
+export async function removeUserFromBranch(body: {
+  user_id: number | string;
+  branch_id: number | string;
+}): Promise<string> {
+  const { data } = await api.delete(`branches/remove-user/${body.user_id}`, {
+    data: body,
+  });
+  return (data?.message as string) ?? "User removed from branch.";
+}
+
+// ─── Discount Tiers ───────────────────────────────────────────────────────────
+
+export const DISCOUNT_TIER_TYPES = ["percentage", "fixed_amount"] as const;
+export type DiscountTierType = (typeof DISCOUNT_TIER_TYPES)[number];
+
+export const DISCOUNT_TIER_TYPE_LABELS: Record<string, string> = {
+  percentage: "Percentage",
+  fixed_amount: "Fixed amount",
+};
+
+export interface DiscountTierRow {
+  id: number | string;
+  name: string;
+  discount_type: string;
+  discount_value: number | string;
+  is_active?: boolean;
+  created_at?: string;
+  updated_at?: string;
+  [k: string]: unknown;
+}
+
+export interface DiscountTierInput {
+  name: string;
+  discount_type: string;
+  discount_value: number;
+  is_active?: boolean;
+}
+
+export async function listDiscountTiers(
+  params: ListParams
+): Promise<ListResult<DiscountTierRow>> {
+  const { data } = await api.post("discount-tiers/list", buildBody(params));
+  return parseList<DiscountTierRow>(data, params.limit);
+}
+
+/** Every tier, for the pickers that attach a tier to a customer. */
+export async function fetchAllDiscountTiers(): Promise<DiscountTierRow[]> {
+  const res = await listDiscountTiers({ page: 1, limit: 100 });
+  return res.rows;
+}
+
+export async function getDiscountTier(id: number | string): Promise<DiscountTierRow> {
+  const { data } = await api.get(`discount-tiers/${id}`);
+  return (data?.payload ?? data?.data ?? data) as DiscountTierRow;
+}
+
+export const createDiscountTier = (body: DiscountTierInput) =>
+  createRecord("discount-tiers", body, "Discount tier created.");
+
+export const updateDiscountTier = (
+  id: number | string,
+  body: Partial<DiscountTierInput>
+) => updateRecord(`discount-tiers/${id}`, body, "Discount tier updated.");
+
+// ─── API Users (storefront credentials) ───────────────────────────────────────
+
+export interface ApiUserRow {
+  id: number | string;
+  name: string;
+  api_key?: string | null;
+  website_setting_id?: number | null;
+  websiteSetting?: { id?: number | string; site_name?: string } | null;
+  branch_id?: number | null;
+  branch?: { id?: number | string; name?: string } | null;
+  is_active?: boolean;
+  last_used_at?: string | null;
+  created_at?: string;
+  updated_at?: string;
+  [k: string]: unknown;
+}
+
+/** Returned once on create and regenerate — never retrievable again. */
+export interface ApiCredentials {
+  api_key?: string;
+  api_password?: string;
+  [k: string]: unknown;
+}
+
+function pickCredentials(data: Json): ApiCredentials | null {
+  const p: Json = data?.payload ?? data?.data ?? data ?? {};
+  const c: Json = p.credentials ?? p.credential ?? p;
+  const key = c?.api_key ?? c?.apiKey ?? null;
+  const password = c?.api_password ?? c?.apiPassword ?? c?.api_secret ?? null;
+  return key || password ? { ...c, api_key: key, api_password: password } : null;
+}
+
+export async function listApiUsers(params: ListParams): Promise<ListResult<ApiUserRow>> {
+  const { data } = await api.post("api-users/list", buildBody(params));
+  return parseList<ApiUserRow>(data, params.limit);
+}
+
+export async function getApiUser(id: number | string): Promise<ApiUserRow> {
+  const { data } = await api.get(`api-users/get/${id}`);
+  return (data?.payload ?? data?.data ?? data) as ApiUserRow;
+}
+
+export async function createApiUser(body: {
+  name: string;
+  website_setting_id: number | string;
+  branch_id: number | string;
+  is_active?: boolean;
+}): Promise<{ message: string; credentials: ApiCredentials | null }> {
+  const { data } = await api.post("api-users/", body);
+  return {
+    message: (data?.message as string) ?? "API user created.",
+    credentials: pickCredentials(data),
+  };
+}
+
+export async function updateApiUser(
+  id: number | string,
+  body: {
+    name?: string;
+    website_setting_id?: number | string;
+    branch_id?: number | string;
+    is_active?: boolean;
+  }
+): Promise<string> {
+  const { data } = await api.put(`api-users/${id}`, body);
+  return (data?.message as string) ?? "API user updated.";
+}
+
+export async function regenerateApiCredentials(
+  id: number | string
+): Promise<{ message: string; credentials: ApiCredentials | null }> {
+  const { data } = await api.put(`api-users/${id}/regenerate`);
+  return {
+    message: (data?.message as string) ?? "Credentials regenerated.",
+    credentials: pickCredentials(data),
+  };
+}
+
+/** All stores, for the API-user store picker. */
+export async function fetchAllWebsiteSettings(): Promise<WebsiteSettingRow[]> {
+  const { data } = await api.post("website-settings/list", { page: 1, limit: 100 });
+  return parseList<WebsiteSettingRow>(data, 100).rows;
+}
+
+// ─── Contact form submissions ─────────────────────────────────────────────────
+
+export const INQUIRY_STATUSES = ["new", "in_progress", "resolved", "archived"] as const;
+export type InquiryStatus = (typeof INQUIRY_STATUSES)[number];
+
+export const INQUIRY_STATUS_LABELS: Record<string, string> = {
+  new: "New",
+  in_progress: "In progress",
+  resolved: "Resolved",
+  archived: "Archived",
+};
+
+export const HELP_TOPICS = [
+  "custom_order", "dtf_transfer", "bulk_quote", "artwork_help", "shipping", "other",
+] as const;
+
+export const HELP_TOPIC_LABELS: Record<string, string> = {
+  custom_order: "Custom order",
+  dtf_transfer: "DTF transfer",
+  bulk_quote: "Bulk quote",
+  artwork_help: "Artwork help",
+  shipping: "Shipping",
+  other: "Other",
+};
+
+export interface ContactSubmissionRow {
+  id: number | string;
+  first_name: string;
+  last_name: string;
+  email: string;
+  phone?: string;
+  help_topic?: string;
+  message: string;
+  status?: InquiryStatus;
+  admin_notes?: string | null;
+  is_active?: boolean;
+  created_at?: string;
+  [k: string]: unknown;
+}
+
+export async function listContactSubmissions(
+  params: ListParams
+): Promise<ListResult<ContactSubmissionRow>> {
+  const { data } = await api.post("contact-submissions/list", buildBody(params));
+  return parseList<ContactSubmissionRow>(data, params.limit);
+}
+
+export async function getContactSubmission(
+  id: number | string
+): Promise<ContactSubmissionRow> {
+  const { data } = await api.get(`contact-submissions/${id}`);
+  return (data?.payload ?? data?.data ?? data) as ContactSubmissionRow;
+}
+
+export async function updateContactSubmission(
+  id: number | string,
+  body: { status?: InquiryStatus; admin_notes?: string; is_active?: boolean }
+): Promise<string> {
+  const { data } = await api.put(`contact-submissions/${id}`, body);
+  return (data?.message as string) ?? "Submission updated.";
+}
+
+// ─── Net 30 applications ──────────────────────────────────────────────────────
+
+export interface Net30ApplicationRow {
+  id: number | string;
+  company_name: string;
+  first_name: string;
+  last_name: string;
+  email: string;
+  phone?: string;
+  phone_country_code?: string | null;
+  company_tax_id?: string;
+  years_in_business?: number;
+  requested_credit_amount?: number | string;
+  resale_certificate_url?: string | null;
+  business_license_url?: string | null;
+  status?: InquiryStatus;
+  admin_notes?: string | null;
+  is_active?: boolean;
+  created_at?: string;
+  [k: string]: unknown;
+}
+
+export async function listNet30Applications(
+  params: ListParams
+): Promise<ListResult<Net30ApplicationRow>> {
+  const { data } = await api.post("net30-applications/list", buildBody(params));
+  return parseList<Net30ApplicationRow>(data, params.limit);
+}
+
+export async function getNet30Application(
+  id: number | string
+): Promise<Net30ApplicationRow> {
+  const { data } = await api.get(`net30-applications/${id}`);
+  return (data?.payload ?? data?.data ?? data) as Net30ApplicationRow;
+}
+
+export async function updateNet30Application(
+  id: number | string,
+  body: { status?: InquiryStatus; admin_notes?: string; is_active?: boolean }
+): Promise<string> {
+  const { data } = await api.put(`net30-applications/${id}`, body);
+  return (data?.message as string) ?? "Application updated.";
+}
+
+// ─── Product images ───────────────────────────────────────────────────────────
+
+export interface ProductImageDetailRow {
+  id: number | string;
+  product_id: number | string;
+  image_url: string;
+  is_primary?: boolean;
+  sort_order?: number;
+  is_active?: boolean;
+  [k: string]: unknown;
+}
+
+export async function listProductImages(
+  productId: number | string
+): Promise<ProductImageDetailRow[]> {
+  const { data } = await api.post("product-images/list", {
+    page: 1,
+    limit: 100,
+    filters: { product_id: productId },
+  });
+  return parseList<ProductImageDetailRow>(data, 100).rows.sort(
+    (a, b) => (a.sort_order ?? 0) - (b.sort_order ?? 0)
+  );
+}
+
+export async function getProductImage(id: number | string): Promise<ProductImageDetailRow> {
+  const { data } = await api.get(`product-images/get/${id}`);
+  return (data?.payload ?? data?.data ?? data) as ProductImageDetailRow;
+}
+
+export const createProductImage = (body: {
+  product_id: number | string;
+  image_url: string;
+  is_primary?: boolean;
+  sort_order?: number;
+  is_active?: boolean;
+}) => createRecord("product-images", body, "Image added.");
+
+export async function createProductImagesBulk(
+  productId: number | string,
+  images: { image_url: string; is_primary?: boolean; sort_order?: number }[]
+): Promise<string> {
+  const { data } = await api.post("product-images/bulk", {
+    product_id: productId,
+    images,
+  });
+  return (data?.message as string) ?? "Images added.";
+}
+
+export const updateProductImage = (
+  id: number | string,
+  body: Partial<ProductImageDetailRow>
+) => updateRecord(`product-images/${id}`, body, "Image updated.");
+
+// ─── Product descriptions ─────────────────────────────────────────────────────
+
+export interface ProductDescriptionRow {
+  id: number | string;
+  product_id: number | string;
+  heading: string;
+  description: string;
+  sort_order?: number;
+  is_active?: boolean;
+  [k: string]: unknown;
+}
+
+export async function listProductDescriptions(
+  productId: number | string
+): Promise<ProductDescriptionRow[]> {
+  const { data } = await api.post("product-descriptions/list", {
+    page: 1,
+    limit: 100,
+    filters: { product_id: productId },
+  });
+  return parseList<ProductDescriptionRow>(data, 100).rows.sort(
+    (a, b) => (a.sort_order ?? 0) - (b.sort_order ?? 0)
+  );
+}
+
+export async function getProductDescription(
+  id: number | string
+): Promise<ProductDescriptionRow> {
+  const { data } = await api.get(`product-descriptions/get/${id}`);
+  return (data?.payload ?? data?.data ?? data) as ProductDescriptionRow;
+}
+
+export const createProductDescription = (body: {
+  product_id: number | string;
+  heading: string;
+  description: string;
+  sort_order?: number;
+  is_active?: boolean;
+}) => createRecord("product-descriptions", body, "Description added.");
+
+export async function createProductDescriptionsBulk(
+  productId: number | string,
+  descriptions: { heading: string; description: string; sort_order?: number }[]
+): Promise<string> {
+  const { data } = await api.post("product-descriptions/bulk", {
+    product_id: productId,
+    descriptions,
+  });
+  return (data?.message as string) ?? "Descriptions added.";
+}
+
+export const updateProductDescription = (
+  id: number | string,
+  body: Partial<ProductDescriptionRow>
+) => updateRecord(`product-descriptions/${id}`, body, "Description updated.");
+
+// ─── Product FAQs ─────────────────────────────────────────────────────────────
+
+export interface ProductFaqDetailRow {
+  id: number | string;
+  product_id: number | string;
+  question: string;
+  answer: string;
+  sort_order?: number;
+  is_active?: boolean;
+  [k: string]: unknown;
+}
+
+export async function listProductFaqs(
+  productId: number | string
+): Promise<ProductFaqDetailRow[]> {
+  const { data } = await api.post("product-faqs/list", {
+    page: 1,
+    limit: 100,
+    filters: { product_id: productId },
+  });
+  return parseList<ProductFaqDetailRow>(data, 100).rows.sort(
+    (a, b) => (a.sort_order ?? 0) - (b.sort_order ?? 0)
+  );
+}
+
+export async function getProductFaq(id: number | string): Promise<ProductFaqDetailRow> {
+  const { data } = await api.get(`product-faqs/get/${id}`);
+  return (data?.payload ?? data?.data ?? data) as ProductFaqDetailRow;
+}
+
+export const createProductFaq = (body: {
+  product_id: number | string;
+  question: string;
+  answer: string;
+  sort_order?: number;
+  is_active?: boolean;
+}) => createRecord("product-faqs", body, "FAQ added.");
+
+export async function createProductFaqsBulk(
+  productId: number | string,
+  faqs: { question: string; answer: string; sort_order?: number }[]
+): Promise<string> {
+  const { data } = await api.post("product-faqs", { product_id: productId, faqs });
+  return (data?.message as string) ?? "FAQs added.";
+}
+
+export const updateProductFaq = (
+  id: number | string,
+  body: Partial<ProductFaqDetailRow>
+) => updateRecord(`product-faqs/${id}`, body, "FAQ updated.");
+
+// ─── Product variants, scan and sale pricing ──────────────────────────────────
+
+export async function listProductVariants(
+  params: ListParams
+): Promise<ListResult<ProductVariantRow>> {
+  const { data } = await api.post("product-variants/list", buildBody(params));
+  return parseList<ProductVariantRow>(data, params.limit);
+}
+
+export async function getProductVariant(
+  id: number | string
+): Promise<ProductVariantRow> {
+  const { data } = await api.get(`product-variants/get/${id}`);
+  return (data?.payload ?? data?.data ?? data) as ProductVariantRow;
+}
+
+/** Barcode/SKU lookup — tries the variant SKU first, then the product SKU. */
+export async function scanProduct(body: {
+  code?: string;
+  product_id?: number | string;
+  variant_id?: number | string;
+}): Promise<Json> {
+  const { data } = await api.post("products/scan", body);
+  return (data?.payload ?? data?.data ?? data) as Json;
+}
+
+export async function applySale(body: {
+  categoryId?: number | string;
+  productIds?: (number | string)[];
+  type: "PERCENT" | "FIXED";
+  discount_percent?: number;
+  sale_price?: number;
+}): Promise<string> {
+  const { data } = await api.post("products/sale/apply", body);
+  return (data?.message as string) ?? "Sale applied.";
+}
+
+export async function removeSale(body: {
+  categoryId?: number | string;
+  productIds?: (number | string)[];
+}): Promise<string> {
+  const { data } = await api.post("products/sale/remove", body);
+  return (data?.message as string) ?? "Sale removed.";
+}
+
+// ─── Order operations ─────────────────────────────────────────────────────────
+
+export async function assignOrderCourier(
+  id: number | string,
+  body: {
+    courier_id: number | string;
+    rate_id?: string;
+    carrier_account_id?: string;
+    service_name?: string;
+    carrier_name?: string;
+    service_code?: string;
+  }
+): Promise<string> {
+  const { data } = await api.put(`orders/${id}/courier`, body);
+  return (data?.message as string) ?? "Courier assigned.";
+}
+
+export async function cancelOrder(
+  id: number | string,
+  body: { user_id: number | string; reason: string }
+): Promise<string> {
+  const { data } = await api.put(`orders/${id}/cancel`, body);
+  return (data?.message as string) ?? "Order cancelled.";
+}
+
+export async function getOrderByCode(code: string): Promise<OrderDetail> {
+  const { data } = await api.get(`orders/code/${code}`);
+  return (data?.payload ?? data?.data ?? data) as OrderDetail;
+}
+
+export async function getOrderStatusByCode(code: string): Promise<Json> {
+  const { data } = await api.get(`orders/status/${code}`);
+  return (data?.payload ?? data?.data ?? data) as Json;
+}
+
+export interface BulkStatusResult {
+  updated: (number | string)[];
+  failed: { id: number | string; reason?: string }[];
+  message: string;
+}
+
+/** Moves many orders at once; illegal transitions come back in `failed`. */
+export async function bulkUpdateOrderStatus(body: {
+  order_ids: (number | string)[];
+  status: string;
+  notes?: string;
+}): Promise<BulkStatusResult> {
+  const { data } = await api.post("orders/bulk-status", body);
+  const p: Json = data?.payload ?? data?.data ?? data ?? {};
+  return {
+    updated: (p.updated ?? []) as (number | string)[],
+    failed: (p.failed ?? []) as { id: number | string; reason?: string }[],
+    message: (data?.message as string) ?? "Orders updated.",
+  };
+}
+
+// ─── Activity log ─────────────────────────────────────────────────────────────
+
+export interface ActivityLogRow {
+  id: number | string;
+  entity_type?: string;
+  entity_id?: number | string;
+  action?: string;
+  notes?: string | null;
+  performed_by?: number | string | null;
+  performer?: { full_name?: string; name?: string; email?: string } | null;
+  user?: { full_name?: string; name?: string; email?: string } | null;
+  created_at?: string;
+  [k: string]: unknown;
+}
+
+export async function listActivityLogs(
+  params: ListParams
+): Promise<ListResult<ActivityLogRow>> {
+  const { data } = await api.post("activity-logs/list", buildBody(params));
+  return parseList<ActivityLogRow>(data, params.limit);
+}
+
+export async function getActivityLog(id: number | string): Promise<ActivityLogRow> {
+  const { data } = await api.get(`activity-logs/get/${id}`);
+  return (data?.payload ?? data?.data ?? data) as ActivityLogRow;
+}
+
+// ─── Addresses & cart (customer records) ──────────────────────────────────────
+
+export interface AddressRow {
+  id: number | string;
+  user_id?: number | string | null;
+  full_name?: string;
+  phone?: string;
+  email?: string | null;
+  address_line1?: string;
+  address_line2?: string | null;
+  city?: string;
+  state?: string | null;
+  postal_code?: string | null;
+  country?: string | null;
+  is_default?: boolean;
+  is_active?: boolean;
+  created_at?: string;
+  [k: string]: unknown;
+}
+
+/** Admin-wide address list (the plain list endpoint is customer-scoped). */
+export async function listAddresses(params: ListParams): Promise<ListResult<AddressRow>> {
+  const { data } = await api.post("addresses/admin/list", buildBody(params));
+  return parseList<AddressRow>(data, params.limit);
+}
+
+export async function getAddress(id: number | string): Promise<AddressRow> {
+  const { data } = await api.get(`addresses/get/${id}`);
+  return (data?.payload ?? data?.data ?? data) as AddressRow;
+}
+
+export interface CartItemRow {
+  id: number | string;
+  user_id?: number | string | null;
+  product_id?: number | string;
+  product?: { title?: string; name?: string; price?: number | string; featured_image?: string | null } | null;
+  variant_id?: number | string | null;
+  quantity?: number;
+  is_active?: boolean;
+  created_at?: string;
+  [k: string]: unknown;
+}
+
+export async function listCartItems(params: ListParams): Promise<ListResult<CartItemRow>> {
+  const { data } = await api.post("cart-items/list", buildBody(params));
+  return parseList<CartItemRow>(data, params.limit);
+}
+
+export async function getCartItem(id: number | string): Promise<CartItemRow> {
+  const { data } = await api.get(`cart-items/get/${id}`);
+  return (data?.payload ?? data?.data ?? data) as CartItemRow;
+}
+
+// ─── Design uploads ───────────────────────────────────────────────────────────
+
+export interface DesignUploadRow {
+  id: number | string;
+  user_id?: number | string | null;
+  user?: { full_name?: string; name?: string; email?: string } | null;
+  order_id?: number | string | null;
+  file_url?: string | null;
+  file_name?: string | null;
+  file_type?: string | null;
+  print_method?: string | null;
+  notes?: string | null;
+  status?: string;
+  is_active?: boolean;
+  created_at?: string;
+  [k: string]: unknown;
+}
+
+export async function listDesignUploads(
+  params: ListParams
+): Promise<ListResult<DesignUploadRow>> {
+  const { data } = await api.post("design-uploads/list", buildBody(params));
+  return parseList<DesignUploadRow>(data, params.limit);
+}
+
+export async function getDesignUpload(id: number | string): Promise<DesignUploadRow> {
+  const { data } = await api.get(`design-uploads/get/${id}`);
+  return (data?.payload ?? data?.data ?? data) as DesignUploadRow;
+}
+
+export const createDesignUpload = (body: Json) =>
+  createRecord("design-uploads", body, "Design uploaded.");
+
+export const updateDesignUpload = (id: number | string, body: Json) =>
+  updateRecord(`design-uploads/${id}`, body, "Design updated.");
+
+// ─── Duration report ──────────────────────────────────────────────────────────
+
+export interface DurationReport {
+  orders: Json[];
+  summary: Json;
+  pagination?: Json;
+}
+
+export async function getDurationReport(body: {
+  period?: DashboardPeriod;
+  startDate?: string;
+  endDate?: string;
+  sortBy?: string;
+  sortOrder?: "asc" | "desc";
+  include_orders?: boolean;
+  page?: number;
+  limit?: number;
+  filters?: Json;
+}): Promise<DurationReport> {
+  const { data } = await api.post("reports/duration", body);
+  const p: Json = data?.payload ?? data?.data ?? data ?? {};
+  return {
+    orders: (Array.isArray(p) ? p : p.orders ?? p.rows ?? p.data ?? []) as Json[],
+    summary: (p.summary ?? p.totals ?? {}) as Json,
+    pagination: data?.pagination ?? p.pagination,
+  };
+}
+
+/** Excel export — returns the .xlsx blob. */
+export async function exportDurationReport(body: {
+  period?: DashboardPeriod;
+  startDate?: string;
+  endDate?: string;
+  sortBy?: string;
+  sortOrder?: "asc" | "desc";
+  filters?: Json;
+}): Promise<Blob> {
+  const { data } = await api.post("reports/duration/excel", body, {
+    responseType: "blob",
+  });
+  return data as Blob;
+}
+
+// ─── Remaining single-record fetches ──────────────────────────────────────────
+
+export async function getMenuById(id: number | string): Promise<MenuRow> {
+  const { data } = await api.get(`menus/get/${id}`);
+  return (data?.payload ?? data?.data ?? data) as MenuRow;
+}
+
+export async function getMenuRightById(id: number | string): Promise<MenuRightRow> {
+  const { data } = await api.get(`menu-rights/get/${id}`);
+  return (data?.payload ?? data?.data ?? data) as MenuRightRow;
+}
+
+export async function getSizeById(id: number | string): Promise<SizeRow> {
+  const { data } = await api.get(`sizes/get/${id}`);
+  return (data?.payload ?? data?.data ?? data) as SizeRow;
+}
+
+export async function getColorById(id: number | string): Promise<ColorRow> {
+  const { data } = await api.get(`colors/get/${id}`);
+  return (data?.payload ?? data?.data ?? data) as ColorRow;
+}
+
+export async function getVendorById(id: number | string): Promise<VendorRow> {
+  const { data } = await api.get(`vendors/get/${id}`);
+  return (data?.payload ?? data?.data ?? data) as VendorRow;
+}
+
+export async function getBranchById(id: number | string): Promise<BranchRow> {
+  const { data } = await api.get(`branches/get/${id}`);
+  return (data?.payload ?? data?.data ?? data) as BranchRow;
+}
+
+export async function getPickupLocationById(
+  id: number | string
+): Promise<PickupLocationRow> {
+  const { data } = await api.get(`pickup-locations/get/${id}`);
+  return (data?.payload ?? data?.data ?? data) as PickupLocationRow;
+}
+
+export async function getBlogById(id: number | string): Promise<BlogRow> {
+  const { data } = await api.get(`blogs/get/${id}`);
+  return (data?.payload ?? data?.data ?? data) as BlogRow;
+}
+
+export async function getOrderComment(id: number | string): Promise<OrderCommentRow> {
+  const { data } = await api.get(`order-comments/get/${id}`);
+  return (data?.payload ?? data?.data ?? data) as OrderCommentRow;
+}
+
+export async function getProductCategoryById(
+  id: number | string
+): Promise<ProductCategoryRow> {
+  const { data } = await api.get(`product-categories/get/${id}`);
+  return (data?.payload ?? data?.data ?? data) as ProductCategoryRow;
+}
+
+/** The store settings for the signed-in admin. */
+export async function getCurrentWebsiteSettings(): Promise<WebsiteSettingRow> {
+  const { data } = await api.get("website-settings/current");
+  return (data?.payload ?? data?.data ?? data) as WebsiteSettingRow;
+}
+
+export async function getWebsiteSettingsById(
+  id: number | string
+): Promise<WebsiteSettingRow> {
+  const { data } = await api.get(`website-settings/get/${id}`);
+  return (data?.payload ?? data?.data ?? data) as WebsiteSettingRow;
+}
+
+export async function getCheckoutPromotions(): Promise<Json> {
+  const { data } = await api.get("promotions/checkout");
+  return (data?.payload ?? data?.data ?? data) as Json;
+}
+
+export async function createCheckoutSession(body: Json): Promise<Json> {
+  const { data } = await api.post("payments/checkout-session", body);
+  return (data?.payload ?? data?.data ?? data) as Json;
 }

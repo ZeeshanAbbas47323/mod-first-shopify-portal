@@ -6,6 +6,7 @@ import { Loader2 } from "lucide-react";
 import { toast } from "sonner";
 
 import { ProductForm } from "@/components/products/product-form";
+import { ProductExtras } from "@/components/products/product-extras";
 import { apiErrorMessage } from "@/lib/auth-api";
 import { getProduct, type ProductDetailRow } from "@/lib/admin-api";
 
@@ -57,5 +58,10 @@ export default function EditProductPage() {
     );
   }
 
-  return <ProductForm product={product} />;
+  return (
+    <>
+      <ProductForm product={product} />
+      <ProductExtras productId={product.id} />
+    </>
+  );
 }

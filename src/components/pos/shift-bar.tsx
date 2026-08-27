@@ -29,6 +29,14 @@ import { StatusBadge, type BadgeTone } from "@/components/status-badge";
 import { apiErrorMessage } from "@/lib/auth-api";
 import { cn } from "@/lib/utils";
 import {
+  openPrintWindow,
+  pickFileUrl,
+  pickHtml,
+  popupBlocked,
+  showBlob,
+  type PrintWindow,
+} from "@/lib/print-output";
+import {
   closeShift,
   getMyBranchDevices,
   openShift,
@@ -48,28 +56,34 @@ const SHIFT_TONES: Record<string, BadgeTone> = {
   ended: "neutral",
 };
 
-/** Open a print-service response in a new tab, whether it's HTML or a PDF blob. */
-export async function openPrintOutput(result: Blob | Record<string, unknown>) {
+/**
+ * Show a print-service response in a tab. `target` must be opened
+ * synchronously inside the click handler, otherwise the browser blocks it.
+ */
+export async function openPrintOutput(
+  result: Blob | Record<string, unknown>,
+  target: PrintWindow
+) {
   if (result instanceof Blob) {
-    const url = URL.createObjectURL(result);
-    window.open(url, "_blank");
-    setTimeout(() => URL.revokeObjectURL(url), 60_000);
+    await showBlob(result, target);
+    if (popupBlocked(target)) {
+      toast.warning("Pop-ups are blocked — the file was downloaded instead.");
+    }
     return;
   }
-  const payload = (result?.payload ?? result?.data ?? result) as Record<string, unknown>;
-  const html = (payload?.html ?? payload?.content ?? payload?.receipt) as string | undefined;
-  const url = (payload?.url ?? payload?.file_url) as string | undefined;
+  const url = pickFileUrl(result);
+  const html = pickHtml(result);
   if (url) {
-    window.open(url, "_blank");
+    if (target.win) target.show(url);
+    else window.open(url, "_blank");
     return;
   }
   if (html) {
-    const win = window.open("", "_blank");
-    win?.document.write(html);
-    win?.document.close();
+    target.writeHtml(html);
     return;
   }
-  toast.error("Nothing to print in the response.");
+  target.close();
+  throw new Error("Nothing to print in the response.");
 }
 
 export function ShiftBar({
@@ -101,11 +115,17 @@ export function ShiftBar({
 
   const print = async () => {
     if (!shift) return;
+    const target = openPrintWindow();
     setBusy(true);
     try {
-      await openPrintOutput(await printShiftReport(shift.id, { format: "pdf" }));
+      await openPrintOutput(await printShiftReport(shift.id, { format: "pdf" }), target);
     } catch (error) {
-      toast.error(apiErrorMessage(error, "Couldn't print the shift report."));
+      target.close();
+      toast.error(
+        error instanceof Error && error.message
+          ? error.message
+          : apiErrorMessage(error, "Couldn't print the shift report.")
+      );
     } finally {
       setBusy(false);
     }

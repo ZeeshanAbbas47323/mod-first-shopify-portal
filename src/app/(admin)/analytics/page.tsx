@@ -6,7 +6,7 @@ import {
   CartesianGrid, Tooltip, ResponsiveContainer, Cell,
 } from "recharts";
 import {
-  ArrowDownRight,
+  ArrowDownRight, Download, Loader2,
   Package, ShoppingCart, Tag, TrendingUp, Wallet,
 } from "lucide-react";
 import { format, subDays } from "date-fns";
@@ -25,7 +25,9 @@ import {
   getSalesReport, getOrderReport, getInventoryReport,
   getCustomerReport, getProductPerformanceReport,
   getFinancialReport, getCouponUsageReport,
+  getDurationReport, exportDurationReport,
   SALES_GROUP_BY,
+  type DurationReport,
   type SalesGroupBy, type SalesDataRow, type SalesSummary,
   type OrderReportRow, type OrderReportSummary,
   type InventoryReportRow, type InventoryReportSummary,
@@ -850,6 +852,181 @@ function CouponTab() {
 // ROOT PAGE
 // ═══════════════════════════════════════════════════════════════════════════════
 
+// ─── Duration report ──────────────────────────────────────────────────────────
+
+function DurationTab() {
+  const [range, setRange] = React.useState<DateRange>(defaultRange());
+  const [report, setReport] = React.useState<DurationReport | null>(null);
+  const [loading, setLoading] = React.useState(true);
+  const [exporting, setExporting] = React.useState(false);
+  const [page, setPage] = React.useState(1);
+
+  React.useEffect(() => {
+    setPage(1);
+  }, [range]);
+
+  React.useEffect(() => {
+    if (!range.from || !range.to) return;
+    let cancelled = false;
+    setLoading(true);
+    getDurationReport({
+      period: "custom",
+      startDate: toDate(range.from),
+      endDate: toDate(range.to),
+      include_orders: true,
+      page,
+      limit: 25,
+    })
+      .then((r) => !cancelled && setReport(r))
+      .catch((e) => {
+        if (cancelled) return;
+        setReport(null);
+        toast.error(apiErrorMessage(e, "Couldn't load the duration report."));
+      })
+      .finally(() => !cancelled && setLoading(false));
+    return () => {
+      cancelled = true;
+    };
+  }, [range, page]);
+
+  const exportExcel = async () => {
+    if (!range.from || !range.to) return;
+    setExporting(true);
+    try {
+      const blob = await exportDurationReport({
+        period: "custom",
+        startDate: toDate(range.from),
+        endDate: toDate(range.to),
+      });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = `orders-${toDate(range.from)}-to-${toDate(range.to)}.xlsx`;
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+      setTimeout(() => URL.revokeObjectURL(url), 60_000);
+      toast.success("Export downloaded.");
+    } catch (e) {
+      toast.error(apiErrorMessage(e, "Couldn't export the report."));
+    } finally {
+      setExporting(false);
+    }
+  };
+
+  const summary = (report?.summary ?? {}) as Record<string, unknown>;
+  const num = (k: string) => Number(summary[k] ?? 0);
+  const orders = report?.orders ?? [];
+  const totalPages = Number(
+    (report?.pagination as Record<string, unknown> | undefined)?.totalPages ?? 1
+  );
+
+  return (
+    <div className="flex flex-col gap-4">
+      <DateControls range={range} onRange={setRange}>
+        <Button
+          variant="outline"
+          size="sm"
+          className="ml-auto"
+          onClick={exportExcel}
+          disabled={exporting}
+        >
+          {exporting ? (
+            <Loader2 className="size-4 animate-spin" />
+          ) : (
+            <Download className="size-4" />
+          )}
+          Export Excel
+        </Button>
+      </DateControls>
+
+      <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+        <SummaryCard label="Orders" value={num("total_orders").toLocaleString("en-US")} icon={<ShoppingCart className="size-4" />} />
+        <SummaryCard label="Revenue" value={fmt$(num("total_amount") || num("total_revenue"))} icon={<Wallet className="size-4" />} />
+        <SummaryCard label="Paid" value={fmt$(num("paid_amount"))} icon={<Wallet className="size-4" />} />
+        <SummaryCard label="Discounts" value={fmt$(num("discount_amount"))} icon={<Tag className="size-4" />} tone="red" />
+      </div>
+
+      <Card className="shadow-none">
+        <CardHeader className="pb-2">
+          <CardTitle className="text-sm">Orders in period</CardTitle>
+        </CardHeader>
+        <CardContent className="p-0">
+          {loading ? (
+            <Skeleton className="m-4 h-56" />
+          ) : orders.length === 0 ? (
+            <Empty />
+          ) : (
+            <div className="overflow-x-auto">
+              <table className="w-full text-sm">
+                <thead className="border-b border-border bg-muted/40 text-xs text-muted-foreground">
+                  <tr>
+                    <th className="px-4 py-2 text-left">Order</th>
+                    <th className="px-4 py-2 text-left">Date</th>
+                    <th className="px-4 py-2 text-left">Status</th>
+                    <th className="px-4 py-2 text-right">Total</th>
+                    <th className="px-4 py-2 text-right">Paid</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {orders.map((o, i) => {
+                    const row = o as Record<string, unknown>;
+                    return (
+                      <tr key={String(row.id ?? i)} className="border-b border-border last:border-b-0">
+                        <td className="px-4 py-2 font-mono text-xs">
+                          {String(row.order_number ?? row.order_code ?? row.id ?? "—")}
+                        </td>
+                        <td className="px-4 py-2">
+                          {row.order_date || row.created_at
+                            ? format(new Date(String(row.order_date ?? row.created_at)), "MMM d, yyyy")
+                            : "—"}
+                        </td>
+                        <td className="px-4 py-2 capitalize">
+                          {String(row.status ?? "—").replace(/_/g, " ")}
+                        </td>
+                        <td className="px-4 py-2 text-right tabular-nums">
+                          {fmt$(Number(row.total_amount ?? 0))}
+                        </td>
+                        <td className="px-4 py-2 text-right tabular-nums">
+                          {fmt$(Number(row.paid_amount ?? 0))}
+                        </td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+            </div>
+          )}
+        </CardContent>
+      </Card>
+
+      {totalPages > 1 && (
+        <div className="flex items-center justify-end gap-2">
+          <Button
+            size="sm"
+            variant="outline"
+            disabled={page <= 1}
+            onClick={() => setPage((p) => p - 1)}
+          >
+            Previous
+          </Button>
+          <span className="text-xs text-muted-foreground">
+            Page {page} of {totalPages}
+          </span>
+          <Button
+            size="sm"
+            variant="outline"
+            disabled={page >= totalPages}
+            onClick={() => setPage((p) => p + 1)}
+          >
+            Next
+          </Button>
+        </div>
+      )}
+    </div>
+  );
+}
+
 const REPORT_TABS = [
   { value: "sales",      label: "Sales" },
   { value: "orders",     label: "Orders" },
@@ -858,6 +1035,7 @@ const REPORT_TABS = [
   { value: "products",   label: "Products" },
   { value: "financial",  label: "Financial" },
   { value: "coupons",    label: "Coupons" },
+  { value: "duration",   label: "Duration" },
 ];
 
 export default function AnalyticsPage() {
@@ -877,6 +1055,7 @@ export default function AnalyticsPage() {
         {tab === "products"  && <ProductPerfTab />}
         {tab === "financial" && <FinancialTab />}
         {tab === "coupons"   && <CouponTab />}
+        {tab === "duration"  && <DurationTab />}
       </div>
     </div>
   );

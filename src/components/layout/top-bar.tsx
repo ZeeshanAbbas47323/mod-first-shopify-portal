@@ -3,7 +3,7 @@
 import * as React from "react";
 import { useRouter } from "next/navigation";
 import {
-  Bell, Home, Loader2, LogOut, Package, Percent,
+  Bell, Home, Loader2, LockKeyhole, LogOut, Package, Percent,
   Search, Settings, ShoppingCart, Store, Tag, Users, X,
 } from "lucide-react";
 
@@ -25,6 +25,7 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { SidebarTrigger } from "@/components/ui/sidebar";
+import { lockScreenNow } from "@/components/layout/screen-lock";
 import { useAuthStore } from "@/stores/auth-store";
 import {
   globalAdminSearch,
@@ -248,6 +249,9 @@ export function TopBar() {
             <DropdownMenuSeparator />
             <DropdownMenuItem onClick={() => router.push("/settings")}>
               <Settings className="size-4" /> Settings
+            </DropdownMenuItem>
+            <DropdownMenuItem onClick={() => lockScreenNow()}>
+              <LockKeyhole className="size-4" /> Lock screen
             </DropdownMenuItem>
             <DropdownMenuSeparator />
             <DropdownMenuItem

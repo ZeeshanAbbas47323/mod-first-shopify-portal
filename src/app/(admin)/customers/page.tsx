@@ -1,6 +1,7 @@
 "use client";
 
 import * as React from "react";
+import { useRouter } from "next/navigation";
 import { format } from "date-fns";
 import { type ColumnDef } from "@tanstack/react-table";
 import { Download, Search, X } from "lucide-react";
@@ -125,6 +126,7 @@ const columns: ColumnDef<UserRow>[] = [
 ];
 
 export default function CustomersPage() {
+  const router = useRouter();
   const [page, setPage] = React.useState(1);
   const [rows, setRows] = React.useState<UserRow[]>([]);
   const [total, setTotal] = React.useState(0);
@@ -225,6 +227,7 @@ export default function CustomersPage() {
         columns={columns}
         data={rows}
         loading={loading}
+        onRowClick={(row) => router.push(`/customers/${row.id}`)}
         serverPagination={{
           pageIndex: page - 1,
           pageCount: totalPages,

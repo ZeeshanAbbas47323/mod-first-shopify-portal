@@ -4,7 +4,7 @@ import * as React from "react";
 import { useRouter } from "next/navigation";
 import { format, subDays } from "date-fns";
 import { type ColumnDef } from "@tanstack/react-table";
-import { Download, Search, X } from "lucide-react";
+import { ChevronDown, Download, Loader2, Search, X } from "lucide-react";
 import { toast } from "sonner";
 
 import { Button } from "@/components/ui/button";
@@ -14,11 +14,18 @@ import {
   Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
 } from "@/components/ui/select";
 import { DataTable } from "@/components/data-table";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
 import { DateRangePicker } from "@/components/date-range-picker";
 import { StatusBadge } from "@/components/status-badge";
 import { apiErrorMessage } from "@/lib/auth-api";
 import {
-  listOrders, PAYMENT_STATUSES, DELIVERY_TYPES,
+  listOrders, bulkUpdateOrderStatus,
+  ORDER_STATUSES, PAYMENT_STATUSES, DELIVERY_TYPES,
   type OrderRow,
 } from "@/lib/admin-api";
 import type { DateRange } from "react-day-picker";
@@ -149,6 +156,9 @@ export default function OrdersPage() {
   const router = useRouter();
   const [tab, setTab] = React.useState("all");
   const [page, setPage] = React.useState(1);
+  const [selected, setSelected] = React.useState<OrderRow[]>([]);
+  const [clearKey, setClearKey] = React.useState(0);
+  const [bulkBusy, setBulkBusy] = React.useState(false);
   const [rows, setRows] = React.useState<OrderRow[]>([]);
   const [total, setTotal] = React.useState(0);
   const [totalPages, setTotalPages] = React.useState(1);
@@ -186,6 +196,33 @@ export default function OrdersPage() {
   }, [page, tab, dateRange, payStatus, deliveryType, search]);
 
   React.useEffect(() => { load(); }, [load]);
+
+  // Illegal transitions come back in `failed`, so report both halves.
+  const runBulkStatus = async (status: string) => {
+    if (!selected.length) return;
+    setBulkBusy(true);
+    try {
+      const result = await bulkUpdateOrderStatus({
+        order_ids: selected.map((o) => o.id),
+        status,
+      });
+      if (result.updated.length) {
+        toast.success(
+          `${result.updated.length} order${result.updated.length === 1 ? "" : "s"} moved to "${status.replace(/_/g, " ")}".`
+        );
+      }
+      result.failed.forEach((f) =>
+        toast.error(`Order #${f.id}: ${f.reason ?? "couldn't be updated."}`)
+      );
+      if (!result.updated.length && !result.failed.length) toast.success(result.message);
+      setClearKey((k) => k + 1);
+      load();
+    } catch (error) {
+      toast.error(apiErrorMessage(error, "Couldn't update the orders."));
+    } finally {
+      setBulkBusy(false);
+    }
+  };
 
   return (
     <div className="flex flex-col gap-4">
@@ -270,11 +307,52 @@ export default function OrdersPage() {
         </div>
       </div>
 
+      {/* Bulk actions */}
+      {selected.length > 0 && (
+        <div className="flex flex-wrap items-center gap-3 rounded-xl border border-border bg-card px-3 py-2">
+          <span className="text-sm font-medium">
+            {selected.length} order{selected.length === 1 ? "" : "s"} selected
+          </span>
+          <DropdownMenu>
+            <DropdownMenuTrigger
+              disabled={bulkBusy}
+              render={
+                <Button size="sm" variant="outline">
+                  {bulkBusy && <Loader2 className="size-4 animate-spin" />}
+                  Set status
+                  <ChevronDown className="size-3.5" />
+                </Button>
+              }
+            />
+            <DropdownMenuContent align="start" className="w-52">
+              {ORDER_STATUSES.map((s) => (
+                <DropdownMenuItem
+                  key={s}
+                  className="capitalize"
+                  onClick={() => runBulkStatus(s)}
+                >
+                  {s.replace(/_/g, " ")}
+                </DropdownMenuItem>
+              ))}
+            </DropdownMenuContent>
+          </DropdownMenu>
+          <button
+            type="button"
+            onClick={() => setClearKey((k) => k + 1)}
+            className="text-xs text-muted-foreground hover:text-foreground"
+          >
+            Clear selection
+          </button>
+        </div>
+      )}
+
       {/* Table */}
       <DataTable
         columns={columns}
         data={rows}
         loading={loading}
+        onSelectionChange={setSelected}
+        clearSelectionKey={clearKey}
         onRowClick={(row) => router.push(`/orders/${row.id}`)}
         serverPagination={{
           pageIndex: page - 1,

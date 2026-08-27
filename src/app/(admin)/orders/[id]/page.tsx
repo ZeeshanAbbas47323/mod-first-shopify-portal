@@ -6,21 +6,45 @@ import { format } from "date-fns";
 import {
   ArrowLeft, Loader2, Truck, CreditCard, Package, MapPin,
   Phone, Mail, User, Clock, ChevronDown, FileText, Banknote,
-  Printer,
+  Printer, XCircle,
 } from "lucide-react";
 import { toast } from "sonner";
 
 import { Button } from "@/components/ui/button";
 import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
+import {
   Card, CardContent, CardHeader, CardTitle,
 } from "@/components/ui/card";
 import { Separator } from "@/components/ui/separator";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import { Textarea } from "@/components/ui/textarea";
+import {
+  Dialog, DialogContent, DialogDescription,
+  DialogFooter, DialogHeader, DialogTitle,
+} from "@/components/ui/dialog";
+import {
+  Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
+} from "@/components/ui/select";
 import { StatusBadge } from "@/components/status-badge";
 import { OrderComments } from "@/components/orders/order-comments";
 import { RefundsSection } from "@/components/orders/refunds-section";
 import { apiErrorMessage } from "@/lib/auth-api";
 import {
-  getOrder, updateOrderStatus, printOrder,
+  openPrintWindow,
+  pickFileUrl,
+  pickHtml,
+  popupBlocked,
+  showBlob,
+} from "@/lib/print-output";
+import {
+  getOrder, updateOrderStatus, printOrder, printOrderRaw,
+  assignOrderCourier, cancelOrder, listCouriers, type CourierRow,
   ORDER_STATUSES,
   type OrderDetail, type OrderAddress, type PrintType, type PrintFormat,
 } from "@/lib/admin-api";
@@ -54,6 +78,8 @@ export default function OrderDetailPage() {
   const [statusOpen, setStatusOpen] = React.useState(false);
   const [printOpen, setPrintOpen] = React.useState(false);
   const [printing, setPrinting] = React.useState(false);
+  const [courierOpen, setCourierOpen] = React.useState(false);
+  const [cancelOpen, setCancelOpen] = React.useState(false);
 
   const load = React.useCallback(() => {
     if (!id) return;
@@ -66,56 +92,104 @@ export default function OrderDetailPage() {
 
   React.useEffect(() => { load(); }, [load]);
 
-  // Close dropdowns on outside click
-  React.useEffect(() => {
-    const handleClick = () => { setPrintOpen(false); setStatusOpen(false); };
-    if (printOpen || statusOpen) {
-      document.addEventListener("click", handleClick, { capture: true, once: true });
-      return () => document.removeEventListener("click", handleClick, { capture: true });
-    }
-  }, [printOpen, statusOpen]);
+  // The print service keys off order_code; order_number is a different value,
+  // so only send it when the order actually carries a code.
+  const printTarget = () => ({
+    order_code: order?.order_code,
+    order_id: order?.id,
+  });
 
-  const handlePrint = async (printType: PrintType, fmt: PrintFormat) => {
+  const handlePrintRaw = async (printType: PrintType, fmt: PrintFormat) => {
     if (!order) return;
+    // Open the tab inside the click so the browser doesn't treat it as a popup.
+    const target = openPrintWindow();
     setPrinting(true);
     setPrintOpen(false);
     try {
-      const result = await printOrder({
-        order_code: order.order_number,
-        order_id: order.id,
+      const blob = await printOrderRaw({
+        ...printTarget(),
         print_type: printType,
         format: fmt,
-        raw: fmt === "pdf",
       });
-      if (fmt === "pdf" && result instanceof Blob) {
-        const url = URL.createObjectURL(result);
-        window.open(url, "_blank");
-        setTimeout(() => URL.revokeObjectURL(url), 60000);
-      } else {
-        // HTML response — open in new window
-        const html = typeof result === "string" ? result : (result as Record<string, unknown>)?.html ?? (result as Record<string, unknown>)?.payload ?? "";
-        const win = window.open("", "_blank");
-        if (win) {
-          win.document.write(String(html));
-          win.document.close();
-          win.focus();
-          win.print();
-        }
+      await showBlob(blob, target);
+      if (popupBlocked(target)) {
+        toast.warning("Pop-ups are blocked — the file was downloaded instead.");
       }
-      toast.success("Print ready.");
     } catch (err) {
-      toast.error(apiErrorMessage(err, "Couldn't print order."));
+      target.close();
+      toast.error(
+        err instanceof Error && err.message
+          ? err.message
+          : apiErrorMessage(err, "Couldn't open the receipt.")
+      );
     } finally {
       setPrinting(false);
     }
   };
 
-  const PRINT_OPTIONS: { label: string; type: PrintType; format: PrintFormat }[] = [
-    { label: "Thermal 80mm (PDF)", type: "thermal_80mm", format: "pdf" },
-    { label: "Thermal 58mm (PDF)", type: "thermal_58mm", format: "pdf" },
-    { label: "A4 Invoice (PDF)", type: "a4", format: "pdf" },
-    { label: "Thermal 80mm (HTML)", type: "thermal_80mm", format: "html" },
-    { label: "A4 Invoice (HTML)", type: "a4", format: "html" },
+  const handlePrint = async (printType: PrintType, fmt: PrintFormat) => {
+    if (!order) return;
+    const target = openPrintWindow();
+    setPrinting(true);
+    setPrintOpen(false);
+    try {
+      const result = await printOrder({
+        ...printTarget(),
+        print_type: printType,
+        format: fmt,
+        raw: fmt === "pdf",
+      });
+
+      if (result instanceof Blob) {
+        await showBlob(result, target);
+        if (popupBlocked(target)) {
+          toast.warning("Pop-ups are blocked — the file was downloaded instead.");
+        }
+      } else {
+        // JSON response — either inline HTML or a link to a hosted file.
+        const html = pickHtml(result);
+        const fileUrl = pickFileUrl(result);
+        if (html) {
+          target.writeHtml(html);
+          target.win?.print();
+        } else if (fileUrl) {
+          if (target.win) target.show(fileUrl);
+          else window.open(fileUrl, "_blank");
+        } else {
+          target.close();
+          throw new Error("The print service returned nothing to display.");
+        }
+        if (popupBlocked(target)) {
+          toast.error("Pop-ups are blocked — allow them for this site to print.");
+          return;
+        }
+      }
+      toast.success("Print ready.");
+    } catch (err) {
+      target.close();
+      toast.error(
+        err instanceof Error && err.message
+          ? err.message
+          : apiErrorMessage(err, "Couldn't print order.")
+      );
+    } finally {
+      setPrinting(false);
+    }
+  };
+
+  const PRINT_OPTIONS: {
+    label: string;
+    type: PrintType;
+    format: PrintFormat;
+    raw?: boolean;
+  }[] = [
+    { label: "Receipt 80mm (PDF)", type: "thermal_80mm", format: "pdf" },
+    { label: "Receipt 58mm (PDF)", type: "thermal_58mm", format: "pdf" },
+    { label: "A4 invoice (PDF)", type: "a4", format: "pdf" },
+    { label: "Receipt 80mm (print now)", type: "thermal_80mm", format: "html" },
+    { label: "A4 invoice (print now)", type: "a4", format: "html" },
+    { label: "Open 80mm in new tab", type: "thermal_80mm", format: "html", raw: true },
+    { label: "Open A4 in new tab", type: "a4", format: "pdf", raw: true },
   ];
 
   const handleStatusChange = async (status: string) => {
@@ -186,35 +260,36 @@ export default function OrderDetailPage() {
           <span className="text-sm text-muted-foreground">
             {fmtDate(order.order_date ?? order.created_at)}
           </span>
-          <div className="relative">
-            <Button
-              variant="outline"
-              size="sm"
-              onClick={() => setPrintOpen((o) => !o)}
+          <DropdownMenu open={printOpen} onOpenChange={setPrintOpen}>
+            <DropdownMenuTrigger
               disabled={printing}
-            >
-              {printing ? (
-                <Loader2 className="size-4 animate-spin" />
-              ) : (
-                <Printer className="size-4" />
-              )}
-              Print
-              <ChevronDown className="size-3.5" />
-            </Button>
-            {printOpen && (
-              <div className="absolute right-0 top-full z-10 mt-1 w-56 rounded-lg border bg-popover p-1 shadow-md">
-                {PRINT_OPTIONS.map((opt) => (
-                  <button
-                    key={`${opt.type}-${opt.format}`}
-                    onClick={() => handlePrint(opt.type, opt.format)}
-                    className="flex w-full items-center rounded-md px-3 py-2 text-sm hover:bg-accent"
-                  >
-                    {opt.label}
-                  </button>
-                ))}
-              </div>
-            )}
-          </div>
+              render={
+                <Button variant="outline" size="sm">
+                  {printing ? (
+                    <Loader2 className="size-4 animate-spin" />
+                  ) : (
+                    <Printer className="size-4" />
+                  )}
+                  Print
+                  <ChevronDown className="size-3.5" />
+                </Button>
+              }
+            />
+            <DropdownMenuContent align="end" className="w-56">
+              {PRINT_OPTIONS.map((opt) => (
+                <DropdownMenuItem
+                  key={`${opt.type}-${opt.format}-${opt.raw ? "raw" : "post"}`}
+                  onClick={() =>
+                    opt.raw
+                      ? handlePrintRaw(opt.type, opt.format)
+                      : handlePrint(opt.type, opt.format)
+                  }
+                >
+                  {opt.label}
+                </DropdownMenuItem>
+              ))}
+            </DropdownMenuContent>
+          </DropdownMenu>
         </div>
       </div>
 
@@ -411,6 +486,19 @@ export default function OrderDetailPage() {
           )}
           {/* Comments */}
           {id && <OrderComments orderId={id} />}
+
+          <AssignCourierDialog
+            orderId={order.id}
+            open={courierOpen}
+            onOpenChange={setCourierOpen}
+            onSaved={load}
+          />
+          <CancelOrderDialog
+            order={order}
+            open={cancelOpen}
+            onOpenChange={setCancelOpen}
+            onSaved={load}
+          />
         </div>
 
         {/* ── RIGHT COLUMN (sidebar) ── */}
@@ -421,35 +509,61 @@ export default function OrderDetailPage() {
               <CardTitle className="text-base">Update Status</CardTitle>
             </CardHeader>
             <CardContent>
-              <div className="relative">
-                <Button
-                  variant="outline"
-                  className="w-full justify-between"
-                  onClick={() => setStatusOpen((o) => !o)}
+              <DropdownMenu open={statusOpen} onOpenChange={setStatusOpen}>
+                <DropdownMenuTrigger
                   disabled={updatingStatus}
-                >
-                  {updatingStatus ? (
-                    <Loader2 className="size-4 animate-spin" />
-                  ) : (
-                    <span className="capitalize">{(order.status ?? "—").replace(/_/g, " ")}</span>
-                  )}
-                  <ChevronDown className="size-4 text-muted-foreground" />
-                </Button>
-                {statusOpen && (
-                  <div className="absolute left-0 top-full z-10 mt-1 w-full rounded-lg border bg-popover p-1 shadow-md">
-                    {ORDER_STATUSES.map((s) => (
-                      <button
-                        key={s}
-                        onClick={() => handleStatusChange(s)}
-                        className="flex w-full items-center rounded-md px-3 py-2 text-sm capitalize hover:bg-accent disabled:opacity-50"
-                        disabled={s === order.status}
-                      >
-                        {s.replace(/_/g, " ")}
-                      </button>
-                    ))}
-                  </div>
-                )}
-              </div>
+                  render={
+                    <Button variant="outline" className="w-full justify-between">
+                      {updatingStatus ? (
+                        <Loader2 className="size-4 animate-spin" />
+                      ) : (
+                        <span className="capitalize">
+                          {(order.status ?? "—").replace(/_/g, " ")}
+                        </span>
+                      )}
+                      <ChevronDown className="size-4 text-muted-foreground" />
+                    </Button>
+                  }
+                />
+                <DropdownMenuContent align="start" className="w-56">
+                  {ORDER_STATUSES.map((s) => (
+                    <DropdownMenuItem
+                      key={s}
+                      disabled={s === order.status}
+                      onClick={() => handleStatusChange(s)}
+                      className="capitalize"
+                    >
+                      {s.replace(/_/g, " ")}
+                    </DropdownMenuItem>
+                  ))}
+                </DropdownMenuContent>
+              </DropdownMenu>
+            </CardContent>
+          </Card>
+
+          {/* Fulfilment actions */}
+          <Card>
+            <CardHeader className="pb-3">
+              <CardTitle className="text-base">Actions</CardTitle>
+            </CardHeader>
+            <CardContent className="flex flex-col gap-2">
+              <Button
+                variant="outline"
+                className="justify-start"
+                onClick={() => setCourierOpen(true)}
+              >
+                <Truck className="size-4" />
+                Assign courier
+              </Button>
+              <Button
+                variant="outline"
+                className="justify-start text-destructive hover:text-destructive"
+                disabled={order.status === "cancelled"}
+                onClick={() => setCancelOpen(true)}
+              >
+                <XCircle className="size-4" />
+                {order.status === "cancelled" ? "Order cancelled" : "Cancel order"}
+              </Button>
             </CardContent>
           </Card>
 
@@ -567,5 +681,234 @@ export default function OrderDetailPage() {
         </div>
       </div>
     </div>
+  );
+}
+
+
+// ─── Assign courier ───────────────────────────────────────────────────────────
+
+function AssignCourierDialog({
+  orderId,
+  open,
+  onOpenChange,
+  onSaved,
+}: {
+  orderId: number | string;
+  open: boolean;
+  onOpenChange: (v: boolean) => void;
+  onSaved: () => void;
+}) {
+  const [couriers, setCouriers] = React.useState<CourierRow[]>([]);
+  const [courierId, setCourierId] = React.useState("");
+  const [carrierName, setCarrierName] = React.useState("");
+  const [serviceName, setServiceName] = React.useState("");
+  const [serviceCode, setServiceCode] = React.useState("");
+  const [saving, setSaving] = React.useState(false);
+
+  React.useEffect(() => {
+    if (!open) return;
+    setCarrierName("");
+    setServiceName("");
+    setServiceCode("");
+    listCouriers({ page: 1, limit: 100, filters: { is_active: true } })
+      .then((res) => {
+        setCouriers(res.rows);
+        setCourierId(res.rows[0] ? String(res.rows[0].id) : "");
+      })
+      .catch(() => setCouriers([]));
+  }, [open]);
+
+  const submit = async () => {
+    if (!courierId) return;
+    setSaving(true);
+    try {
+      toast.success(
+        await assignOrderCourier(orderId, {
+          courier_id: Number(courierId),
+          carrier_name: carrierName.trim() || undefined,
+          service_name: serviceName.trim() || undefined,
+          service_code: serviceCode.trim() || undefined,
+        })
+      );
+      onOpenChange(false);
+      onSaved();
+    } catch (err) {
+      toast.error(apiErrorMessage(err, "Couldn't assign the courier."));
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  return (
+    <Dialog open={open} onOpenChange={onOpenChange}>
+      <DialogContent className="sm:max-w-md">
+        <DialogHeader>
+          <DialogTitle>Assign courier</DialogTitle>
+          <DialogDescription>
+            Carrier and service are required by Shippo and UPS; leave them blank for
+            couriers that don&apos;t need them.
+          </DialogDescription>
+        </DialogHeader>
+
+        <div className="space-y-4">
+          <div className="space-y-1.5">
+            <Label>Courier</Label>
+            <Select
+              items={Object.fromEntries(couriers.map((c) => [String(c.id), c.name]))}
+              value={courierId}
+              onValueChange={(v) => setCourierId(v as string)}
+            >
+              <SelectTrigger className="w-full">
+                <SelectValue placeholder="Select a courier" />
+              </SelectTrigger>
+              <SelectContent className="max-h-64">
+                {couriers.map((c) => (
+                  <SelectItem key={c.id} value={String(c.id)}>
+                    {c.name}
+                    {c.code ? ` · ${c.code}` : ""}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+            {couriers.length === 0 && (
+              <p className="text-xs text-destructive">
+                No active couriers — add one under Settings → Couriers.
+              </p>
+            )}
+          </div>
+
+          <div className="grid gap-3 sm:grid-cols-2">
+            <div className="space-y-1.5">
+              <Label htmlFor="carrier-name">Carrier name</Label>
+              <Input
+                id="carrier-name"
+                value={carrierName}
+                onChange={(e) => setCarrierName(e.target.value)}
+                placeholder="USPS"
+              />
+            </div>
+            <div className="space-y-1.5">
+              <Label htmlFor="service-name">Service name</Label>
+              <Input
+                id="service-name"
+                value={serviceName}
+                onChange={(e) => setServiceName(e.target.value)}
+                placeholder="UPS Next Day Air"
+              />
+            </div>
+          </div>
+
+          <div className="space-y-1.5">
+            <Label htmlFor="service-code">Service code (UPS)</Label>
+            <Input
+              id="service-code"
+              value={serviceCode}
+              onChange={(e) => setServiceCode(e.target.value)}
+              placeholder="01"
+              className="w-24 font-mono"
+            />
+          </div>
+        </div>
+
+        <DialogFooter>
+          <Button variant="outline" onClick={() => onOpenChange(false)}>
+            Cancel
+          </Button>
+          <Button onClick={submit} disabled={saving || !courierId}>
+            {saving && <Loader2 className="size-4 animate-spin" />}
+            Assign
+          </Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
+  );
+}
+
+// ─── Cancel order ─────────────────────────────────────────────────────────────
+
+function CancelOrderDialog({
+  order,
+  open,
+  onOpenChange,
+  onSaved,
+}: {
+  order: OrderDetail;
+  open: boolean;
+  onOpenChange: (v: boolean) => void;
+  onSaved: () => void;
+}) {
+  const [reason, setReason] = React.useState("");
+  const [saving, setSaving] = React.useState(false);
+
+  React.useEffect(() => {
+    if (open) setReason("");
+  }, [open]);
+
+  const customer = order.customer;
+  const userId =
+    order.user_id ??
+    (customer && typeof customer === "object" ? customer.id : undefined);
+
+  const submit = async () => {
+    if (!reason.trim() || userId == null) return;
+    setSaving(true);
+    try {
+      toast.success(
+        await cancelOrder(order.id, {
+          user_id: userId as number | string,
+          reason: reason.trim(),
+        })
+      );
+      onOpenChange(false);
+      onSaved();
+    } catch (err) {
+      toast.error(apiErrorMessage(err, "Couldn't cancel the order."));
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  return (
+    <Dialog open={open} onOpenChange={onOpenChange}>
+      <DialogContent className="sm:max-w-md">
+        <DialogHeader>
+          <DialogTitle>Cancel this order?</DialogTitle>
+          <DialogDescription>
+            The reason is recorded on the activity log and shown to the customer.
+          </DialogDescription>
+        </DialogHeader>
+
+        <div className="space-y-1.5">
+          <Label htmlFor="cancel-reason">Reason</Label>
+          <Textarea
+            id="cancel-reason"
+            rows={3}
+            value={reason}
+            onChange={(e) => setReason(e.target.value)}
+            placeholder="Customer changed their mind"
+            autoFocus
+          />
+          {userId == null && (
+            <p className="text-sm text-destructive">
+              This order has no customer attached, so it can&apos;t be cancelled here.
+            </p>
+          )}
+        </div>
+
+        <DialogFooter>
+          <Button variant="outline" onClick={() => onOpenChange(false)}>
+            Keep order
+          </Button>
+          <Button
+            variant="destructive"
+            onClick={submit}
+            disabled={saving || !reason.trim() || userId == null}
+          >
+            {saving && <Loader2 className="size-4 animate-spin" />}
+            Cancel order
+          </Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
   );
 }

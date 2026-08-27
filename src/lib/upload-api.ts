@@ -90,3 +90,19 @@ export function imageUrlToPath(url: string): string | null {
     return null;
   }
 }
+
+/** Multiple videos in one request (field: files). */
+export async function uploadVideos(files: File[], folder = "general"): Promise<string[]> {
+  const form = new FormData();
+  files.forEach((f) => form.append("files", f));
+  const { data } = await api.post(
+    `upload/videos?folder=${encodeURIComponent(folder)}`,
+    form,
+    { headers: { "Content-Type": "multipart/form-data" }, timeout: 600000 }
+  );
+  const p: Json = data?.payload ?? data?.data ?? data ?? {};
+  const list = (Array.isArray(p) ? p : p.files ?? p.urls ?? []) as Json[];
+  return list
+    .map((f) => (typeof f === "string" ? f : f?.url ?? f?.path))
+    .filter(Boolean) as string[];
+}

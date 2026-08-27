@@ -21,6 +21,7 @@ import { StatusBadge, type BadgeTone } from "@/components/status-badge";
 import { apiErrorMessage } from "@/lib/auth-api";
 import { cn } from "@/lib/utils";
 import { ShiftBar, money, openPrintOutput } from "@/components/pos/shift-bar";
+import { openPrintWindow } from "@/lib/print-output";
 import {
   SHIFT_STATUSES,
   getCurrentShift,
@@ -129,10 +130,16 @@ export default function PosShiftsPage() {
   }, [page, debounced, status, dateRange, refreshKey]);
 
   const print = async (shift: ShiftRow) => {
+    const target = openPrintWindow();
     try {
-      await openPrintOutput(await printShiftReport(shift.id, { format: "pdf" }));
+      await openPrintOutput(await printShiftReport(shift.id, { format: "pdf" }), target);
     } catch (error) {
-      toast.error(apiErrorMessage(error, "Couldn't print the shift report."));
+      target.close();
+      toast.error(
+        error instanceof Error && error.message
+          ? error.message
+          : apiErrorMessage(error, "Couldn't print the shift report.")
+      );
     }
   };
 

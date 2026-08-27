@@ -130,3 +130,27 @@ export async function changePassword(values: {
   const { data } = await api.post("auth/change-password", values);
   return data?.message ?? "Password changed successfully.";
 }
+
+/** The signed-in admin's own profile. */
+export async function getProfile(): Promise<Json> {
+  const { data } = await api.get("auth/profile");
+  return (data?.payload ?? data?.data ?? data) as Json;
+}
+
+export async function updateProfile(body: {
+  full_name?: string;
+  phone?: string;
+  image?: string | null;
+}): Promise<string> {
+  const { data } = await api.patch("auth/profile", body);
+  return data?.message ?? "Profile updated.";
+}
+
+/** Tell the server to invalidate this session before clearing it locally. */
+export async function logoutServer(): Promise<void> {
+  try {
+    await api.post("auth/logout");
+  } catch {
+    // Signing out locally must succeed even if the call fails.
+  }
+}

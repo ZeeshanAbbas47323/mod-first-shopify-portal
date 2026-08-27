@@ -18,6 +18,7 @@ import { apiErrorMessage } from "@/lib/auth-api";
 import { cn } from "@/lib/utils";
 import { printOrder, type PrintType } from "@/lib/admin-api";
 import { money, openPrintOutput } from "@/components/pos/shift-bar";
+import { openPrintWindow } from "@/lib/print-output";
 import {
   POS_PAYMENT_LABELS,
   POS_PAYMENT_METHODS,
@@ -202,12 +203,19 @@ export function PosPaymentDialog({
   };
 
   const print = async () => {
+    const target = openPrintWindow();
     try {
       await openPrintOutput(
-        await printOrder({ order_code: orderCode, print_type: printType, format: "pdf" })
+        await printOrder({ order_code: orderCode, print_type: printType, format: "pdf" }),
+        target
       );
     } catch (error) {
-      toast.error(apiErrorMessage(error, "Couldn't print the receipt."));
+      target.close();
+      toast.error(
+        error instanceof Error && error.message
+          ? error.message
+          : apiErrorMessage(error, "Couldn't print the receipt.")
+      );
     }
   };
 

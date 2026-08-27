@@ -18,6 +18,8 @@ import {
   MapPin,
   Package,
   Layers,
+  History,
+  KeyRound,
   LockKeyhole,
   Palette,
   Percent,
@@ -45,6 +47,8 @@ import { SizesSection } from "@/components/settings/sizes-section";
 import { ColorsSection } from "@/components/settings/colors-section";
 import { ThemeSection } from "@/components/settings/theme-section";
 import { ScreenLockSection } from "@/components/settings/screen-lock-section";
+import { ApiUsersSection } from "@/components/settings/api-users-section";
+import { ActivityLogSection } from "@/components/settings/activity-log-section";
 import { MenusSection } from "@/components/settings/menus-section";
 import { MenuRightsSection } from "@/components/settings/menu-rights-section";
 import { WebsiteSettingsSection } from "@/components/settings/website-settings-section";
@@ -74,6 +78,8 @@ type SectionKey =
   | "theme"
   | "menus"
   | "menu-rights"
+  | "api-users"
+  | "activity"
   | "shipping"
   | "couriers"
   | "pickup-locations";
@@ -93,6 +99,8 @@ const settingsNav: {
   { label: "Theme", icon: Layers, key: "theme" },
   { label: "Menus", icon: ListTree, key: "menus" },
   { label: "Menu rights", icon: ShieldCheck, key: "menu-rights" },
+  { label: "API users", icon: KeyRound, key: "api-users" },
+  { label: "Activity log", icon: History, key: "activity" },
   { label: "Plan", icon: Package },
   { label: "Payments", icon: CreditCard },
   { label: "Checkout", icon: ShoppingCart },
@@ -126,6 +134,8 @@ const sectionMeta: Record<
   theme: { title: "Theme", icon: Layers },
   menus: { title: "Menus", icon: ListTree },
   "menu-rights": { title: "Menu rights", icon: ShieldCheck },
+  "api-users": { title: "API Users", icon: KeyRound },
+  activity: { title: "Activity Log", icon: History },
   shipping: { title: "Shipping & Delivery", icon: Truck },
   couriers: { title: "Couriers", icon: Truck },
   "pickup-locations": { title: "Pickup Locations", icon: MapPin },
@@ -365,6 +375,8 @@ export default function SettingsPage() {
             {section === "theme" && <ThemeSection />}
             {section === "menus" && <MenusSection />}
             {section === "menu-rights" && <MenuRightsSection />}
+            {section === "api-users" && <ApiUsersSection />}
+            {section === "activity" && <ActivityLogSection />}
 
             {section === "general" && <WebsiteSettingsSection />}
             {section === "shipping" && <ShippingSection />}
