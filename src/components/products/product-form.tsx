@@ -11,7 +11,6 @@ import {
   Check,
   ChevronsUpDown,
   ExternalLink,
-  GripVertical,
   ImagePlus,
   Loader2,
   Plus,
@@ -21,6 +20,11 @@ import {
 
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import {
+  VariantsSection,
+  type VariantsForm,
+} from "@/components/products/variants-section";
+import type { Control, UseFormRegister } from "react-hook-form";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { RichTextEditor } from "@/components/ui/rich-text-editor";
@@ -52,8 +56,6 @@ import {
   fetchAllVendors,
   listColors,
   listSizes,
-  createColorAndReturn,
-  createSizeAndReturn,
   PRODUCT_STATUSES,
   type ProductDetailRow,
   type ProductImageRow,
@@ -62,12 +64,6 @@ import {
   type ColorRow,
   type SizeRow,
 } from "@/lib/admin-api";
-import {
-  Dialog as InlineDialog,
-  DialogContent as InlineDialogContent,
-  DialogHeader as InlineDialogHeader,
-  DialogTitle as InlineDialogTitle,
-} from "@/components/ui/dialog";
 import { api } from "@/lib/api";
 import { cn, imgUrl } from "@/lib/utils";
 
@@ -75,15 +71,31 @@ import { cn, imgUrl } from "@/lib/utils";
 
 const VARIANT_STATUSES = ["active", "inactive", "out_of_stock"] as const;
 
-const variantSchema = z.object({
-  id: z.union([z.number(), z.string()]).optional(),
-  color_id: z.string().min(1, "Color required"),
-  size_id: z.string().min(1, "Size required"),
-  sku: z.string().optional(),
-  price: z.string().optional(),
-  sale_price: z.string().optional(),
-  status: z.enum(VARIANT_STATUSES),
-});
+const variantSchema = z
+  .object({
+    id: z.union([z.number(), z.string()]).optional(),
+    // The API needs one of the two, not both — a size-only or colour-only
+    // variant is valid.
+    color_id: z.string().optional(),
+    size_id: z.string().optional(),
+    sku: z.string().optional(),
+    price: z.string().min(1, "Price required"),
+    sale_price: z.string().optional(),
+    discount_percent: z.string().optional(),
+    discount_amount: z.string().optional(),
+    quantity: z.string().optional(),
+    image_url: z.string().nullable().optional(),
+    status: z.enum(VARIANT_STATUSES),
+  })
+  .superRefine((v, ctx) => {
+    if (!v.color_id && !v.size_id) {
+      ctx.addIssue({
+        code: "custom",
+        path: ["color_id"],
+        message: "Pick a colour or a size",
+      });
+    }
+  });
 
 const faqSchema = z.object({
   id: z.union([z.number(), z.string()]).optional(),
@@ -419,303 +431,6 @@ function VendorSelect({
 
 // ─── Color Combobox with inline create ───────────────────────────────────────
 
-function ColorCombobox({
-  value,
-  onChange,
-  colors,
-  onCreated,
-  hasError,
-}: {
-  value: string;
-  onChange: (v: string) => void;
-  colors: ColorRow[];
-  onCreated: (c: ColorRow) => void;
-  hasError?: boolean;
-}) {
-  const [open, setOpen] = React.useState(false);
-  const [search, setSearch] = React.useState("");
-  const [creating, setCreating] = React.useState(false);
-  const [newName, setNewName] = React.useState("");
-  const [newHex, setNewHex] = React.useState("#000000");
-  const [saving, setSaving] = React.useState(false);
-
-  const filtered = colors.filter((c) =>
-    c.name.toLowerCase().includes(search.toLowerCase())
-  );
-  const selected = colors.find((c) => String(c.id) === value);
-
-  async function handleCreate() {
-    if (!newName.trim()) return;
-    setSaving(true);
-    try {
-      const created = await createColorAndReturn({ name: newName.trim(), hex_code: newHex });
-      onCreated(created);
-      onChange(String(created.id));
-      setCreating(false);
-      setOpen(false);
-      setNewName("");
-      setNewHex("#000000");
-    } catch {
-      toast.error("Failed to create color.");
-    } finally {
-      setSaving(false);
-    }
-  }
-
-  return (
-    <>
-      <Popover open={open} onOpenChange={setOpen}>
-        <PopoverTrigger
-          className={cn(
-            "flex h-8 w-full min-w-[100px] items-center justify-between rounded-md border bg-card px-2 text-sm",
-            "hover:bg-accent focus:outline-none focus:ring-2 focus:ring-ring",
-            hasError ? "border-destructive" : "border-input"
-          )}
-        >
-          {selected ? (
-            <span className="flex items-center gap-1.5 truncate">
-              <span
-                className="inline-block size-3 shrink-0 rounded-full border border-border"
-                style={{ backgroundColor: selected.hex_code }}
-              />
-              <span className="truncate">{selected.name}</span>
-            </span>
-          ) : (
-            <span className="text-muted-foreground">Color</span>
-          )}
-          <ChevronsUpDown className="ml-1 size-3 shrink-0 opacity-50" />
-        </PopoverTrigger>
-        <PopoverContent className="w-52 p-0" align="start">
-          <Command shouldFilter={false}>
-            <CommandInput
-              placeholder="Search colors…"
-              value={search}
-              onValueChange={setSearch}
-            />
-            <CommandList className="max-h-48">
-              <CommandGroup>
-                {filtered.map((c) => (
-                  <CommandItem
-                    key={c.id}
-                    value={String(c.id)}
-                    onSelect={() => { onChange(String(c.id)); setOpen(false); setSearch(""); }}
-                    className="flex items-center gap-2"
-                  >
-                    <span
-                      className="inline-block size-3 shrink-0 rounded-full border border-border"
-                      style={{ backgroundColor: c.hex_code }}
-                    />
-                    <span className="flex-1 truncate">{c.name}</span>
-                    {value === String(c.id) && <Check className="size-3 text-primary" />}
-                  </CommandItem>
-                ))}
-                {filtered.length === 0 && (
-                  <p className="py-2 text-center text-xs text-muted-foreground">No colors found</p>
-                )}
-              </CommandGroup>
-            </CommandList>
-            <div className="border-t border-border p-1">
-              <button
-                type="button"
-                onClick={() => { setCreating(true); setOpen(false); setNewName(search); }}
-                className="flex w-full items-center gap-2 rounded px-2 py-1.5 text-xs font-medium text-primary hover:bg-accent"
-              >
-                <Plus className="size-3" /> Add new color
-              </button>
-            </div>
-          </Command>
-        </PopoverContent>
-      </Popover>
-
-      <InlineDialog open={creating} onOpenChange={setCreating}>
-        <InlineDialogContent className="sm:max-w-xs">
-          <InlineDialogHeader>
-            <InlineDialogTitle>New color</InlineDialogTitle>
-          </InlineDialogHeader>
-          <div className="space-y-3 pt-2">
-            <div className="space-y-1.5">
-              <label className="text-sm font-medium">Name</label>
-              <Input
-                autoFocus
-                placeholder="e.g. Royal Blue"
-                value={newName}
-                onChange={(e) => setNewName(e.target.value)}
-                onKeyDown={(e) => e.key === "Enter" && handleCreate()}
-              />
-            </div>
-            <div className="space-y-1.5">
-              <label className="text-sm font-medium">Hex color</label>
-              <div className="flex items-center gap-2">
-                <input
-                  type="color"
-                  value={newHex}
-                  onChange={(e) => setNewHex(e.target.value)}
-                  className="size-9 cursor-pointer rounded-md border border-border p-0.5"
-                />
-                <Input
-                  value={newHex}
-                  onChange={(e) => setNewHex(e.target.value)}
-                  placeholder="#000000"
-                  className="font-mono"
-                />
-              </div>
-            </div>
-            <div className="flex gap-2 pt-1">
-              <Button type="button" variant="outline" className="flex-1" onClick={() => setCreating(false)}>
-                Cancel
-              </Button>
-              <Button type="button" className="flex-1" disabled={!newName.trim() || saving} onClick={handleCreate}>
-                {saving && <Loader2 className="size-3 animate-spin" />}
-                Create
-              </Button>
-            </div>
-          </div>
-        </InlineDialogContent>
-      </InlineDialog>
-    </>
-  );
-}
-
-// ─── Size Combobox with inline create ────────────────────────────────────────
-
-function SizeCombobox({
-  value,
-  onChange,
-  sizes,
-  onCreated,
-  hasError,
-}: {
-  value: string;
-  onChange: (v: string) => void;
-  sizes: SizeRow[];
-  onCreated: (s: SizeRow) => void;
-  hasError?: boolean;
-}) {
-  const [open, setOpen] = React.useState(false);
-  const [search, setSearch] = React.useState("");
-  const [creating, setCreating] = React.useState(false);
-  const [newName, setNewName] = React.useState("");
-  const [newDisplay, setNewDisplay] = React.useState("");
-  const [saving, setSaving] = React.useState(false);
-
-  const filtered = sizes.filter((s) =>
-    (s.display_name ?? s.name).toLowerCase().includes(search.toLowerCase())
-  );
-  const selected = sizes.find((s) => String(s.id) === value);
-
-  async function handleCreate() {
-    if (!newName.trim()) return;
-    setSaving(true);
-    try {
-      const created = await createSizeAndReturn({
-        name: newName.trim(),
-        display_name: newDisplay.trim() || newName.trim(),
-      });
-      onCreated(created);
-      onChange(String(created.id));
-      setCreating(false);
-      setOpen(false);
-      setNewName("");
-      setNewDisplay("");
-    } catch {
-      toast.error("Failed to create size.");
-    } finally {
-      setSaving(false);
-    }
-  }
-
-  return (
-    <>
-      <Popover open={open} onOpenChange={setOpen}>
-        <PopoverTrigger
-          className={cn(
-            "flex h-8 w-full min-w-[90px] items-center justify-between rounded-md border bg-card px-2 text-sm",
-            "hover:bg-accent focus:outline-none focus:ring-2 focus:ring-ring",
-            hasError ? "border-destructive" : "border-input"
-          )}
-        >
-          <span className={selected ? "" : "text-muted-foreground"}>
-            {selected ? (selected.display_name ?? selected.name) : "Size"}
-          </span>
-          <ChevronsUpDown className="ml-1 size-3 shrink-0 opacity-50" />
-        </PopoverTrigger>
-        <PopoverContent className="w-44 p-0" align="start">
-          <Command shouldFilter={false}>
-            <CommandInput
-              placeholder="Search sizes…"
-              value={search}
-              onValueChange={setSearch}
-            />
-            <CommandList className="max-h-48">
-              <CommandGroup>
-                {filtered.map((s) => (
-                  <CommandItem
-                    key={s.id}
-                    value={String(s.id)}
-                    onSelect={() => { onChange(String(s.id)); setOpen(false); setSearch(""); }}
-                    className="flex items-center gap-2"
-                  >
-                    <span className="flex-1 truncate">{s.display_name ?? s.name}</span>
-                    {value === String(s.id) && <Check className="size-3 text-primary" />}
-                  </CommandItem>
-                ))}
-                {filtered.length === 0 && (
-                  <p className="py-2 text-center text-xs text-muted-foreground">No sizes found</p>
-                )}
-              </CommandGroup>
-            </CommandList>
-            <div className="border-t border-border p-1">
-              <button
-                type="button"
-                onClick={() => { setCreating(true); setOpen(false); setNewName(search); setNewDisplay(search); }}
-                className="flex w-full items-center gap-2 rounded px-2 py-1.5 text-xs font-medium text-primary hover:bg-accent"
-              >
-                <Plus className="size-3" /> Add new size
-              </button>
-            </div>
-          </Command>
-        </PopoverContent>
-      </Popover>
-
-      <InlineDialog open={creating} onOpenChange={setCreating}>
-        <InlineDialogContent className="sm:max-w-xs">
-          <InlineDialogHeader>
-            <InlineDialogTitle>New size</InlineDialogTitle>
-          </InlineDialogHeader>
-          <div className="space-y-3 pt-2">
-            <div className="space-y-1.5">
-              <label className="text-sm font-medium">Code <span className="text-muted-foreground">(e.g. XL)</span></label>
-              <Input
-                autoFocus
-                placeholder="XL"
-                value={newName}
-                onChange={(e) => setNewName(e.target.value)}
-              />
-            </div>
-            <div className="space-y-1.5">
-              <label className="text-sm font-medium">Display name <span className="text-muted-foreground">(e.g. Extra Large)</span></label>
-              <Input
-                placeholder="Extra Large"
-                value={newDisplay}
-                onChange={(e) => setNewDisplay(e.target.value)}
-                onKeyDown={(e) => e.key === "Enter" && handleCreate()}
-              />
-            </div>
-            <div className="flex gap-2 pt-1">
-              <Button type="button" variant="outline" className="flex-1" onClick={() => setCreating(false)}>
-                Cancel
-              </Button>
-              <Button type="button" className="flex-1" disabled={!newName.trim() || saving} onClick={handleCreate}>
-                {saving && <Loader2 className="size-3 animate-spin" />}
-                Create
-              </Button>
-            </div>
-          </div>
-        </InlineDialogContent>
-      </InlineDialog>
-    </>
-  );
-}
 
 // ─── Section Card ─────────────────────────────────────────────────────────────
 
@@ -770,6 +485,7 @@ export function ProductForm({ product }: { product?: ProductDetailRow }) {
     handleSubmit,
     control,
     setValue,
+    watch,
     getFieldState,
     formState: { errors, isSubmitting },
   } = useForm<ProductFormValues>({
@@ -811,6 +527,10 @@ export function ProductForm({ product }: { product?: ProductDetailRow }) {
         sku: v.sku ?? "",
         price: v.price != null ? String(v.price) : "",
         sale_price: v.sale_price != null ? String(v.sale_price) : "",
+        discount_percent: v.discount_percent != null ? String(v.discount_percent) : "",
+        discount_amount: v.discount_amount != null ? String(v.discount_amount) : "",
+        quantity: v.quantity != null ? String(v.quantity) : "",
+        image_url: v.image_url ?? null,
         status: (v.status as typeof VARIANT_STATUSES[number]) ?? "active",
       })),
       faqs: (product?.faqs ?? []).map((f) => ({
@@ -823,12 +543,8 @@ export function ProductForm({ product }: { product?: ProductDetailRow }) {
 
   const {
     fields: variantFields,
-    append: appendVariant,
-    remove: removeVariant,
-    move: moveVariant,
   } = useFieldArray({ control, name: "variants" });
 
-  const dragIdx = React.useRef<number | null>(null);
 
   const {
     fields: faqFields,
@@ -895,6 +611,31 @@ export function ProductForm({ product }: { product?: ProductDetailRow }) {
     setImgUploading(false);
   };
 
+  /**
+   * Without this the form silently does nothing when a field fails validation
+   * — no request, no message. Surface the first problem instead.
+   */
+  const onInvalid = (formErrors: typeof errors) => {
+    const variantIssue = Array.isArray(formErrors.variants)
+      ? formErrors.variants.find((v) => v)
+      : undefined;
+    const message = variantIssue
+      ? (variantIssue.price?.message ??
+          variantIssue.color_id?.message ??
+          "Check the variants — each one needs a price and a colour or size.")
+      : (Object.values(formErrors).find(
+          (e) => e && typeof e === "object" && "message" in e && e.message
+        ) as { message?: string } | undefined)?.message;
+
+    toast.error(message ?? "Some fields need attention before saving.");
+
+    // Jump to the first field that failed so it isn't hidden below the fold.
+    const firstInvalid = document.querySelector<HTMLElement>(
+      "[aria-invalid='true'], [data-invalid='true']"
+    );
+    firstInvalid?.scrollIntoView({ behavior: "smooth", block: "center" });
+  };
+
   const onSubmit = async (values: ProductFormValues) => {
     // Treat the product as variant-tracked when EITHER the form has variant rows
     // OR the server thinks it has variants (guards against a partial hydration
@@ -948,11 +689,16 @@ export function ProductForm({ product }: { product?: ProductDetailRow }) {
     };
 
     const makeVariantBody = (v: typeof values.variants[number]) => ({
-      color_id: Number(v.color_id),
-      size_id: Number(v.size_id),
+      // Send only the axis that was chosen — the API rejects a null id.
+      color_id: v.color_id ? Number(v.color_id) : undefined,
+      size_id: v.size_id ? Number(v.size_id) : undefined,
       sku: v.sku || undefined,
       price: parseNum(v.price),
       sale_price: parseNum(v.sale_price),
+      discount_percent: parseNum(v.discount_percent),
+      discount_amount: parseNum(v.discount_amount),
+      quantity: parseNum(v.quantity) ?? 0,
+      image_url: v.image_url || undefined,
       status: v.status,
       is_active: true,
     });
@@ -1009,7 +755,7 @@ export function ProductForm({ product }: { product?: ProductDetailRow }) {
   };
 
   return (
-    <form onSubmit={handleSubmit(onSubmit)} noValidate>
+    <form onSubmit={handleSubmit(onSubmit, onInvalid)} noValidate>
       {/* ── Top bar ── */}
       <div className="mb-5 flex flex-wrap items-center gap-3">
         <Button
@@ -1242,161 +988,20 @@ export function ProductForm({ product }: { product?: ProductDetailRow }) {
 
           {/* Variants */}
           <Section title="Variants">
-            <div className="space-y-3">
-              {variantFields.length === 0 ? (
-                <p className="text-sm text-muted-foreground">
-                  No variants yet. Add variants for different color + size combinations.
-                </p>
-              ) : (
-                <div className="overflow-x-auto rounded-lg border border-border">
-                  <table className="w-full text-sm">
-                    <thead>
-                      <tr className="border-b border-border bg-muted/40">
-                        <th className="w-8 px-3 py-2 text-left font-medium text-muted-foreground"></th>
-                        <th className="min-w-32 px-3 py-2 text-left font-medium">Color</th>
-                        <th className="min-w-28 px-3 py-2 text-left font-medium">Size</th>
-                        <th className="min-w-24 px-3 py-2 text-left font-medium">SKU</th>
-                        <th className="min-w-24 px-3 py-2 text-left font-medium">Price</th>
-                        <th className="min-w-24 px-3 py-2 text-left font-medium">Sale price</th>
-                        <th className="min-w-28 px-3 py-2 text-left font-medium">Status</th>
-                        <th className="w-8 px-3 py-2"></th>
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {variantFields.map((field, idx) => (
-                        <tr
-                          key={field.id}
-                          draggable
-                          onDragStart={() => { dragIdx.current = idx; }}
-                          onDragOver={(e) => {
-                            e.preventDefault();
-                            if (dragIdx.current !== null && dragIdx.current !== idx) {
-                              moveVariant(dragIdx.current, idx);
-                              dragIdx.current = idx;
-                            }
-                          }}
-                          onDragEnd={() => { dragIdx.current = null; }}
-                          className="border-b border-border transition-colors last:border-0 hover:bg-muted/30"
-                        >
-                          <td className="px-2 py-2 text-muted-foreground">
-                            <GripVertical className="size-4 cursor-grab active:cursor-grabbing" />
-                          </td>
-                          {/* Color */}
-                          <td className="px-2 py-2">
-                            <Controller
-                              name={`variants.${idx}.color_id`}
-                              control={control}
-                              render={({ field: f }) => (
-                                <ColorCombobox
-                                  value={f.value}
-                                  onChange={f.onChange}
-                                  colors={colors}
-                                  onCreated={(c) => setColors((prev) => [...prev, c])}
-                                  hasError={!!errors.variants?.[idx]?.color_id}
-                                />
-                              )}
-                            />
-                          </td>
-                          {/* Size */}
-                          <td className="px-2 py-2">
-                            <Controller
-                              name={`variants.${idx}.size_id`}
-                              control={control}
-                              render={({ field: f }) => (
-                                <SizeCombobox
-                                  value={f.value}
-                                  onChange={f.onChange}
-                                  sizes={sizes}
-                                  onCreated={(s) => setSizes((prev) => [...prev, s])}
-                                  hasError={!!errors.variants?.[idx]?.size_id}
-                                />
-                              )}
-                            />
-                          </td>
-                          {/* SKU */}
-                          <td className="px-2 py-2">
-                            <Input
-                              placeholder="SKU"
-                              className="h-8 font-mono text-sm"
-                              {...register(`variants.${idx}.sku`)}
-                            />
-                          </td>
-                          {/* Price */}
-                          <td className="px-2 py-2">
-                            <div className="relative">
-                              <span className="absolute left-2 top-1/2 -translate-y-1/2 text-xs text-muted-foreground">$</span>
-                              <Input
-                                type="number"
-                                step="0.01"
-                                min="0"
-                                placeholder="0.00"
-                                className="h-8 pl-5 text-sm"
-                                {...register(`variants.${idx}.price`)}
-                              />
-                            </div>
-                          </td>
-                          {/* Sale price */}
-                          <td className="px-2 py-2">
-                            <div className="relative">
-                              <span className="absolute left-2 top-1/2 -translate-y-1/2 text-xs text-muted-foreground">$</span>
-                              <Input
-                                type="number"
-                                step="0.01"
-                                min="0"
-                                placeholder="0.00"
-                                className="h-8 pl-5 text-sm"
-                                {...register(`variants.${idx}.sale_price`)}
-                              />
-                            </div>
-                          </td>
-                          {/* Status */}
-                          <td className="px-2 py-2">
-                            <Controller
-                              name={`variants.${idx}.status`}
-                              control={control}
-                              render={({ field: f }) => (
-                                <Select value={f.value} onValueChange={f.onChange}>
-                                  <SelectTrigger className="h-8 text-sm capitalize">
-                                    <SelectValue />
-                                  </SelectTrigger>
-                                  <SelectContent>
-                                    {VARIANT_STATUSES.map((s) => (
-                                      <SelectItem key={s} value={s} className="capitalize">
-                                        {s.replace(/_/g, " ")}
-                                      </SelectItem>
-                                    ))}
-                                  </SelectContent>
-                                </Select>
-                              )}
-                            />
-                          </td>
-                          <td className="px-2 py-2">
-                            <Button
-                              type="button"
-                              variant="ghost"
-                              size="icon"
-                              className="size-8 text-muted-foreground hover:text-destructive"
-                              onClick={() => removeVariant(idx)}
-                            >
-                              <Trash2 className="size-4" />
-                            </Button>
-                          </td>
-                        </tr>
-                      ))}
-                    </tbody>
-                  </table>
-                </div>
-              )}
-              <Button
-                type="button"
-                variant="outline"
-                size="sm"
-                onClick={() => appendVariant({ color_id: "", size_id: "", sku: "", price: "", sale_price: "", status: "active" })}
-              >
-                <Plus className="size-4" />
-                Add variant
-              </Button>
-            </div>
+            <VariantsSection
+              control={control as unknown as Control<VariantsForm>}
+              register={register as unknown as UseFormRegister<VariantsForm>}
+              colors={colors}
+              sizes={sizes}
+              onColorCreated={(c) => setColors((prev) => [...prev, c])}
+              onSizeCreated={(sz) => setSizes((prev) => [...prev, sz])}
+              basePrice={watch("price")}
+            />
+            {errors.variants?.some?.((v) => v?.color_id || v?.price) && (
+              <p className="mt-2 text-sm text-destructive">
+                Every variant needs a price and at least a colour or a size.
+              </p>
+            )}
           </Section>
 
           {/* FAQ */}

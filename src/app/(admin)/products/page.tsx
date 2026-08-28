@@ -27,6 +27,9 @@ import { cn, imgUrl } from "@/lib/utils";
 
 const PAGE_SIZE = 20;
 
+/** Quantity at or below this is flagged amber in the inventory column. */
+const LOW_STOCK = 5;
+
 const STATUS_ITEMS: Record<string, string> = {
   all: "All statuses",
   active: "Active",
@@ -91,15 +94,24 @@ const columns: ColumnDef<ProductRow>[] = [
     header: "Inventory",
     cell: ({ row }) => {
       const r = row.original;
-      const qty = r.quantity ?? 0;
+      const qty = r.quantity;
       const vc = r.variants_count;
+
+      // The API omits stock on some products; that isn't the same as zero.
+      if (qty == null) {
+        return <span className="text-sm text-muted-foreground">—</span>;
+      }
+      const suffix =
+        vc && vc > 0 ? ` across ${vc} variant${vc > 1 ? "s" : ""}` : "";
       return (
-        <span className={cn("text-sm", qty === 0 && "text-destructive")}>
-          {qty === 0
-            ? "Out of stock"
-            : vc && vc > 0
-            ? `${qty} in stock for ${vc} variant${vc > 1 ? "s" : ""}`
-            : `${qty} in stock`}
+        <span
+          className={cn(
+            "text-sm",
+            qty === 0 && "text-destructive",
+            qty > 0 && qty <= LOW_STOCK && "text-[#b98900]"
+          )}
+        >
+          {qty === 0 ? `Out of stock${suffix}` : `${qty} in stock${suffix}`}
         </span>
       );
     },

@@ -700,6 +700,7 @@ export interface ProductImageRow {
 
 export interface ProductVariantRow {
   id?: number | string;
+  product_id?: number | string;
   color_id?: number | string | null;
   size_id?: number | string | null;
   title?: string;
@@ -708,7 +709,10 @@ export interface ProductVariantRow {
   price?: number | null;
   sale_price?: number | null;
   compare_at_price?: number | null;
+  discount_percent?: number | null;
+  discount_amount?: number | null;
   quantity?: number;
+  image_url?: string | null;
   status?: string;
   is_active?: boolean;
 }
@@ -764,9 +768,35 @@ export async function listProducts(
     ? payload
     : payload.rows ?? payload.items ?? payload.products ?? payload.list ?? payload.data ?? [];
   // Normalize API field name differences (name→title, base_price→price, etc.)
-  const rows = rawRows.map((r): ProductRow => ({
+  const rows = rawRows.map((r): ProductRow => {
+    const variants = (Array.isArray(r.variants) ? r.variants : []) as Json[];
+    const variantsCount =
+      (r.variants_count ?? r.variantsCount ?? (variants.length || undefined)) as
+        | number
+        | undefined;
+
+    // Stock lives per variant once a product has any, so the product-level
+    // column has to add them up — otherwise every variant product reads as
+    // out of stock.
+    const variantQty = variants.length
+      ? variants.reduce((sum, v) => sum + (Number(v.quantity) || 0), 0)
+      : undefined;
+    const productQty = [
+      r.quantity, r.total_quantity, r.stock, r.stock_quantity,
+      r.available_quantity, r.inventory_quantity,
+    ].find((v) => v != null);
+    const quantity =
+      variantQty != null && (productQty == null || Number(productQty) === 0)
+        ? variantQty
+        : productQty != null
+          ? Number(productQty)
+          : undefined;
+
+    return {
     ...r as ProductRow,
     title: (r.title ?? r.name ?? "") as string,
+    quantity,
+    variants_count: variantsCount,
     price: r.price != null ? (r.price as number) : r.base_price != null ? parseFloat(r.base_price as string) : null,
     featured_image: (r.featured_image ?? r.image ?? r.thumbnail
       ?? (Array.isArray(r.images) && r.images.length > 0
@@ -777,13 +807,47 @@ export async function listProducts(
               ?? null)
           : null)
       ?? null) as string | null,
-  }));
+    };
+  });
   const pagination = data?.pagination ?? {};
   const total: number =
     pagination.total ?? payload.total ?? payload.count ?? payload.totalRecords ?? rows.length;
   const totalPages: number =
     pagination.totalPages ?? payload.totalPages ?? Math.max(1, Math.ceil(total / params.limit));
   return { rows, total, totalPages };
+}
+
+/** Pull an id out of either `color_id` or a nested `color: { id }`. */
+function relationId(row: Json, key: "color" | "size"): number | null {
+  const direct = row[`${key}_id`];
+  if (direct != null) return Number(direct);
+  const nested = row[key];
+  if (nested && typeof nested === "object" && (nested as Json).id != null) {
+    return Number((nested as Json).id);
+  }
+  return null;
+}
+
+/** Variants can come back under a few different keys and shapes. */
+function normalizeVariants(raw: Json): ProductVariantRow[] {
+  const list = (raw.variants ??
+    raw.productVariants ??
+    raw.product_variants ??
+    []) as Json[];
+  if (!Array.isArray(list)) return [];
+  return list.map((v) => ({
+    ...(v as ProductVariantRow),
+    id: v.id,
+    color_id: relationId(v, "color"),
+    size_id: relationId(v, "size"),
+    price: v.price != null ? Number(v.price) : v.base_price != null ? Number(v.base_price) : null,
+    sale_price: v.sale_price != null ? Number(v.sale_price) : null,
+    discount_percent: v.discount_percent != null ? Number(v.discount_percent) : null,
+    discount_amount: v.discount_amount != null ? Number(v.discount_amount) : null,
+    quantity: Number(v.quantity ?? v.stock ?? v.stock_quantity ?? 0),
+    image_url: (v.image_url ?? v.image ?? null) as string | null,
+    status: (v.status as string) ?? "active",
+  }));
 }
 
 export async function getProduct(id: number | string): Promise<ProductDetailRow> {
@@ -817,6 +881,9 @@ export async function getProduct(id: number | string): Promise<ProductDetailRow>
           url: (img.url ?? img.image_url ?? "") as string,
         }))
       : [],
+    // variants: the id must survive so edits PUT instead of creating
+    // duplicates, and colour/size may arrive as nested objects.
+    variants: normalizeVariants(raw),
   } as ProductDetailRow;
 }
 
