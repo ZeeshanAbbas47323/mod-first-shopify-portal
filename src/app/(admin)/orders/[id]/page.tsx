@@ -6,7 +6,7 @@ import { format } from "date-fns";
 import {
   ArrowLeft, Loader2, Truck, CreditCard, Package, MapPin,
   Phone, Mail, User, Clock, ChevronDown, FileText, Banknote,
-  Printer, XCircle,
+  Printer, XCircle, Download, ExternalLink, FileImage,
 } from "lucide-react";
 import { toast } from "sonner";
 
@@ -44,6 +44,9 @@ import {
 } from "@/lib/print-output";
 import {
   getOrder, updateOrderStatus, printOrder, printOrderRaw,
+  orderItemDesigns, orderItemDesignIds, orderDesigns, orderDesignIds,
+  fetchOrderDesigns, type DesignUploadRow,
+  type OrderDesignUpload,
   assignOrderCourier, cancelOrder, listCouriers, type CourierRow,
   ORDER_STATUSES,
   type OrderDetail, type OrderAddress, type PrintType, type PrintFormat,
@@ -78,6 +81,11 @@ export default function OrderDetailPage() {
   const [statusOpen, setStatusOpen] = React.useState(false);
   const [printOpen, setPrintOpen] = React.useState(false);
   const [printing, setPrinting] = React.useState(false);
+  // Artwork is referenced by id on the order lines, so the files are fetched
+  // once the order itself has loaded.
+  const [designFiles, setDesignFiles] = React.useState<Map<string, DesignUploadRow>>(
+    new Map()
+  );
   const [courierOpen, setCourierOpen] = React.useState(false);
   const [cancelOpen, setCancelOpen] = React.useState(false);
 
@@ -91,6 +99,22 @@ export default function OrderDetailPage() {
   }, [id]);
 
   React.useEffect(() => { load(); }, [load]);
+
+  React.useEffect(() => {
+    if (!order) return;
+    const ids = orderDesignIds(order);
+    if (ids.length === 0) {
+      setDesignFiles(new Map());
+      return;
+    }
+    let cancelled = false;
+    fetchOrderDesigns(ids)
+      .then((map) => !cancelled && setDesignFiles(map))
+      .catch(() => {});
+    return () => {
+      cancelled = true;
+    };
+  }, [order]);
 
   // The print service keys off order_code; order_number is a different value,
   // so only send it when the order actually carries a code.
@@ -238,6 +262,11 @@ export default function OrderDetailPage() {
   const activityLogs = order.activityLogs ?? [];
   const paymentLogs = order.paymentLogs ?? [];
   const shipments = order.shipments ?? [];
+  // Embedded designs plus the ones resolved from their ids.
+  const allDesigns: OrderDesignUpload[] = [
+    ...orderDesigns(order),
+    ...[...designFiles.values()],
+  ];
 
   return (
     <div className="flex flex-col gap-4">
@@ -338,6 +367,24 @@ export default function OrderDetailPage() {
                         {item.sku && (
                           <p className="text-xs text-muted-foreground">SKU: {item.sku}</p>
                         )}
+                        {item.print_method && (
+                          <p className="text-xs text-muted-foreground uppercase">
+                            {item.print_method.replace(/_/g, " ")}
+                          </p>
+                        )}
+                        {item.custom_text && (
+                          <p className="truncate text-xs text-muted-foreground">
+                            “{item.custom_text}”
+                          </p>
+                        )}
+                        <ItemDesigns
+                          designs={[
+                            ...orderItemDesigns(item),
+                            ...orderItemDesignIds(item)
+                              .map((did) => designFiles.get(String(did)))
+                              .filter((d): d is DesignUploadRow => !!d),
+                          ]}
+                        />
                       </div>
                       <div className="shrink-0 text-right text-sm">
                         <p className="text-muted-foreground">
@@ -351,6 +398,26 @@ export default function OrderDetailPage() {
               </div>
             </CardContent>
           </Card>
+
+          {/* Artwork */}
+          {allDesigns.length > 0 && (
+            <Card>
+              <CardHeader className="flex-row items-center gap-2 pb-3">
+                <FileImage className="size-4 text-muted-foreground" />
+                <CardTitle className="text-base">Artwork</CardTitle>
+                <span className="ml-auto text-xs text-muted-foreground">
+                  {allDesigns.length} file{allDesigns.length === 1 ? "" : "s"}
+                </span>
+              </CardHeader>
+              <CardContent>
+                <div className="grid gap-3 sm:grid-cols-3 lg:grid-cols-4">
+                  {allDesigns.map((d, i) => (
+                    <DesignCard key={String(d.id ?? i)} design={d} index={i} />
+                  ))}
+                </div>
+              </CardContent>
+            </Card>
+          )}
 
           {/* Payment summary card */}
           <Card>
@@ -910,5 +977,140 @@ function CancelOrderDialog({
         </DialogFooter>
       </DialogContent>
     </Dialog>
+  );
+}
+
+
+// ─── Artwork attached to a line ───────────────────────────────────────────────
+
+/**
+ * Design files can't just be plain links — the same file is usually wanted
+ * either saved to disk or opened for a quick look, so each one offers both.
+ */
+function ItemDesigns({ designs }: { designs: OrderDesignUpload[] }) {
+  if (designs.length === 0) return null;
+
+  return (
+    <div className="mt-1.5 flex flex-wrap gap-1.5">
+      {designs.map((d, i) => {
+        const url = d.file_url ?? d.edit_url ?? "";
+        const name = d.file_name ?? `Design ${i + 1}`;
+        return (
+          <DropdownMenu key={String(d.id ?? i)}>
+            <DropdownMenuTrigger
+              render={
+                <button
+                  type="button"
+                  className="flex max-w-52 items-center gap-1.5 rounded-lg border border-border bg-muted/40 px-2 py-1 text-xs text-[#005bd3] transition-colors hover:bg-muted"
+                >
+                  <FileImage className="size-3.5 shrink-0" />
+                  <span className="truncate">{name}</span>
+                  <ChevronDown className="size-3 shrink-0 text-muted-foreground" />
+                </button>
+              }
+            />
+            <DropdownMenuContent align="start" className="w-52">
+              <DropdownMenuItem
+                onClick={() => window.open(url, "_blank", "noopener")}
+              >
+                <ExternalLink className="size-4" /> Open in new tab
+              </DropdownMenuItem>
+              <DropdownMenuItem onClick={() => downloadDesign(url, name)}>
+                <Download className="size-4" /> Download
+              </DropdownMenuItem>
+              {d.edit_url && d.file_url && d.edit_url !== d.file_url && (
+                <DropdownMenuItem
+                  onClick={() => window.open(d.edit_url as string, "_blank", "noopener")}
+                >
+                  <ExternalLink className="size-4" /> Open edited version
+                </DropdownMenuItem>
+              )}
+            </DropdownMenuContent>
+          </DropdownMenu>
+        );
+      })}
+    </div>
+  );
+}
+
+/**
+ * Fetch the file first so the browser saves it instead of navigating — a plain
+ * `download` attribute is ignored for cross-origin URLs.
+ */
+async function downloadDesign(url: string, name: string) {
+  if (!url) return;
+  try {
+    const res = await fetch(url);
+    if (!res.ok) throw new Error(`Server returned ${res.status}`);
+    const blob = await res.blob();
+    const objectUrl = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = objectUrl;
+    a.download = name;
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+    setTimeout(() => URL.revokeObjectURL(objectUrl), 60_000);
+  } catch {
+    // CORS or a dead link — fall back to opening it so the file isn't lost.
+    toast.error("Couldn't download directly — opening the file instead.");
+    window.open(url, "_blank", "noopener");
+  }
+}
+
+
+// ─── Artwork card ─────────────────────────────────────────────────────────────
+
+const isPreviewable = (url: string) =>
+  /\.(png|jpe?g|webp|gif|svg|avif)(\?|$)/i.test(url);
+
+/** Thumbnail with the same open/download choice as the inline chips. */
+function DesignCard({ design, index }: { design: OrderDesignUpload; index: number }) {
+  const url = design.file_url ?? design.edit_url ?? "";
+  const name = design.file_name ?? `Design ${index + 1}`;
+
+  return (
+    <div className="overflow-hidden rounded-xl border border-border">
+      <div className="flex h-28 items-center justify-center bg-muted/40">
+        {isPreviewable(url) ? (
+          // eslint-disable-next-line @next/next/no-img-element
+          <img src={url} alt={name} className="size-full object-contain" />
+        ) : (
+          <FileImage className="size-6 text-muted-foreground" />
+        )}
+      </div>
+      <div className="space-y-1.5 p-2">
+        <p className="truncate text-xs font-medium" title={name}>
+          {name}
+        </p>
+        {design.print_method && (
+          <p className="text-[11px] uppercase text-muted-foreground">
+            {design.print_method.replace(/_/g, " ")}
+          </p>
+        )}
+        <div className="flex gap-1">
+          <Button
+            type="button"
+            size="sm"
+            variant="outline"
+            className="h-7 flex-1 px-2 text-xs"
+            onClick={() => window.open(url, "_blank", "noopener")}
+          >
+            <ExternalLink className="size-3" />
+            Open
+          </Button>
+          <Button
+            type="button"
+            size="sm"
+            variant="outline"
+            className="h-7 px-2 text-xs"
+            aria-label={`Download ${name}`}
+            onClick={() => downloadDesign(url, name)}
+          >
+            <Download className="size-3" />
+          </Button>
+        </div>
+      </div>
+    </div>
   );
 }

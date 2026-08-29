@@ -130,6 +130,8 @@ export interface OrderRow {
   items_count?: number;
   customer?: OrderCustomer | string | null;
   email?: string;
+  /** When the order was placed — preferred over created_at for display. */
+  order_date?: string;
   created_at?: string;
   [k: string]: unknown;
 }
@@ -163,6 +165,17 @@ export async function listOrders(params: ListOrdersParams): Promise<ListResult<O
   return parseList<OrderRow>(data, params.limit);
 }
 
+/** Artwork attached to an order line. */
+export interface OrderDesignUpload {
+  id?: number | string;
+  file_url?: string | null;
+  file_name?: string | null;
+  edit_url?: string | null;
+  print_method?: string | null;
+  is_active?: boolean;
+  [k: string]: unknown;
+}
+
 export interface OrderItem {
   id: number | string;
   order_id?: number | string;
@@ -175,6 +188,10 @@ export interface OrderItem {
   variant_name?: string;
   sku?: string;
   image?: string;
+  print_method?: string | null;
+  custom_text?: string | null;
+  designUploads?: OrderDesignUpload[];
+  design_uploads?: OrderDesignUpload[];
   product?: {
     id?: number | string;
     title?: string;
@@ -182,6 +199,90 @@ export interface OrderItem {
     [k: string]: unknown;
   };
   [k: string]: unknown;
+}
+
+const DESIGN_KEYS = [
+  "designs", "designUploads", "design_uploads", "design",
+  "designUpload", "design_upload", "artwork", "artworks",
+] as const;
+
+function designRows(source: Json | undefined): Json[] {
+  if (!source) return [];
+  const rows: Json[] = [];
+  DESIGN_KEYS.forEach((key) => {
+    const raw = source[key];
+    if (!raw) return;
+    (Array.isArray(raw) ? raw : [raw]).forEach((d) => rows.push(d as Json));
+  });
+  return rows;
+}
+
+/** Designs embedded whole (they carry the file), as opposed to join rows. */
+export function orderItemDesigns(item: OrderItem): OrderDesignUpload[] {
+  return designRows(item as Json).filter(
+    (d) => d.file_url || d.edit_url
+  ) as OrderDesignUpload[];
+}
+
+/**
+ * An order line usually links artwork through a join row that carries only
+ * `design_upload_id`, so the file itself has to be fetched separately.
+ */
+export function orderItemDesignIds(item: OrderItem): (number | string)[] {
+  const ids: (number | string)[] = [];
+  designRows(item as Json).forEach((d) => {
+    const id = d.design_upload_id ?? d.designUploadId;
+    if (id != null) ids.push(id as number | string);
+  });
+  const raw = (item as Json).design_upload_ids;
+  if (Array.isArray(raw)) raw.forEach((id) => id != null && ids.push(id));
+  return [...new Set(ids.map(String))].map(
+    (v) => (ids.find((i) => String(i) === v) as number | string)
+  );
+}
+
+/** Every upload id referenced anywhere on the order. */
+export function orderDesignIds(order: OrderDetail): (number | string)[] {
+  const ids = [
+    ...orderItemDesignIds(order as unknown as OrderItem),
+    ...(order.items ?? []).flatMap(orderItemDesignIds),
+  ];
+  return [...new Set(ids.map(String))].map(
+    (v) => (ids.find((i) => String(i) === v) as number | string)
+  );
+}
+
+/** Designs embedded on the order or its lines, de-duplicated. */
+export function orderDesigns(order: OrderDetail): OrderDesignUpload[] {
+  const all = [
+    ...(designRows(order as Json).filter((d) => d.file_url || d.edit_url) as OrderDesignUpload[]),
+    ...(order.items ?? []).flatMap(orderItemDesigns),
+  ];
+  const seen = new Set<string>();
+  return all.filter((d) => {
+    const key = String(d.id ?? d.file_url ?? d.edit_url);
+    if (seen.has(key)) return false;
+    seen.add(key);
+    return true;
+  });
+}
+
+/** Fetch the referenced uploads; a missing one is skipped, not fatal. */
+export async function fetchOrderDesigns(
+  ids: (number | string)[]
+): Promise<Map<string, DesignUploadRow>> {
+  const map = new Map<string, DesignUploadRow>();
+  await Promise.all(
+    ids.map(async (id) => {
+      try {
+        const row = await getDesignUpload(id);
+        if (row) map.set(String(id), row);
+      } catch {
+        // deleted or not visible — leave it out
+      }
+    })
+  );
+  return map;
 }
 
 export interface OrderAddress {

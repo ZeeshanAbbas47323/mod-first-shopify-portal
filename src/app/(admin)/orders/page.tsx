@@ -80,11 +80,20 @@ const columns: ColumnDef<OrderRow>[] = [
     ),
   },
   {
-    accessorKey: "created_at",
+    accessorKey: "order_date",
     header: "Date",
     cell: ({ row }) => {
-      const v = row.getValue<string>("created_at");
-      return v ? format(new Date(v), "MMM d, yyyy") : "—";
+      // order_date is when the order was placed; created_at is the fallback.
+      const v = row.original.order_date ?? row.original.created_at;
+      if (!v) return "—";
+      const d = new Date(v);
+      if (isNaN(d.getTime())) return "—";
+      return (
+        <div className="whitespace-nowrap">
+          <p>{format(d, "MMM d, yyyy")}</p>
+          <p className="text-xs text-muted-foreground">{format(d, "h:mm a")}</p>
+        </div>
+      );
     },
   },
   {
