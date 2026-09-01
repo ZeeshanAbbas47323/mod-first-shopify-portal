@@ -3281,3 +3281,253 @@ export async function createCheckoutSession(body: Json): Promise<Json> {
   const { data } = await api.post("payments/checkout-session", body);
   return (data?.payload ?? data?.data ?? data) as Json;
 }
+
+// ─── Draft orders ─────────────────────────────────────────────────────────────
+
+export const DRAFT_STATUSES = [
+  "open", "invoice_sent", "completed", "cancelled",
+] as const;
+export type DraftStatus = (typeof DRAFT_STATUSES)[number];
+
+export const DRAFT_STATUS_LABELS: Record<string, string> = {
+  open: "Open",
+  invoice_sent: "Invoice sent",
+  completed: "Completed",
+  cancelled: "Cancelled",
+};
+
+export interface DraftOrderItem {
+  id?: number | string;
+  product_id: number | string;
+  variant_id?: number | string | null;
+  quantity: number;
+  unit_price?: number | string | null;
+  print_method?: string | null;
+  custom_text?: string | null;
+  width?: number | null;
+  height?: number | null;
+  is_tax_applied?: boolean;
+  design_upload_ids?: (number | string)[];
+  product?: { id?: number | string; name?: string; title?: string; featured_image?: string | null; images?: Json[] } | null;
+  variant?: { id?: number | string; sku?: string | null; price?: number | string | null } | null;
+  [k: string]: unknown;
+}
+
+export interface DraftOrderRow {
+  id: number | string;
+  draft_number?: string;
+  status?: DraftStatus;
+  channel?: string;
+  delivery_type?: "home_delivery" | "store_pickup";
+  user_id?: number | string | null;
+  customer?: { id?: number | string; full_name?: string; email?: string; phone?: string } | null;
+  email?: string | null;
+  phone?: string | null;
+  full_name?: string | null;
+  shipping_address_id?: number | null;
+  billing_address_id?: number | null;
+  shippingAddress?: OrderAddress | null;
+  pickup_location_id?: number | null;
+  pickupLocation?: { id?: number | string; name?: string } | null;
+  coupon_code?: string | null;
+  manual_discount_type?: "percentage" | "fixed_amount" | null;
+  manual_discount_value?: number | string | null;
+  manual_discount_reason?: string | null;
+  notes?: string | null;
+  subtotal?: number | string;
+  discount_amount?: number | string;
+  tax_amount?: number | string;
+  shipping_fee?: number | string;
+  total_amount?: number | string;
+  items?: DraftOrderItem[];
+  branch_id?: number | null;
+  created_at?: string;
+  updated_at?: string;
+  [k: string]: unknown;
+}
+
+export interface DraftOrderInput {
+  user_id?: number | string;
+  email?: string;
+  phone?: string;
+  full_name?: string;
+  delivery_type?: "home_delivery" | "store_pickup";
+  shipping_address_id?: number | string | null;
+  billing_address_id?: number | string | null;
+  pickup_location_id?: number | string | null;
+  coupon_code?: string;
+  manual_discount_type?: "percentage" | "fixed_amount";
+  manual_discount_value?: number;
+  manual_discount_reason?: string;
+  notes?: string;
+  items?: DraftOrderItem[];
+  status?: DraftStatus;
+}
+
+const draftUnwrap = (data: Json): DraftOrderRow =>
+  (data?.payload ?? data?.data ?? data) as DraftOrderRow;
+
+export interface DraftListParams {
+  page: number;
+  limit: number;
+  search?: string;
+  sortBy?: "created_at" | "updated_at" | "draft_number" | "total_amount" | "status";
+  sortOrder?: "asc" | "desc";
+  filters?: Json;
+}
+
+export async function listDraftOrders(
+  params: DraftListParams
+): Promise<ListResult<DraftOrderRow>> {
+  const body: Json = { page: params.page, limit: params.limit };
+  if (params.search) body.search = params.search;
+  if (params.sortBy) body.sortBy = params.sortBy;
+  if (params.sortOrder) body.sortOrder = params.sortOrder;
+  const clean = Object.fromEntries(
+    Object.entries(params.filters ?? {}).filter(
+      ([, v]) => v !== undefined && v !== null && v !== ""
+    )
+  );
+  if (Object.keys(clean).length) body.filters = clean;
+  const { data } = await api.post("draft-orders/list", body);
+  return parseList<DraftOrderRow>(data, params.limit);
+}
+
+export async function getDraftOrder(id: number | string): Promise<DraftOrderRow> {
+  const { data } = await api.get(`draft-orders/${id}`);
+  return draftUnwrap(data);
+}
+
+/** Creating from the dashboard makes it a point_of_sale draft. */
+export async function createDraftOrder(body: DraftOrderInput): Promise<DraftOrderRow> {
+  const { data } = await api.post("draft-orders/", body);
+  return draftUnwrap(data);
+}
+
+/** Sending `items` replaces the whole line set; omit it to leave lines alone. */
+export async function updateDraftOrder(
+  id: number | string,
+  body: Partial<DraftOrderInput>
+): Promise<DraftOrderRow> {
+  const { data } = await api.put(`draft-orders/${id}`, body);
+  return draftUnwrap(data);
+}
+
+export async function deleteDraftOrder(id: number | string): Promise<string> {
+  const { data } = await api.delete(`draft-orders/${id}`);
+  return (data?.message as string) ?? "Draft deleted.";
+}
+
+export const DRAFT_PAYMENT_OPTIONS = [
+  "send_payment_link", "payment_screen", "mark_as_paid",
+] as const;
+export type DraftPaymentOption = (typeof DRAFT_PAYMENT_OPTIONS)[number];
+
+/** Each option only accepts its own set of methods — a mismatch is a 422. */
+export const DRAFT_PAYMENT_METHODS: Record<DraftPaymentOption, string[]> = {
+  send_payment_link: ["stripe", "paypal", "stripe_and_cash", "paypal_and_cash"],
+  payment_screen: ["stripe", "paypal", "stripe_and_cash", "paypal_and_cash"],
+  mark_as_paid: ["cash", "bank_transfer", "without_payment"],
+};
+
+export interface CompleteDraftResult {
+  draft_order_id?: number | string;
+  draft_number?: string;
+  order?: Json;
+  payment?: {
+    payment_option?: string;
+    payment_method?: string;
+    payment_status?: string;
+    payment_reference?: string;
+    session_url?: string | null;
+    online_amount?: number | null;
+    cash_amount?: number | null;
+    emailed_to?: string | null;
+    invoice_sent_to?: string | null;
+  };
+  message: string;
+  success: boolean;
+  [k: string]: unknown;
+}
+
+/**
+ * Turns the draft into a real order and settles payment in one call. A payment
+ * failure still returns the created order, so the caller must not retry
+ * completing the same draft.
+ */
+export async function completeDraftOrder(
+  id: number | string,
+  body: {
+    payment_option: DraftPaymentOption;
+    payment_method: string;
+    online_amount?: number;
+    cash_amount?: number;
+    success_url?: string;
+    cancel_url?: string;
+    email?: string;
+    note?: string;
+    send_invoice?: boolean;
+    invoice_print_type?: PrintType;
+    send_email?: boolean;
+  }
+): Promise<CompleteDraftResult> {
+  const { data } = await api.post(`draft-orders/${id}/complete`, body);
+  const p: Json = data?.payload ?? data?.data ?? data ?? {};
+  return {
+    ...p,
+    message: (data?.message as string) ?? "Draft completed.",
+    success: data?.success !== false,
+  } as CompleteDraftResult;
+}
+
+export interface AddressInput {
+  full_name: string;
+  phone: string;
+  email?: string;
+  address_line1: string;
+  address_line2?: string;
+  city: string;
+  state?: string;
+  postal_code?: string;
+  country?: string;
+  is_default?: boolean;
+  type?: "shipping" | "billing";
+  is_active?: boolean;
+  /** Not documented, but sent so the API can attach it to the customer. */
+  user_id?: number | string;
+}
+
+export async function createAddress(body: AddressInput): Promise<AddressRow> {
+  const { data } = await api.post("addresses", body);
+  return (data?.payload ?? data?.data ?? data) as AddressRow;
+}
+
+export async function updateAddress(
+  id: number | string,
+  body: Partial<AddressInput>
+): Promise<string> {
+  const { data } = await api.put(`addresses/${id}`, body);
+  return (data?.message as string) ?? "Address updated.";
+}
+
+/**
+ * A customer's saved addresses. The admin list has no user_id filter, so the
+ * customer's email is used and the results are narrowed by user_id when the
+ * API happens to return it.
+ */
+export async function listCustomerAddresses(customer: {
+  id?: number | string | null;
+  email?: string | null;
+}): Promise<AddressRow[]> {
+  const filters: Json = {};
+  if (customer.email) filters.email = customer.email;
+  if (!customer.email && customer.id != null) filters.user_id = customer.id;
+
+  const res = await listAddresses({ page: 1, limit: 50, filters });
+  const rows = res.rows;
+  if (customer.id == null) return rows;
+  const owned = rows.filter(
+    (a) => a.user_id == null || String(a.user_id) === String(customer.id)
+  );
+  return owned.length ? owned : rows;
+}
