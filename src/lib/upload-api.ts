@@ -1,4 +1,5 @@
 import { api } from "@/lib/api";
+import { rememberUploadBase } from "@/lib/utils";
 
 /**
  * Upload APIs — multipart/form-data.
@@ -11,9 +12,16 @@ import { api } from "@/lib/api";
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 type Json = Record<string, any>;
 
-/** Find the uploaded file URL wherever the API puts it. */
+/**
+ * The API returns both `url` (path only) and `absolute_url` (public link).
+ * The path is what gets stored — the CDN origin is remembered separately so a
+ * domain change doesn't need a data migration.
+ */
 function pickUrl(data: Json): string {
   const p: Json = data?.payload ?? data?.data ?? data ?? {};
+  rememberUploadBase(
+    (p.absolute_url ?? p.absoluteUrl ?? p.file?.absolute_url) as string | undefined
+  );
   const candidate =
     p.url ??
     p.path ??
@@ -71,6 +79,10 @@ export async function uploadImages(files: File[], folder = "general"): Promise<s
   );
   const p: Json = data?.payload ?? data?.data ?? data ?? {};
   const list = (Array.isArray(p) ? p : p.files ?? p.urls ?? []) as Json[];
+  rememberUploadBase(
+    (list.find((f) => typeof f !== "string" && f?.absolute_url)?.absolute_url ??
+      p.absolute_url) as string | undefined
+  );
   return list
     .map((f) => (typeof f === "string" ? f : f?.url ?? f?.path))
     .filter(Boolean) as string[];
@@ -82,13 +94,14 @@ export async function deleteFile(path: string): Promise<string> {
   return (data?.message as string) ?? "File deleted.";
 }
 
-/** Extract the server path from a full image URL, e.g. https://api.com/uploads/x.webp → /uploads/x.webp */
+/**
+ * The stored value for a file, ready to hand to `deleteFile`, which accepts
+ * either a path or a full CDN URL.
+ */
 export function imageUrlToPath(url: string): string | null {
-  try {
-    return new URL(url).pathname;
-  } catch {
-    return null;
-  }
+  if (!url) return null;
+  if (/^https?:\/\//.test(url)) return url;
+  return url.startsWith("/") ? url : `/${url}`;
 }
 
 /** Multiple videos in one request (field: files). */
@@ -102,6 +115,10 @@ export async function uploadVideos(files: File[], folder = "general"): Promise<s
   );
   const p: Json = data?.payload ?? data?.data ?? data ?? {};
   const list = (Array.isArray(p) ? p : p.files ?? p.urls ?? []) as Json[];
+  rememberUploadBase(
+    (list.find((f) => typeof f !== "string" && f?.absolute_url)?.absolute_url ??
+      p.absolute_url) as string | undefined
+  );
   return list
     .map((f) => (typeof f === "string" ? f : f?.url ?? f?.path))
     .filter(Boolean) as string[];

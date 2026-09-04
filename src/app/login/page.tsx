@@ -69,7 +69,7 @@ export default function LoginPage() {
             {/* eslint-disable-next-line @next/next/no-img-element */}
             <img
               src="/images/branding/logo_white.png"
-              alt="modeFirst"
+              alt="Mod First"
               className="h-8 w-auto"
             />
           </div>

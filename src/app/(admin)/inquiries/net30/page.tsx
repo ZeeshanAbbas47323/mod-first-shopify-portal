@@ -22,6 +22,7 @@ import { DataTable } from "@/components/data-table";
 import { DateRangePicker } from "@/components/date-range-picker";
 import { StatusBadge } from "@/components/status-badge";
 import { apiErrorMessage } from "@/lib/auth-api";
+import { fileUrl } from "@/lib/utils";
 import {
   INQUIRY_STATUSES,
   INQUIRY_STATUS_LABELS,
@@ -350,7 +351,7 @@ function ApplicationDialog({
                       size="sm"
                       render={
                         <a
-                          href={application.resale_certificate_url}
+                          href={fileUrl(application.resale_certificate_url)}
                           target="_blank"
                           rel="noreferrer"
                         />
@@ -366,7 +367,7 @@ function ApplicationDialog({
                       size="sm"
                       render={
                         <a
-                          href={application.business_license_url}
+                          href={fileUrl(application.business_license_url)}
                           target="_blank"
                           rel="noreferrer"
                         />

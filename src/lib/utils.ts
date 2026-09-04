@@ -5,16 +5,67 @@ export function cn(...inputs: ClassValue[]) {
   return twMerge(clsx(inputs))
 }
 
-/** Prepend the API base origin to relative image paths, proxied to avoid CORP blocks. */
-export function imgUrl(src?: string | null): string {
+/** Origin of the API itself, e.g. https://command.modfirst.com */
+export function apiOrigin(): string {
+  return (process.env.NEXT_PUBLIC_API_URL ?? "")
+    .replace(/\/api\/.*$/, "")
+    .replace(/\/$/, "");
+}
+
+/**
+ * Where uploaded files are actually served from. The API stores only the path
+ * (e.g. /products/shirt.png) so the public origin has to come from somewhere:
+ *   1. NEXT_PUBLIC_IMAGE_URL — the CDN the API uploads to
+ *   2. the origin learned from the last upload's `absolute_url`
+ *   3. the API host, as a last resort if neither is known
+ */
+const UPLOAD_BASE_KEY = "modefirst-upload-base";
+let learnedUploadBase: string | null = null;
+
+/** Called after an upload so later page loads can resolve stored paths. */
+export function rememberUploadBase(absoluteUrl?: string | null): void {
+  if (!absoluteUrl) return;
+  try {
+    const origin = new URL(absoluteUrl).origin;
+    if (origin === learnedUploadBase) return;
+    learnedUploadBase = origin;
+    if (typeof window !== "undefined") {
+      localStorage.setItem(UPLOAD_BASE_KEY, origin);
+    }
+  } catch {
+    // not an absolute URL — nothing to learn
+  }
+}
+
+export function uploadBase(): string {
+  const configured = (process.env.NEXT_PUBLIC_IMAGE_URL ?? "").trim().replace(/\/$/, "");
+  if (configured) return configured;
+  if (learnedUploadBase) return learnedUploadBase;
+  if (typeof window !== "undefined") {
+    try {
+      const stored = localStorage.getItem(UPLOAD_BASE_KEY);
+      if (stored) {
+        learnedUploadBase = stored;
+        return stored;
+      }
+    } catch {
+      // private mode — fall through to the API host
+    }
+  }
+  return apiOrigin();
+}
+
+/** Absolute public link for a stored file — images, anchors and downloads. */
+export function fileUrl(src?: string | null): string {
   if (!src) return "";
-  if (src.startsWith("data:") || src.startsWith("blob:")) return src;
-  const base = (process.env.NEXT_PUBLIC_API_URL ?? "").replace(/\/api\/.*$/, "").replace(/\/$/, "");
-  const absolute = src.startsWith("http://") || src.startsWith("https://")
-    ? src
-    : `${base}${src.startsWith("/") ? "" : "/"}${src}`;
-  // Proxy through Next.js to bypass Cross-Origin-Resource-Policy: same-origin
-  return `/api/img?url=${encodeURIComponent(absolute)}`;
+  if (/^(https?:|data:|blob:)/.test(src)) return src;
+  const base = uploadBase();
+  return `${base}${src.startsWith("/") ? "" : "/"}${src}`;
+}
+
+/** Resolve a stored image path to a public CDN URL. */
+export function imgUrl(src?: string | null): string {
+  return fileUrl(src);
 }
 
 /**

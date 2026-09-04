@@ -22,7 +22,7 @@ import { DataTable } from "@/components/data-table";
 import { DateRangePicker } from "@/components/date-range-picker";
 import { StatusBadge, type BadgeTone } from "@/components/status-badge";
 import { apiErrorMessage } from "@/lib/auth-api";
-import { imgUrl } from "@/lib/utils";
+import { fileUrl, imgUrl } from "@/lib/utils";
 import {
   listDesignUploads,
   updateDesignUpload,
@@ -339,7 +339,7 @@ function DesignDialog({
                 variant="outline"
                 size="sm"
                 render={
-                  <a href={design.file_url} target="_blank" rel="noreferrer" download />
+                  <a href={fileUrl(design.file_url)} target="_blank" rel="noreferrer" download />
                 }
               >
                 <Download className="size-3.5" />

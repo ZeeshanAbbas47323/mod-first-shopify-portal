@@ -9,7 +9,7 @@ const inter = Inter({
 });
 
 export const metadata: Metadata = {
-  title: "modeFirst Portal",
+  title: "Mod First Portal",
   description: "Commerce admin portal",
 };
 

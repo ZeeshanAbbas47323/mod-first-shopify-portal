@@ -35,6 +35,7 @@ import { StatusBadge } from "@/components/status-badge";
 import { OrderComments } from "@/components/orders/order-comments";
 import { RefundsSection } from "@/components/orders/refunds-section";
 import { apiErrorMessage } from "@/lib/auth-api";
+import { fileUrl, imgUrl } from "@/lib/utils";
 import {
   openPrintWindow,
   pickFileUrl,
@@ -993,7 +994,7 @@ function ItemDesigns({ designs }: { designs: OrderDesignUpload[] }) {
   return (
     <div className="mt-1.5 flex flex-wrap gap-1.5">
       {designs.map((d, i) => {
-        const url = d.file_url ?? d.edit_url ?? "";
+        const url = fileUrl(d.file_url ?? d.edit_url ?? "");
         const name = d.file_name ?? `Design ${i + 1}`;
         return (
           <DropdownMenu key={String(d.id ?? i)}>
@@ -1020,7 +1021,9 @@ function ItemDesigns({ designs }: { designs: OrderDesignUpload[] }) {
               </DropdownMenuItem>
               {d.edit_url && d.file_url && d.edit_url !== d.file_url && (
                 <DropdownMenuItem
-                  onClick={() => window.open(d.edit_url as string, "_blank", "noopener")}
+                  onClick={() =>
+                    window.open(fileUrl(d.edit_url as string), "_blank", "noopener")
+                  }
                 >
                   <ExternalLink className="size-4" /> Open edited version
                 </DropdownMenuItem>
@@ -1066,7 +1069,7 @@ const isPreviewable = (url: string) =>
 
 /** Thumbnail with the same open/download choice as the inline chips. */
 function DesignCard({ design, index }: { design: OrderDesignUpload; index: number }) {
-  const url = design.file_url ?? design.edit_url ?? "";
+  const url = fileUrl(design.file_url ?? design.edit_url ?? "");
   const name = design.file_name ?? `Design ${index + 1}`;
 
   return (
@@ -1074,7 +1077,7 @@ function DesignCard({ design, index }: { design: OrderDesignUpload; index: numbe
       <div className="flex h-28 items-center justify-center bg-muted/40">
         {isPreviewable(url) ? (
           // eslint-disable-next-line @next/next/no-img-element
-          <img src={url} alt={name} className="size-full object-contain" />
+          <img src={imgUrl(url)} alt={name} className="size-full object-contain" />
         ) : (
           <FileImage className="size-6 text-muted-foreground" />
         )}

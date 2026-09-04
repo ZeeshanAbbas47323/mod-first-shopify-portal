@@ -200,7 +200,7 @@ export function TopBar() {
       <div className="flex flex-1 items-center gap-2">
         <SidebarTrigger className="text-neutral-300 hover:bg-white/10 hover:text-white md:hidden" />
         {/* eslint-disable-next-line @next/next/no-img-element */}
-        <img src="/images/branding/logo_white.png" alt="modeFirst" className="h-7 w-auto" />
+        <img src="/images/branding/logo_white.png" alt="Mod First" className="h-7 w-auto" />
       </div>
 
       {/* Center — search trigger button */}

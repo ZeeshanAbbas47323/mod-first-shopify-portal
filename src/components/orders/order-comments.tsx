@@ -24,7 +24,7 @@ import { ConfirmDeleteDialog } from "@/components/confirm-delete-dialog";
 import { MediaUpload } from "@/components/media-upload";
 import { StatusBadge, type BadgeTone } from "@/components/status-badge";
 import { apiErrorMessage } from "@/lib/auth-api";
-import { cn } from "@/lib/utils";
+import { cn, fileUrl } from "@/lib/utils";
 import {
   ORDER_COMMENT_TYPES,
   ORDER_COMMENT_TYPE_LABELS,
@@ -317,7 +317,7 @@ export function OrderComments({ orderId }: { orderId: number | string }) {
 
                         {c.attachment_url && !editing && (
                           <a
-                            href={c.attachment_url}
+                            href={fileUrl(c.attachment_url)}
                             target="_blank"
                             rel="noreferrer"
                             className="mt-1.5 inline-flex items-center gap-1 text-xs text-[#005bd3] hover:underline"
