@@ -29,7 +29,7 @@ import {
   POPUP_TYPES, type PopupRow,
 } from "@/lib/admin-api";
 
-const PAGE_SIZE = 10;
+const DEFAULT_PAGE_SIZE = 10;
 
 const popupTypeLabel: Record<string, string> = {
   announcement: "Announcement",
@@ -103,6 +103,7 @@ export function PopupsTab() {
   const [rows, setRows] = React.useState<PopupRow[]>([]);
   const [loading, setLoading] = React.useState(true);
   const [page, setPage] = React.useState(0);
+  const [pageSize, setPageSize] = React.useState<number>(DEFAULT_PAGE_SIZE);
   const [pageCount, setPageCount] = React.useState(1);
   const [total, setTotal] = React.useState(0);
   const [search, setSearch] = React.useState("");
@@ -121,7 +122,7 @@ export function PopupsTab() {
   React.useEffect(() => {
     let cancelled = false;
     setLoading(true);
-    listPopups({ page: page + 1, limit: PAGE_SIZE, filters: { title: debounced || undefined } })
+    listPopups({ page: page + 1, limit: pageSize, filters: { title: debounced ? { contains: debounced } : undefined } })
       .then((res) => {
         if (cancelled) return;
         setRows(res.rows); setTotal(res.total); setPageCount(res.totalPages);
@@ -129,7 +130,7 @@ export function PopupsTab() {
       .catch((err) => { if (!cancelled) toast.error(apiErrorMessage(err, "Couldn't load popups.")); })
       .finally(() => !cancelled && setLoading(false));
     return () => { cancelled = true; };
-  }, [page, debounced, refreshKey]);
+  }, [page, pageSize, debounced, refreshKey]);
 
   const handleToggleStatus = async (row: PopupRow, next: boolean) => {
     try {
@@ -164,7 +165,14 @@ export function PopupsTab() {
       <DataTable
         columns={columns} data={rows} loading={loading}
         onRowClick={(row) => { setEditing(row); setDialogOpen(true); }}
-        serverPagination={{ pageIndex: page, pageCount, total, onPageChange: setPage }}
+        serverPagination={{
+          pageIndex: page,
+          pageCount,
+          total,
+          onPageChange: setPage,
+          pageSize,
+          onPageSizeChange: setPageSize,
+        }}
       />
     </div>
   );

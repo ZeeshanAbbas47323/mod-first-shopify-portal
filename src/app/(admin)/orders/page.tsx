@@ -30,7 +30,7 @@ import {
 } from "@/lib/admin-api";
 import type { DateRange } from "react-day-picker";
 
-const PAGE_LIMIT = 20;
+const DEFAULT_PAGE_SIZE = 20;
 
 const fmt$ = (n?: number | null) =>
   n != null ? `$${Number(n).toLocaleString("en-US", { minimumFractionDigits: 2 })}` : "—";
@@ -165,6 +165,7 @@ export default function OrdersPage() {
   const router = useRouter();
   const [tab, setTab] = React.useState("all");
   const [page, setPage] = React.useState(1);
+  const [pageSize, setPageSize] = React.useState<number>(DEFAULT_PAGE_SIZE);
   const [selected, setSelected] = React.useState<OrderRow[]>([]);
   const [clearKey, setClearKey] = React.useState(0);
   const [bulkBusy, setBulkBusy] = React.useState(false);
@@ -190,19 +191,19 @@ export default function OrdersPage() {
     setLoading(true);
     listOrders({
       page,
-      limit: PAGE_LIMIT,
+      limit: pageSize,
       dateRange,
       status: TAB_STATUS[tab],
       payment_status: payStatus === "all" ? undefined : payStatus,
       delivery_type: deliveryType === "all" ? undefined : deliveryType,
-      order_number: search || undefined,
+      search: search || undefined,
     })
       .then(({ rows: r, total: t, totalPages: tp }) => {
         setRows(r); setTotal(t); setTotalPages(tp);
       })
       .catch((e) => toast.error(apiErrorMessage(e, "Couldn't load orders.")))
       .finally(() => setLoading(false));
-  }, [page, tab, dateRange, payStatus, deliveryType, search]);
+  }, [page, pageSize, tab, dateRange, payStatus, deliveryType, search]);
 
   React.useEffect(() => { load(); }, [load]);
 
@@ -368,6 +369,8 @@ export default function OrdersPage() {
           pageCount: totalPages,
           total,
           onPageChange: (idx) => setPage(idx + 1),
+          pageSize,
+          onPageSizeChange: setPageSize,
         }}
       />
     </div>

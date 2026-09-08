@@ -1,12 +1,13 @@
 "use client";
 
 import * as React from "react";
+import Link from "next/link";
 import { useParams, useRouter } from "next/navigation";
 import { format } from "date-fns";
 import {
   ArrowLeft, Loader2, Truck, CreditCard, Package, MapPin,
   Phone, Mail, User, Clock, ChevronDown, FileText, Banknote,
-  Printer, XCircle, Download, ExternalLink, FileImage,
+  Printer, XCircle, Download, ExternalLink, FileImage, Store,
 } from "lucide-react";
 import { toast } from "sonner";
 
@@ -683,7 +684,17 @@ export default function OrderDetailPage() {
               <CardTitle className="text-base">Customer</CardTitle>
             </CardHeader>
             <CardContent className="space-y-2">
-              <p className="text-sm font-medium">{order.full_name ?? "Guest checkout"}</p>
+              {/* Linked through to the customer record, the way Shopify does. */}
+              {order.user?.id ? (
+                <Link
+                  href={`/customers/${order.user.id}`}
+                  className="text-sm font-medium underline-offset-2 hover:underline"
+                >
+                  {order.full_name ?? order.user.full_name ?? "View customer"}
+                </Link>
+              ) : (
+                <p className="text-sm font-medium">{order.full_name ?? "Guest checkout"}</p>
+              )}
               {order.email && (
                 <div className="flex items-center gap-2 text-sm text-muted-foreground">
                   <Mail className="size-3.5" />
@@ -698,6 +709,30 @@ export default function OrderDetailPage() {
               )}
             </CardContent>
           </Card>
+
+          {(order.branch || order.posShift) && (
+            <Card>
+              <CardHeader className="flex-row items-center gap-2 pb-3">
+                <Store className="size-4 text-muted-foreground" />
+                <CardTitle className="text-base">Point of sale</CardTitle>
+              </CardHeader>
+              <CardContent className="space-y-1 text-sm">
+                {order.branch?.name && (
+                  <p>
+                    <span className="text-muted-foreground">Branch: </span>
+                    {order.branch.name}
+                    {order.branch.code ? ` (${order.branch.code})` : ""}
+                  </p>
+                )}
+                {order.posShift?.shift_code && (
+                  <p>
+                    <span className="text-muted-foreground">Shift: </span>
+                    {order.posShift.shift_code}
+                  </p>
+                )}
+              </CardContent>
+            </Card>
+          )}
 
           {/* Shipping address card */}
           {order.shippingAddr && (

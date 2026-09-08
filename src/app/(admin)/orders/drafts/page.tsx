@@ -16,13 +16,14 @@ import {
 import { DataTable } from "@/components/data-table";
 import { StatusBadge, type BadgeTone } from "@/components/status-badge";
 import { apiErrorMessage } from "@/lib/auth-api";
+import { usePermissions } from "@/stores/menu-store";
 import {
   DRAFT_STATUS_LABELS,
   listDraftOrders,
   type DraftOrderRow,
 } from "@/lib/admin-api";
 
-const PAGE_SIZE = 20;
+const DEFAULT_PAGE_SIZE = 20;
 
 export const DRAFT_TONES: Record<string, BadgeTone> = {
   open: "attention",
@@ -49,11 +50,13 @@ const customerName = (row: DraftOrderRow) =>
   row.customer?.full_name ?? row.full_name ?? row.email ?? "No customer";
 
 export default function DraftOrdersPage() {
+  const permissions = usePermissions("/orders/drafts");
   const router = useRouter();
 
   const [rows, setRows] = React.useState<DraftOrderRow[]>([]);
   const [loading, setLoading] = React.useState(true);
   const [page, setPage] = React.useState(0);
+  const [pageSize, setPageSize] = React.useState<number>(DEFAULT_PAGE_SIZE);
   const [pageCount, setPageCount] = React.useState(1);
   const [total, setTotal] = React.useState(0);
 
@@ -76,7 +79,7 @@ export default function DraftOrdersPage() {
     setLoading(true);
     listDraftOrders({
       page: page + 1,
-      limit: PAGE_SIZE,
+      limit: pageSize,
       search: debounced || undefined,
       sortBy: "created_at",
       sortOrder: "desc",
@@ -100,7 +103,7 @@ export default function DraftOrdersPage() {
     return () => {
       cancelled = true;
     };
-  }, [page, debounced, status, channel]);
+  }, [page, pageSize, debounced, status, channel]);
 
   const columns = React.useMemo<ColumnDef<DraftOrderRow>[]>(
     () => [
@@ -194,10 +197,12 @@ export default function DraftOrdersPage() {
             you complete them.
           </p>
         </div>
-        <Button render={<Link href="/orders/drafts/new" />}>
-          <Plus className="size-4" />
-          Create draft order
-        </Button>
+        {permissions.can_create && (
+          <Button render={<Link href="/orders/drafts/new" />}>
+            <Plus className="size-4" />
+            Create draft order
+          </Button>
+        )}
       </div>
 
       <div className="flex flex-wrap items-center gap-2">
@@ -241,7 +246,14 @@ export default function DraftOrdersPage() {
         data={rows}
         loading={loading}
         onRowClick={(row) => router.push(`/orders/drafts/${row.id}`)}
-        serverPagination={{ pageIndex: page, pageCount, total, onPageChange: setPage }}
+        serverPagination={{
+          pageIndex: page,
+          pageCount,
+          total,
+          onPageChange: setPage,
+          pageSize,
+          onPageSizeChange: setPageSize,
+        }}
       />
     </div>
   );

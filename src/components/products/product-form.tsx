@@ -52,6 +52,7 @@ import { uploadImage, deleteFile, imageUrlToPath } from "@/lib/upload-api";
 import {
   createProduct,
   updateProduct,
+  deleteRecord,
   fetchAllProductCategories,
   fetchAllVendors,
   listColors,
@@ -717,6 +718,19 @@ export function ProductForm({ product }: { product?: ProductDetailRow }) {
 
       if (isEdit) {
         const msg = await updateProduct(product.id, body);
+
+        // Variants the user deleted in the form. Nothing removed them
+        // server-side before, so they came straight back on reload.
+        const keptIds = new Set(
+          values.variants.filter((v) => v.id).map((v) => String(v.id))
+        );
+        const removedVariantIds = (product.variants ?? [])
+          .map((v) => v.id)
+          .filter((id) => id != null && !keptIds.has(String(id)));
+
+        for (const id of removedVariantIds) {
+          await deleteRecord("productVariant", id as number | string);
+        }
 
         // Existing variants → PUT each one individually
         const existingVariants = values.variants.filter((v) => v.id);

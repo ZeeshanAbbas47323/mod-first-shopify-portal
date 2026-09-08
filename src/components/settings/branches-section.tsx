@@ -36,7 +36,7 @@ import { StatusToggle } from "@/components/status-badge";
 import { apiErrorMessage } from "@/lib/auth-api";
 import { createBranch, deleteRecord, listBranches, updateBranch, updateRecordStatus, type BranchRow } from "@/lib/admin-api";
 
-const PAGE_SIZE = 10;
+const DEFAULT_PAGE_SIZE = 10;
 
 const STATUS_ITEMS = { all: "All statuses", active: "Active", inactive: "Inactive" };
 
@@ -129,6 +129,7 @@ export function BranchesSection() {
   const [rows, setRows] = React.useState<BranchRow[]>([]);
   const [loading, setLoading] = React.useState(true);
   const [page, setPage] = React.useState(0);
+  const [pageSize, setPageSize] = React.useState<number>(DEFAULT_PAGE_SIZE);
   const [pageCount, setPageCount] = React.useState(1);
   const [total, setTotal] = React.useState(0);
 
@@ -155,11 +156,11 @@ export function BranchesSection() {
     setLoading(true);
     listBranches({
       page: page + 1,
-      limit: PAGE_SIZE,
+      limit: pageSize,
       dateRange,
       filters: {
-        name: debounced.search || undefined,
-        city: debounced.city || undefined,
+        name: debounced.search ? { contains: debounced.search } : undefined,
+        city: debounced.city ? { contains: debounced.city } : undefined,
         is_active: status === "all" ? undefined : status === "active",
       },
     })
@@ -178,7 +179,7 @@ export function BranchesSection() {
     return () => {
       cancelled = true;
     };
-  }, [page, debounced, status, dateRange, refreshKey]);
+  }, [page, pageSize, debounced, status, dateRange, refreshKey]);
 
   const handleToggleStatus = async (row: BranchRow, next: boolean) => {
     try {
@@ -243,6 +244,8 @@ export function BranchesSection() {
           pageCount,
           total,
           onPageChange: setPage,
+          pageSize,
+          onPageSizeChange: setPageSize,
         }}
       />
     </div>

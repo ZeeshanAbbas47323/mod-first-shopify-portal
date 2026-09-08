@@ -30,7 +30,7 @@ import {
   type DiscountTierRow,
 } from "@/lib/admin-api";
 
-const PAGE_SIZE = 20;
+const DEFAULT_PAGE_SIZE = 20;
 
 const TYPE_FILTER_ITEMS: Record<string, string> = {
   all: "All types",
@@ -56,6 +56,7 @@ export default function DiscountTiersPage() {
   const [rows, setRows] = React.useState<DiscountTierRow[]>([]);
   const [loading, setLoading] = React.useState(true);
   const [page, setPage] = React.useState(0);
+  const [pageSize, setPageSize] = React.useState<number>(DEFAULT_PAGE_SIZE);
   const [pageCount, setPageCount] = React.useState(1);
   const [total, setTotal] = React.useState(0);
 
@@ -83,10 +84,10 @@ export default function DiscountTiersPage() {
     setLoading(true);
     listDiscountTiers({
       page: page + 1,
-      limit: PAGE_SIZE,
+      limit: pageSize,
       dateRange,
       filters: {
-        name: debounced || undefined,
+        name: debounced ? { contains: debounced } : undefined,
         discount_type: type === "all" ? undefined : type,
         is_active: status === "all" ? undefined : status === "active",
       },
@@ -106,7 +107,7 @@ export default function DiscountTiersPage() {
     return () => {
       cancelled = true;
     };
-  }, [page, debounced, type, status, dateRange, refreshKey]);
+  }, [page, pageSize, debounced, type, status, dateRange, refreshKey]);
 
   // There is no common/update-status table for tiers, so the toggle updates
   // the record itself.
@@ -247,6 +248,8 @@ export default function DiscountTiersPage() {
           pageCount,
           total,
           onPageChange: setPage,
+          pageSize,
+          onPageSizeChange: setPageSize,
         }}
       />
 

@@ -12,6 +12,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { AuthShell } from "@/components/auth-shell";
+import { OtpInput } from "@/components/otp-input";
 import {
   apiErrorMessage,
   forgotPassword,
@@ -20,10 +21,8 @@ import {
 } from "@/lib/auth-api";
 import {
   forgotPasswordSchema,
-  otpSchema,
   resetPasswordSchema,
   type ForgotPasswordValues,
-  type OtpValues,
   type ResetPasswordValues,
 } from "@/lib/validations";
 
@@ -32,6 +31,10 @@ type Step = "email" | "otp" | "reset";
 export default function ForgotPasswordPage() {
   const router = useRouter();
   const [step, setStep] = React.useState<Step>("email");
+  const [otpCode, setOtpCode] = React.useState("");
+  const [otpError, setOtpError] = React.useState<string | null>(null);
+  const [verifyingOtp, setVerifyingOtp] = React.useState(false);
+  const verifying = React.useRef(false);
   const [email, setEmail] = React.useState("");
   const [resending, setResending] = React.useState(false);
   const [showPassword, setShowPassword] = React.useState(false);
@@ -39,11 +42,6 @@ export default function ForgotPasswordPage() {
   const emailForm = useForm<ForgotPasswordValues>({
     resolver: zodResolver(forgotPasswordSchema),
     defaultValues: { email: "" },
-  });
-
-  const otpForm = useForm<OtpValues>({
-    resolver: zodResolver(otpSchema),
-    defaultValues: { otp: "" },
   });
 
   const resetForm = useForm<ResetPasswordValues>({
@@ -62,15 +60,30 @@ export default function ForgotPasswordPage() {
     }
   };
 
-  const onOtpSubmit = async (values: OtpValues) => {
-    try {
-      const result = await verifyOtp(email, values.otp);
-      toast.success(result.message || "Code verified.");
-      setStep("reset");
-    } catch (error) {
-      toast.error(apiErrorMessage(error, "Invalid or expired code."));
-    }
-  };
+  // Fired by OtpInput the moment the sixth digit lands.
+  const onOtpComplete = React.useCallback(
+    async (code: string) => {
+      if (verifying.current) return;
+      verifying.current = true;
+      setOtpError(null);
+      setVerifyingOtp(true);
+      try {
+        const result = await verifyOtp(email, code);
+        setOtpCode(code);
+        toast.success(result.message || "Code verified.");
+        setStep("reset");
+      } catch (error) {
+        const message = apiErrorMessage(error, "Invalid or expired code.");
+        setOtpError(message);
+        toast.error(message);
+        setOtpCode("");
+      } finally {
+        verifying.current = false;
+        setVerifyingOtp(false);
+      }
+    },
+    [email]
+  );
 
   const onResetSubmit = async (values: ResetPasswordValues) => {
     try {
@@ -144,40 +157,26 @@ export default function ForgotPasswordPage() {
           <p className="mt-1 mb-6 text-sm text-muted-foreground">
             We sent a 6-digit code to <span className="font-medium">{email}</span>
           </p>
-          <form
-            onSubmit={otpForm.handleSubmit(onOtpSubmit)}
-            className="space-y-4"
-            noValidate
-          >
-            <div className="space-y-1.5">
-              <Label htmlFor="otp">Verification code</Label>
-              <Input
-                id="otp"
-                inputMode="numeric"
-                autoComplete="one-time-code"
-                maxLength={6}
-                placeholder="123456"
-                className="text-center text-lg tracking-[0.5em]"
-                aria-invalid={!!otpForm.formState.errors.otp}
-                {...otpForm.register("otp")}
-              />
-              {otpForm.formState.errors.otp && (
-                <p className="text-sm text-destructive">
-                  {otpForm.formState.errors.otp.message}
-                </p>
-              )}
-            </div>
-            <Button
-              type="submit"
-              className="w-full"
-              disabled={otpForm.formState.isSubmitting}
-            >
-              {otpForm.formState.isSubmitting && (
+          <OtpInput
+            value={otpCode}
+            onChange={setOtpCode}
+            onComplete={onOtpComplete}
+            disabled={verifyingOtp}
+            invalid={!!otpError}
+          />
+
+          <div className="mt-4 min-h-5 text-center text-sm" aria-live="polite">
+            {verifyingOtp && (
+              <span className="inline-flex items-center gap-2 text-muted-foreground">
                 <Loader2 className="size-4 animate-spin" />
-              )}
-              {otpForm.formState.isSubmitting ? "Verifying…" : "Verify code"}
-            </Button>
-          </form>
+                Verifying…
+              </span>
+            )}
+            {!verifyingOtp && otpError && (
+              <span className="text-destructive">{otpError}</span>
+            )}
+          </div>
+
           <div className="mt-4 text-right text-sm">
             <button
               type="button"

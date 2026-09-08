@@ -32,7 +32,7 @@ import {
   type PosDeviceRow,
 } from "@/lib/pos-api";
 
-const PAGE_SIZE = 15;
+const DEFAULT_PAGE_SIZE = 15;
 
 const humanize = (v?: string) =>
   v ? v.replace(/_/g, " ").replace(/\b\w/g, (c) => c.toUpperCase()) : "—";
@@ -57,6 +57,7 @@ export default function PosDevicesPage() {
   const [rows, setRows] = React.useState<PosDeviceRow[]>([]);
   const [loading, setLoading] = React.useState(true);
   const [page, setPage] = React.useState(0);
+  const [pageSize, setPageSize] = React.useState<number>(DEFAULT_PAGE_SIZE);
   const [pageCount, setPageCount] = React.useState(1);
   const [total, setTotal] = React.useState(0);
 
@@ -90,9 +91,9 @@ export default function PosDevicesPage() {
     setLoading(true);
     listPosDevices({
       page: page + 1,
-      limit: PAGE_SIZE,
+      limit: pageSize,
       filters: {
-        name: debounced || undefined,
+        name: debounced ? { contains: debounced } : undefined,
         branch_id: branchId === "all" ? undefined : Number(branchId),
         is_active: status === "all" ? undefined : status === "active",
       },
@@ -112,7 +113,7 @@ export default function PosDevicesPage() {
     return () => {
       cancelled = true;
     };
-  }, [page, debounced, status, branchId, refreshKey]);
+  }, [page, pageSize, debounced, status, branchId, refreshKey]);
 
   const branchName = React.useCallback(
     (id?: number | null) =>
@@ -259,7 +260,14 @@ export default function PosDevicesPage() {
           setEditing(row);
           setDialogOpen(true);
         }}
-        serverPagination={{ pageIndex: page, pageCount, total, onPageChange: setPage }}
+        serverPagination={{
+          pageIndex: page,
+          pageCount,
+          total,
+          onPageChange: setPage,
+          pageSize,
+          onPageSizeChange: setPageSize,
+        }}
       />
 
       <DeviceDialog

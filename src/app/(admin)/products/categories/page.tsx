@@ -12,10 +12,11 @@ import { Input } from "@/components/ui/input";
 import { DataTable } from "@/components/data-table";
 import { StatusToggle } from "@/components/status-badge";
 import { apiErrorMessage } from "@/lib/auth-api";
+import { usePermissions } from "@/stores/menu-store";
 import { listProductCategories, updateRecordStatus, type ProductCategoryRow } from "@/lib/admin-api";
 import { imgUrl } from "@/lib/utils";
 
-const PAGE_SIZE = 20;
+const DEFAULT_PAGE_SIZE = 20;
 
 const imgSrc = (row: ProductCategoryRow) =>
   imgUrl(row.image_url ?? row.image ?? row.banner ?? row.icon ?? null) || null;
@@ -98,10 +99,12 @@ function getColumns(
 }
 
 export default function ProductCategoriesPage() {
+  const permissions = usePermissions("/products/categories");
   const router = useRouter();
   const [rows, setRows] = React.useState<ProductCategoryRow[]>([]);
   const [loading, setLoading] = React.useState(true);
   const [page, setPage] = React.useState(0);
+  const [pageSize, setPageSize] = React.useState<number>(DEFAULT_PAGE_SIZE);
   const [pageCount, setPageCount] = React.useState(1);
   const [total, setTotal] = React.useState(0);
   const [search, setSearch] = React.useState("");
@@ -120,8 +123,8 @@ export default function ProductCategoriesPage() {
     setLoading(true);
     listProductCategories({
       page: page + 1,
-      limit: PAGE_SIZE,
-      filters: { name: debounced || undefined },
+      limit: pageSize,
+      filters: { name: debounced ? { contains: debounced } : undefined },
     })
       .then((res) => {
         if (cancelled) return;
@@ -136,7 +139,7 @@ export default function ProductCategoriesPage() {
       })
       .finally(() => { if (!cancelled) setLoading(false); });
     return () => { cancelled = true; };
-  }, [page, debounced, refreshKey]);
+  }, [page, pageSize, debounced, refreshKey]);
 
   const handleToggleStatus = async (row: ProductCategoryRow, next: boolean) => {
     try {
@@ -154,10 +157,12 @@ export default function ProductCategoriesPage() {
     <div className="flex flex-col gap-4">
       <div className="flex flex-wrap items-center justify-between gap-3">
         <h1 className="text-xl font-bold">Product Categories</h1>
-        <Button onClick={() => router.push("/products/categories/new")}>
-          <Plus className="size-4" />
-          Add category
-        </Button>
+        {permissions.can_create && (
+          <Button onClick={() => router.push("/products/categories/new")}>
+            <Plus className="size-4" />
+            Add category
+          </Button>
+        )}
       </div>
 
       <div className="flex items-center gap-2">
@@ -177,7 +182,14 @@ export default function ProductCategoriesPage() {
         data={rows}
         loading={loading}
         onRowClick={(row) => router.push(`/products/categories/${row.id}`)}
-        serverPagination={{ pageIndex: page, pageCount, total, onPageChange: setPage }}
+        serverPagination={{
+          pageIndex: page,
+          pageCount,
+          total,
+          onPageChange: setPage,
+          pageSize,
+          onPageSizeChange: setPageSize,
+        }}
       />
     </div>
   );

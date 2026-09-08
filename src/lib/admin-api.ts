@@ -67,12 +67,37 @@ interface ListParams {
   limit: number;
   dateRange?: DateRange;
   filters?: Json;
+  /**
+   * Free-text search. This is a top-level field on every list endpoint, not a
+   * filter — the backend `filters` schemas are strict and reject unknown keys,
+   * so putting it in `filters` fails validation and breaks the whole list.
+   */
+  search?: string;
+  /** Backend sort key. Meaning is per-module; the caller supplies the mapping. */
+  sortBy?: string;
+  order?: "asc" | "desc";
 }
 
-function buildBody({ page, limit, dateRange, filters }: ListParams): Json {
+function buildBody({
+  page,
+  limit,
+  dateRange,
+  filters,
+  search,
+  sortBy,
+  order,
+}: ListParams): Json {
   const body: Json = { page, limit };
   if (dateRange?.from) body.startDate = format(dateRange.from, "yyyy-MM-dd");
   if (dateRange?.to) body.endDate = format(dateRange.to, "yyyy-MM-dd");
+  if (search) body.search = search;
+  if (sortBy) {
+    body.sortBy = sortBy;
+    // Modules disagree on the name of the direction field, so send both. Zod
+    // strips whichever one the endpoint does not declare.
+    body.order = order ?? "asc";
+    body.sortOrder = order ?? "asc";
+  }
   const clean = Object.fromEntries(
     Object.entries(filters ?? {}).filter(
       ([, v]) => v !== undefined && v !== null && v !== ""
@@ -145,6 +170,8 @@ export interface ListOrdersParams {
   delivery_type?: string;
   order_number?: string;
   email?: string;
+  /** Free-text search across order number, customer name, email and phone. */
+  search?: string;
   /** Anything else the list endpoint accepts, e.g. user_id. */
   filters?: Json;
 }
@@ -157,6 +184,9 @@ export async function listOrders(params: ListOrdersParams): Promise<ListResult<O
   if (params.status) filters.status = params.status;
   if (params.payment_status) filters.payment_status = params.payment_status;
   if (params.delivery_type) filters.delivery_type = params.delivery_type;
+  // A free-text box has to cover order number, name, email and phone, so it
+  // goes to the endpoint's `search` rather than an exact-match column filter.
+  if (params.search) body.search = params.search;
   if (params.order_number) filters.order_number = params.order_number;
   if (params.email) filters.email = params.email;
   Object.assign(filters, params.filters ?? {});
@@ -356,6 +386,14 @@ export interface OrderDetail extends OrderRow {
   comments?: unknown[];
   coupon?: unknown;
   coupon_id?: number | null;
+  user?: {
+    id: number | string;
+    full_name?: string | null;
+    email?: string | null;
+    phone?: string | null;
+  } | null;
+  branch?: { id: number | string; name?: string; code?: string } | null;
+  posShift?: { id: number | string; shift_code?: string; status?: string } | null;
   estimated_delivery_date?: string | null;
   order_date?: string;
   [k: string]: unknown;
@@ -495,6 +533,28 @@ export interface MenuTreeNode extends MenuRow {
   depth: number;
 }
 
+export interface MenuPermissions {
+  can_view: boolean;
+  can_create: boolean;
+  can_edit: boolean;
+  can_delete: boolean;
+}
+
+export interface NavMenuNode extends MenuRow {
+  permissions: MenuPermissions;
+  children: NavMenuNode[];
+}
+
+/**
+ * The signed-in user's dashboard navigation, already filtered to what their
+ * role may view, with each node's permissions attached.
+ */
+export async function fetchMyMenus(): Promise<NavMenuNode[]> {
+  const { data } = await api.get("menus/my");
+  const payload = data?.payload ?? data?.data ?? data ?? [];
+  return (Array.isArray(payload) ? payload : []) as NavMenuNode[];
+}
+
 export interface MenuRightRow {
   id: number | string;
   menu_id: number;
@@ -603,7 +663,8 @@ export const DELETE_TABLES = [
 export type DeleteTable = (typeof DELETE_TABLES)[number];
 
 export async function deleteRecord(table: DeleteTable, id: number | string): Promise<string> {
-  const { data } = await api.post("common/delete", { id, table });
+  // The endpoint is DELETE, so the payload has to travel in axios' `data`.
+  const { data } = await api.delete("common/delete", { data: { id, table } });
   return (data?.message as string) ?? "Deleted.";
 }
 
@@ -1770,9 +1831,10 @@ export async function updateCourier(id: number | string, body: Partial<CourierRo
   return (data?.message as string) ?? "Courier updated.";
 }
 
+// There is no DELETE /couriers/:id upstream — every soft delete goes through
+// the shared common/delete endpoint.
 export async function deleteCourier(id: number | string): Promise<string> {
-  const { data } = await api.delete(`couriers/${id}`);
-  return (data?.message as string) ?? "Courier deleted.";
+  return deleteRecord("courier", id);
 }
 
 // ─── Popups ───────────────────────────────────────────────────────────────────
@@ -1817,8 +1879,7 @@ export async function updatePopup(id: number | string, body: Partial<PopupRow>):
 }
 
 export async function deletePopup(id: number | string): Promise<string> {
-  const { data } = await api.delete(`popups/${id}`);
-  return (data?.message as string) ?? "Popup deleted.";
+  return deleteRecord("popup", id);
 }
 
 // ─── Coupons ─────────────────────────────────────────────────────────────────
@@ -1986,8 +2047,7 @@ export async function updatePickupLocation(id: number | string, body: Partial<Pi
 }
 
 export async function deletePickupLocation(id: number | string): Promise<string> {
-  const { data } = await api.delete(`pickup-locations/${id}`);
-  return (data?.message as string) ?? "Pickup location deleted.";
+  return deleteRecord("pickupLocation", id);
 }
 
 // ─── Footer Sections ──────────────────────────────────────────────────────────
@@ -3143,9 +3203,12 @@ export interface DesignUploadRow {
 }
 
 export async function listDesignUploads(
-  params: ListParams
+  params: ListParams & { order_id?: number }
 ): Promise<ListResult<DesignUploadRow>> {
-  const { data } = await api.post("design-uploads/list", buildBody(params));
+  const body = buildBody(params);
+  // Resolved through the OrderItemDesign join, so it rides at the top level.
+  if (params.order_id) body.order_id = params.order_id;
+  const { data } = await api.post("design-uploads/list", body);
   return parseList<DesignUploadRow>(data, params.limit);
 }
 
@@ -3530,4 +3593,63 @@ export async function listCustomerAddresses(customer: {
     (a) => a.user_id == null || String(a.user_id) === String(customer.id)
   );
   return owned.length ? owned : rows;
+}
+
+// ─── Notifications ────────────────────────────────────────────────────────────
+
+export interface NotificationRow {
+  id: number;
+  is_read: boolean;
+  read_at?: string | null;
+  created_at: string;
+  event: string;
+  title: string;
+  body: string;
+  data?: Json | null;
+}
+
+export interface NotificationListResult {
+  rows: NotificationRow[];
+  total: number;
+  totalPages: number;
+  unreadCount: number;
+}
+
+/** The signed-in user's own notifications. */
+export async function listMyNotifications(params: {
+  page: number;
+  limit: number;
+  unreadOnly?: boolean;
+}): Promise<NotificationListResult> {
+  const body: Json = { page: params.page, limit: params.limit };
+  if (params.unreadOnly) body.filters = { is_read: false };
+  const { data } = await api.post("notifications/my", body);
+  const rows = (data?.payload ?? data?.data ?? []) as NotificationRow[];
+  const pagination = data?.pagination ?? {};
+  const summary = data?.summary ?? {};
+  return {
+    rows: Array.isArray(rows) ? rows : [],
+    total: pagination.total ?? summary.total ?? rows.length,
+    totalPages:
+      pagination.totalPages ?? Math.max(1, Math.ceil((pagination.total ?? 0) / params.limit)),
+    unreadCount: summary.unread_count ?? 0,
+  };
+}
+
+export async function getUnreadNotificationCount(): Promise<number> {
+  const { data } = await api.get("notifications/unread-count");
+  const payload = data?.payload ?? data?.data ?? {};
+  return (payload.unread_count as number) ?? 0;
+}
+
+export async function markNotificationRead(id: number | string): Promise<void> {
+  await api.patch(`notifications/${id}/read`);
+}
+
+export async function markAllNotificationsRead(): Promise<void> {
+  await api.patch("notifications/read-all");
+}
+
+export async function deleteNotification(id: number | string): Promise<void> {
+  await api.delete(`notifications/${id}`);
 }

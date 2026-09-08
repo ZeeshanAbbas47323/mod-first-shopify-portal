@@ -34,7 +34,7 @@ import { StatusToggle } from "@/components/status-badge";
 import { apiErrorMessage } from "@/lib/auth-api";
 import { createColor, deleteRecord, listColors, updateColor, updateRecordStatus, type ColorRow } from "@/lib/admin-api";
 
-const PAGE_SIZE = 10;
+const DEFAULT_PAGE_SIZE = 10;
 
 const STATUS_ITEMS = { all: "All statuses", active: "Active", inactive: "Inactive" };
 
@@ -92,6 +92,7 @@ export function ColorsSection() {
   const [rows, setRows] = React.useState<ColorRow[]>([]);
   const [loading, setLoading] = React.useState(true);
   const [page, setPage] = React.useState(0);
+  const [pageSize, setPageSize] = React.useState<number>(DEFAULT_PAGE_SIZE);
   const [pageCount, setPageCount] = React.useState(1);
   const [total, setTotal] = React.useState(0);
 
@@ -116,9 +117,9 @@ export function ColorsSection() {
     setLoading(true);
     listColors({
       page: page + 1,
-      limit: PAGE_SIZE,
+      limit: pageSize,
       filters: {
-        name: debouncedSearch || undefined,
+        name: debouncedSearch ? { contains: debouncedSearch } : undefined,
         is_active: status === "all" ? undefined : status === "active",
       },
     })
@@ -137,7 +138,7 @@ export function ColorsSection() {
     return () => {
       cancelled = true;
     };
-  }, [page, debouncedSearch, status, refreshKey]);
+  }, [page, pageSize, debouncedSearch, status, refreshKey]);
 
   const handleToggleStatus = async (row: ColorRow, next: boolean) => {
     try {
@@ -195,6 +196,8 @@ export function ColorsSection() {
           pageCount,
           total,
           onPageChange: setPage,
+          pageSize,
+          onPageSizeChange: setPageSize,
         }}
       />
     </div>

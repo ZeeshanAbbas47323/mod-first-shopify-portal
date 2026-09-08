@@ -20,7 +20,7 @@ import { apiErrorMessage } from "@/lib/auth-api";
 import { imgUrl } from "@/lib/utils";
 import { listWishlists, type WishlistRow } from "@/lib/admin-api";
 
-const PAGE_SIZE = 20;
+const DEFAULT_PAGE_SIZE = 20;
 
 const STATUS_ITEMS: Record<string, string> = {
   all: "All saves",
@@ -64,6 +64,7 @@ export default function WishlistsPage() {
   const [rows, setRows] = React.useState<WishlistRow[]>([]);
   const [loading, setLoading] = React.useState(true);
   const [page, setPage] = React.useState(0);
+  const [pageSize, setPageSize] = React.useState<number>(DEFAULT_PAGE_SIZE);
   const [pageCount, setPageCount] = React.useState(1);
   const [total, setTotal] = React.useState(0);
 
@@ -86,7 +87,7 @@ export default function WishlistsPage() {
     setLoading(true);
     listWishlists({
       page: page + 1,
-      limit: PAGE_SIZE,
+      limit: pageSize,
       dateRange,
       filters: {
         product_id: debouncedProduct ? Number(debouncedProduct) : undefined,
@@ -108,7 +109,7 @@ export default function WishlistsPage() {
     return () => {
       cancelled = true;
     };
-  }, [page, debouncedProduct, status, dateRange]);
+  }, [page, pageSize, debouncedProduct, status, dateRange]);
 
   // Most-saved products on the current page — a quick demand signal.
   const topProducts = React.useMemo(() => {
@@ -264,6 +265,8 @@ export default function WishlistsPage() {
           pageCount,
           total,
           onPageChange: setPage,
+          pageSize,
+          onPageSizeChange: setPageSize,
         }}
       />
     </div>

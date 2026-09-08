@@ -31,7 +31,7 @@ import {
   type ShiftRow,
 } from "@/lib/pos-api";
 
-const PAGE_SIZE = 15;
+const DEFAULT_PAGE_SIZE = 15;
 
 const STATUS_ITEMS: Record<string, string> = {
   all: "All statuses",
@@ -72,6 +72,7 @@ export default function PosShiftsPage() {
   const [rows, setRows] = React.useState<ShiftRow[]>([]);
   const [loading, setLoading] = React.useState(true);
   const [page, setPage] = React.useState(0);
+  const [pageSize, setPageSize] = React.useState<number>(DEFAULT_PAGE_SIZE);
   const [pageCount, setPageCount] = React.useState(1);
   const [total, setTotal] = React.useState(0);
 
@@ -105,10 +106,10 @@ export default function PosShiftsPage() {
     setLoading(true);
     listShifts({
       page: page + 1,
-      limit: PAGE_SIZE,
+      limit: pageSize,
       dateRange,
       filters: {
-        shift_code: debounced || undefined,
+        shift_code: debounced ? { contains: debounced } : undefined,
         status: status === "all" ? undefined : status,
       },
     })
@@ -127,7 +128,7 @@ export default function PosShiftsPage() {
     return () => {
       cancelled = true;
     };
-  }, [page, debounced, status, dateRange, refreshKey]);
+  }, [page, pageSize, debounced, status, dateRange, refreshKey]);
 
   const print = async (shift: ShiftRow) => {
     const target = openPrintWindow();
@@ -296,6 +297,8 @@ export default function PosShiftsPage() {
           pageCount,
           total,
           onPageChange: setPage,
+          pageSize,
+          onPageSizeChange: setPageSize,
         }}
       />
 

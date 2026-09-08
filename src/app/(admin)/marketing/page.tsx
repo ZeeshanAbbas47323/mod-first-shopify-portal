@@ -51,7 +51,7 @@ import {
   type SubscriberRow,
 } from "@/lib/admin-api";
 
-const PAGE_SIZE = 10;
+const DEFAULT_PAGE_SIZE = 10;
 const cap = (s?: string | null) =>
   s ? s.charAt(0).toUpperCase() + s.slice(1) : "—";
 
@@ -149,6 +149,7 @@ function CampaignsTab() {
   const [rows, setRows] = React.useState<CampaignRow[]>([]);
   const [loading, setLoading] = React.useState(true);
   const [page, setPage] = React.useState(0);
+  const [pageSize, setPageSize] = React.useState<number>(DEFAULT_PAGE_SIZE);
   const [pageCount, setPageCount] = React.useState(1);
   const [total, setTotal] = React.useState(0);
 
@@ -173,9 +174,9 @@ function CampaignsTab() {
     setLoading(true);
     listCampaigns({
       page: page + 1,
-      limit: PAGE_SIZE,
+      limit: pageSize,
       filters: {
-        subject: debouncedSearch || undefined,
+        subject: debouncedSearch ? { contains: debouncedSearch } : undefined,
         status: status === "all" ? undefined : status,
       },
     })
@@ -194,7 +195,7 @@ function CampaignsTab() {
     return () => {
       cancelled = true;
     };
-  }, [page, debouncedSearch, status, refreshKey]);
+  }, [page, pageSize, debouncedSearch, status, refreshKey]);
 
   return (
     <div className="flex flex-col gap-3">
@@ -251,7 +252,14 @@ function CampaignsTab() {
           setEditing(row);
           setDialogOpen(true);
         }}
-        serverPagination={{ pageIndex: page, pageCount, total, onPageChange: setPage }}
+        serverPagination={{
+          pageIndex: page,
+          pageCount,
+          total,
+          onPageChange: setPage,
+          pageSize,
+          onPageSizeChange: setPageSize,
+        }}
       />
     </div>
   );
@@ -542,6 +550,7 @@ function SubscribersTab() {
   const [rows, setRows] = React.useState<SubscriberRow[]>([]);
   const [loading, setLoading] = React.useState(true);
   const [page, setPage] = React.useState(0);
+  const [pageSize, setPageSize] = React.useState<number>(DEFAULT_PAGE_SIZE);
   const [pageCount, setPageCount] = React.useState(1);
   const [total, setTotal] = React.useState(0);
 
@@ -568,10 +577,10 @@ function SubscribersTab() {
     setLoading(true);
     listSubscribers({
       page: page + 1,
-      limit: PAGE_SIZE,
+      limit: pageSize,
       dateRange,
       filters: {
-        email: debouncedSearch || undefined,
+        email: debouncedSearch ? { contains: debouncedSearch } : undefined,
         status: status === "all" ? undefined : status,
         source: source === "all" ? undefined : source,
       },
@@ -591,7 +600,7 @@ function SubscribersTab() {
     return () => {
       cancelled = true;
     };
-  }, [page, debouncedSearch, status, source, dateRange, refreshKey]);
+  }, [page, pageSize, debouncedSearch, status, source, dateRange, refreshKey]);
 
   return (
     <div className="flex flex-col gap-3">
@@ -665,7 +674,14 @@ function SubscribersTab() {
           setEditing(row);
           setDialogOpen(true);
         }}
-        serverPagination={{ pageIndex: page, pageCount, total, onPageChange: setPage }}
+        serverPagination={{
+          pageIndex: page,
+          pageCount,
+          total,
+          onPageChange: setPage,
+          pageSize,
+          onPageSizeChange: setPageSize,
+        }}
       />
     </div>
   );

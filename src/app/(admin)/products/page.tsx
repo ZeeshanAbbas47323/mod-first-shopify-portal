@@ -21,11 +21,22 @@ import { DataTable } from "@/components/data-table";
 import { DateRangePicker } from "@/components/date-range-picker";
 import { StatusBadge } from "@/components/status-badge";
 import { apiErrorMessage } from "@/lib/auth-api";
+import { usePermissions } from "@/stores/menu-store";
 import { StockDialog } from "@/components/products/stock-dialog";
 import { listProducts, type ProductRow } from "@/lib/admin-api";
 import { cn, imgUrl } from "@/lib/utils";
 
-const PAGE_SIZE = 20;
+const DEFAULT_PAGE_SIZE = 20;
+
+/**
+ * Column id → the sort key `products/list` understands. The endpoint takes an
+ * enum that already encodes direction, so each column maps to a pair.
+ */
+const PRODUCT_SORT_MAP = {
+  title: { asc: "a_z", desc: "z_a" },
+  price: { asc: "price_low_high", desc: "price_high_low" },
+  created_at: { asc: "oldest", desc: "newest" },
+} as const;
 
 /** Quantity at or below this is flagged amber in the inventory column. */
 const LOW_STOCK = 5;
@@ -156,6 +167,7 @@ const columns: ColumnDef<ProductRow>[] = [
 ];
 
 export default function ProductsPage() {
+  const permissions = usePermissions("/products");
   const [stockTarget, setStockTarget] = React.useState<ProductRow | null>(null);
   const columnsWithStock = React.useMemo<ColumnDef<ProductRow>[]>(() => [
     ...columns,
@@ -189,6 +201,10 @@ export default function ProductsPage() {
   const [pageCount, setPageCount] = React.useState(1);
   const [total, setTotal] = React.useState(0);
 
+  const [pageSize, setPageSize] = React.useState<number>(DEFAULT_PAGE_SIZE);
+  const [sortBy, setSortBy] = React.useState<string | undefined>();
+  const [order, setOrder] = React.useState<"asc" | "desc">("desc");
+
   const [search, setSearch] = React.useState("");
   const [status, setStatus] = React.useState("all");
   const [dateRange, setDateRange] = React.useState<DateRange | undefined>();
@@ -202,17 +218,19 @@ export default function ProductsPage() {
 
   React.useEffect(() => {
     setPage(0);
-  }, [debounced, status, dateRange]);
+  }, [debounced, status, dateRange, pageSize, sortBy, order]);
 
   React.useEffect(() => {
     let cancelled = false;
     setLoading(true);
     listProducts({
       page: page + 1,
-      limit: PAGE_SIZE,
+      limit: pageSize,
       dateRange,
+      search: debounced || undefined,
+      sortBy,
+      order,
       filters: {
-        search: debounced || undefined,
         status: status === "all" ? undefined : status,
       },
     })
@@ -231,16 +249,18 @@ export default function ProductsPage() {
     return () => {
       cancelled = true;
     };
-  }, [page, debounced, status, dateRange, refreshKey]);
+  }, [page, pageSize, sortBy, order, debounced, status, dateRange, refreshKey]);
 
   return (
     <div className="flex flex-col gap-4">
       <div className="flex flex-wrap items-center justify-between gap-3">
         <h1 className="text-xl font-bold">Products</h1>
-        <Button onClick={() => router.push("/products/new")}>
-          <Plus className="size-4" />
-          Add product
-        </Button>
+        {permissions.can_create && (
+          <Button onClick={() => router.push("/products/new")}>
+            <Plus className="size-4" />
+            Add product
+          </Button>
+        )}
       </div>
 
       <div className="flex flex-wrap items-center gap-2">
@@ -277,7 +297,23 @@ export default function ProductsPage() {
         data={rows}
         loading={loading}
         onRowClick={(row) => router.push(`/products/${row.id}`)}
-        serverPagination={{ pageIndex: page, pageCount, total, onPageChange: setPage }}
+        serverPagination={{
+          pageIndex: page,
+          pageCount,
+          total,
+          onPageChange: setPage,
+          pageSize,
+          onPageSizeChange: setPageSize,
+        }}
+        serverSort={{
+          sortBy,
+          order,
+          columnMap: PRODUCT_SORT_MAP,
+          onSortChange: (by, dir) => {
+            setSortBy(by);
+            setOrder(dir);
+          },
+        }}
       />
 
       {stockTarget && (

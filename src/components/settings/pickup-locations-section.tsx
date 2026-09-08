@@ -28,7 +28,7 @@ import {
   type PickupLocationRow,
 } from "@/lib/admin-api";
 
-const PAGE_SIZE = 10;
+const DEFAULT_PAGE_SIZE = 10;
 
 function getColumns(
   onToggleStatus: (row: PickupLocationRow, next: boolean) => Promise<void>
@@ -85,6 +85,7 @@ export function PickupLocationsSection() {
   const [rows, setRows] = React.useState<PickupLocationRow[]>([]);
   const [loading, setLoading] = React.useState(true);
   const [page, setPage] = React.useState(0);
+  const [pageSize, setPageSize] = React.useState<number>(DEFAULT_PAGE_SIZE);
   const [pageCount, setPageCount] = React.useState(1);
   const [total, setTotal] = React.useState(0);
   const [search, setSearch] = React.useState("");
@@ -103,7 +104,7 @@ export function PickupLocationsSection() {
   React.useEffect(() => {
     let cancelled = false;
     setLoading(true);
-    listPickupLocations({ page: page + 1, limit: PAGE_SIZE, filters: { name: debounced || undefined } })
+    listPickupLocations({ page: page + 1, limit: pageSize, filters: { name: debounced ? { contains: debounced } : undefined } })
       .then((res) => {
         if (cancelled) return;
         setRows(res.rows); setTotal(res.total); setPageCount(res.totalPages);
@@ -111,7 +112,7 @@ export function PickupLocationsSection() {
       .catch((err) => { if (!cancelled) toast.error(apiErrorMessage(err, "Couldn't load pickup locations.")); })
       .finally(() => !cancelled && setLoading(false));
     return () => { cancelled = true; };
-  }, [page, debounced, refreshKey]);
+  }, [page, pageSize, debounced, refreshKey]);
 
   const handleToggleStatus = async (row: PickupLocationRow, next: boolean) => {
     try {
@@ -146,7 +147,14 @@ export function PickupLocationsSection() {
       <DataTable
         columns={columns} data={rows} loading={loading}
         onRowClick={(row) => { setEditing(row); setDialogOpen(true); }}
-        serverPagination={{ pageIndex: page, pageCount, total, onPageChange: setPage }}
+        serverPagination={{
+          pageIndex: page,
+          pageCount,
+          total,
+          onPageChange: setPage,
+          pageSize,
+          onPageSizeChange: setPageSize,
+        }}
       />
     </div>
   );

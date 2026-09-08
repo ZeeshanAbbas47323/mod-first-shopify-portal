@@ -3,66 +3,86 @@
 import * as React from "react";
 import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
-import { useForm } from "react-hook-form";
-import { zodResolver } from "@hookform/resolvers/zod";
 import { ArrowLeft, Loader2 } from "lucide-react";
 import { toast } from "sonner";
 
-import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
 import { AuthShell } from "@/components/auth-shell";
+import { OtpInput } from "@/components/otp-input";
 import { apiErrorMessage, sendOtp, verifyOtp } from "@/lib/auth-api";
-import { otpSchema, type OtpValues } from "@/lib/validations";
 import { useAuthStore } from "@/stores/auth-store";
+
+/** Seconds before "Resend code" becomes available again. */
+const RESEND_COOLDOWN = 30;
 
 function VerifyOtpForm() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const email = searchParams.get("email") ?? "";
   const login = useAuthStore((s) => s.login);
-  const [resending, setResending] = React.useState(false);
 
-  const {
-    register,
-    handleSubmit,
-    formState: { errors, isSubmitting },
-  } = useForm<OtpValues>({
-    resolver: zodResolver(otpSchema),
-    defaultValues: { otp: "" },
-  });
+  const [otp, setOtp] = React.useState("");
+  const [error, setError] = React.useState<string | null>(null);
+  const [busy, setBusy] = React.useState(false);
+  const [resending, setResending] = React.useState(false);
+  const [cooldown, setCooldown] = React.useState(RESEND_COOLDOWN);
+
+  // Verification fires from the input's completion callback, so guard against
+  // a second run while the first request is still in flight.
+  const verifying = React.useRef(false);
 
   React.useEffect(() => {
     if (!email) router.replace("/login");
   }, [email, router]);
 
-  const onSubmit = async (values: OtpValues) => {
-    try {
-      const result = await verifyOtp(email, values.otp);
-      if (result.token) {
-        login(
-          result.user ?? { name: email.split("@")[0], email },
-          result.token,
-          result.refreshToken
-        );
-        toast.success(result.message || "Welcome back!");
-        router.replace("/");
-      } else {
-        toast.success(result.message || "Code verified.");
-        router.replace("/login");
+  React.useEffect(() => {
+    if (cooldown <= 0) return;
+    const t = setTimeout(() => setCooldown((c) => c - 1), 1000);
+    return () => clearTimeout(t);
+  }, [cooldown]);
+
+  const submit = React.useCallback(
+    async (code: string) => {
+      if (verifying.current) return;
+      verifying.current = true;
+      setError(null);
+      setBusy(true);
+      try {
+        const result = await verifyOtp(email, code);
+        if (result.token) {
+          login(
+            result.user ?? { name: email.split("@")[0], email },
+            result.token,
+            result.refreshToken
+          );
+          toast.success(result.message || "Welcome back!");
+          router.replace("/");
+        } else {
+          toast.success(result.message || "Code verified.");
+          router.replace("/login");
+        }
+      } catch (err) {
+        const message = apiErrorMessage(err, "Invalid or expired code.");
+        setError(message);
+        toast.error(message);
+        // Clear the boxes so the next attempt starts from an empty field.
+        setOtp("");
+      } finally {
+        verifying.current = false;
+        setBusy(false);
       }
-    } catch (error) {
-      toast.error(apiErrorMessage(error, "Invalid or expired code."));
-    }
-  };
+    },
+    [email, login, router]
+  );
 
   const resend = async () => {
     setResending(true);
+    setError(null);
     try {
-      const message = await sendOtp(email);
-      toast.success(message);
-    } catch (error) {
-      toast.error(apiErrorMessage(error, "Couldn't resend the code."));
+      toast.success(await sendOtp(email));
+      setOtp("");
+      setCooldown(RESEND_COOLDOWN);
+    } catch (err) {
+      toast.error(apiErrorMessage(err, "Couldn't resend the code."));
     } finally {
       setResending(false);
     }
@@ -70,34 +90,31 @@ function VerifyOtpForm() {
 
   return (
     <AuthShell>
-      <h1 className="text-xl font-semibold text-foreground">Enter code</h1>
-      <p className="mt-1 mb-6 text-sm text-muted-foreground">
+      <h1 className="text-center text-xl font-semibold text-foreground">
+        Enter verification code
+      </h1>
+      <p className="mt-1 mb-6 text-center text-sm text-muted-foreground">
         We sent a 6-digit code to <span className="font-medium">{email}</span>
       </p>
 
-      <form onSubmit={handleSubmit(onSubmit)} className="space-y-4" noValidate>
-        <div className="space-y-1.5">
-          <Label htmlFor="otp">Verification code</Label>
-          <Input
-            id="otp"
-            inputMode="numeric"
-            autoComplete="one-time-code"
-            maxLength={6}
-            placeholder="123456"
-            className="text-center text-lg tracking-[0.5em]"
-            aria-invalid={!!errors.otp}
-            {...register("otp")}
-          />
-          {errors.otp && (
-            <p className="text-sm text-destructive">{errors.otp.message}</p>
-          )}
-        </div>
+      <OtpInput
+        value={otp}
+        onChange={setOtp}
+        onComplete={submit}
+        disabled={busy}
+        invalid={!!error}
+      />
 
-        <Button type="submit" className="w-full" disabled={isSubmitting}>
-          {isSubmitting && <Loader2 className="size-4 animate-spin" />}
-          {isSubmitting ? "Verifying…" : "Verify"}
-        </Button>
-      </form>
+      {/* Reserved height so the layout doesn't jump as messages swap. */}
+      <div className="mt-4 min-h-5 text-center text-sm" aria-live="polite">
+        {busy && (
+          <span className="inline-flex items-center gap-2 text-muted-foreground">
+            <Loader2 className="size-4 animate-spin" />
+            Verifying…
+          </span>
+        )}
+        {!busy && error && <span className="text-destructive">{error}</span>}
+      </div>
 
       <div className="mt-4 flex items-center justify-between text-sm">
         <Link
@@ -107,14 +124,19 @@ function VerifyOtpForm() {
           <ArrowLeft className="size-4" />
           Back to login
         </Link>
-        <button
-          type="button"
-          onClick={resend}
-          disabled={resending}
-          className="cursor-pointer font-medium text-[#005bd3] hover:underline disabled:opacity-50"
-        >
-          {resending ? "Sending…" : "Resend code"}
-        </button>
+
+        {cooldown > 0 ? (
+          <span className="text-muted-foreground">Resend in {cooldown}s</span>
+        ) : (
+          <button
+            type="button"
+            onClick={resend}
+            disabled={resending || busy}
+            className="cursor-pointer font-medium text-[#005bd3] hover:underline disabled:opacity-50"
+          >
+            {resending ? "Sending…" : "Resend code"}
+          </button>
+        )}
       </div>
     </AuthShell>
   );

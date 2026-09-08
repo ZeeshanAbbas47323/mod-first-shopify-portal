@@ -32,7 +32,7 @@ import {
   type InquiryStatus,
 } from "@/lib/admin-api";
 
-const PAGE_SIZE = 15;
+const DEFAULT_PAGE_SIZE = 15;
 
 export const STATUS_TONES: Record<string, BadgeTone> = {
   new: "attention",
@@ -61,6 +61,7 @@ export default function ContactSubmissionsPage() {
   const [rows, setRows] = React.useState<ContactSubmissionRow[]>([]);
   const [loading, setLoading] = React.useState(true);
   const [page, setPage] = React.useState(0);
+  const [pageSize, setPageSize] = React.useState<number>(DEFAULT_PAGE_SIZE);
   const [pageCount, setPageCount] = React.useState(1);
   const [total, setTotal] = React.useState(0);
 
@@ -87,10 +88,10 @@ export default function ContactSubmissionsPage() {
     setLoading(true);
     listContactSubmissions({
       page: page + 1,
-      limit: PAGE_SIZE,
+      limit: pageSize,
       dateRange,
       filters: {
-        email: debounced || undefined,
+        email: debounced ? { contains: debounced } : undefined,
         status: status === "all" ? undefined : status,
         help_topic: topic === "all" ? undefined : topic,
       },
@@ -110,7 +111,7 @@ export default function ContactSubmissionsPage() {
     return () => {
       cancelled = true;
     };
-  }, [page, debounced, status, topic, dateRange, refreshKey]);
+  }, [page, pageSize, debounced, status, topic, dateRange, refreshKey]);
 
   const columns = React.useMemo<ColumnDef<ContactSubmissionRow>[]>(
     () => [
@@ -218,7 +219,14 @@ export default function ContactSubmissionsPage() {
         data={rows}
         loading={loading}
         onRowClick={setDetail}
-        serverPagination={{ pageIndex: page, pageCount, total, onPageChange: setPage }}
+        serverPagination={{
+          pageIndex: page,
+          pageCount,
+          total,
+          onPageChange: setPage,
+          pageSize,
+          onPageSizeChange: setPageSize,
+        }}
       />
 
       <SubmissionDialog

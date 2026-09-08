@@ -40,7 +40,7 @@ import {
   type MenuRightRow,
 } from "@/lib/admin-api";
 
-const PAGE_SIZE = 10;
+const DEFAULT_PAGE_SIZE = 10;
 
 const ROLE_ITEMS: Record<string, string> = Object.fromEntries([
   ["all", "All roles"],
@@ -124,6 +124,7 @@ export function MenuRightsSection() {
   const [rows, setRows] = React.useState<MenuRightRow[]>([]);
   const [loading, setLoading] = React.useState(true);
   const [page, setPage] = React.useState(0);
+  const [pageSize, setPageSize] = React.useState<number>(DEFAULT_PAGE_SIZE);
   const [pageCount, setPageCount] = React.useState(1);
   const [total, setTotal] = React.useState(0);
 
@@ -144,7 +145,7 @@ export function MenuRightsSection() {
     setLoading(true);
     listMenuRights({
       page: page + 1,
-      limit: PAGE_SIZE,
+      limit: pageSize,
       filters: {
         role: role === "all" ? undefined : role,
         can_view: triToBool(canView),
@@ -167,7 +168,7 @@ export function MenuRightsSection() {
     return () => {
       cancelled = true;
     };
-  }, [page, role, canView, canEdit, canDelete, refreshKey]);
+  }, [page, pageSize, role, canView, canEdit, canDelete, refreshKey]);
 
   const triSelect = (label: string, value: Tri, onChange: (v: Tri) => void) => (
     <Select
@@ -232,7 +233,14 @@ export function MenuRightsSection() {
           setEditing(row);
           setDialogOpen(true);
         }}
-        serverPagination={{ pageIndex: page, pageCount, total, onPageChange: setPage }}
+        serverPagination={{
+          pageIndex: page,
+          pageCount,
+          total,
+          onPageChange: setPage,
+          pageSize,
+          onPageSizeChange: setPageSize,
+        }}
       />
     </div>
   );

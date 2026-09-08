@@ -3,7 +3,7 @@
 import * as React from "react";
 import { useRouter } from "next/navigation";
 import {
-  Bell, Home, Loader2, LockKeyhole, LogOut, Package, Percent,
+  Home, Loader2, LockKeyhole, LogOut, Package, Percent,
   Search, Settings, ShoppingCart, Store, Tag, Users, X,
 } from "lucide-react";
 
@@ -26,6 +26,8 @@ import {
 } from "@/components/ui/dropdown-menu";
 import { SidebarTrigger } from "@/components/ui/sidebar";
 import { lockScreenNow } from "@/components/layout/screen-lock";
+import { NotificationsMenu } from "@/components/layout/notifications-menu";
+import { useMenuStore } from "@/stores/menu-store";
 import { useAuthStore } from "@/stores/auth-store";
 import {
   globalAdminSearch,
@@ -219,12 +221,7 @@ export function TopBar() {
 
       {/* Right — notifications + user menu */}
       <div className="flex flex-1 items-center justify-end gap-2">
-        <button
-          aria-label="Notifications"
-          className="flex size-8 cursor-pointer items-center justify-center rounded-lg text-neutral-300 transition-colors hover:bg-white/10 hover:text-white"
-        >
-          <Bell className="size-4" />
-        </button>
+        <NotificationsMenu />
 
         <DropdownMenu>
           <DropdownMenuTrigger className="flex cursor-pointer items-center gap-2 rounded-lg p-1 transition-colors hover:bg-white/10">
@@ -256,7 +253,7 @@ export function TopBar() {
             <DropdownMenuSeparator />
             <DropdownMenuItem
               variant="destructive"
-              onClick={() => { logout(); router.replace("/login"); }}
+              onClick={() => { useMenuStore.getState().reset(); logout(); router.replace("/login"); }}
             >
               <LogOut className="size-4" /> Log out
             </DropdownMenuItem>

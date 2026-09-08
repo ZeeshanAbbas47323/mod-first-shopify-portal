@@ -41,7 +41,7 @@ import {
   type CourierRow,
 } from "@/lib/admin-api";
 
-const PAGE_SIZE = 10;
+const DEFAULT_PAGE_SIZE = 10;
 
 function statusTone(s?: string) {
   const v = (s ?? "").toUpperCase();
@@ -56,6 +56,7 @@ export function ShippingSection() {
   const [rows, setRows] = React.useState<ShipmentRow[]>([]);
   const [loading, setLoading] = React.useState(true);
   const [page, setPage] = React.useState(0);
+  const [pageSize, setPageSize] = React.useState<number>(DEFAULT_PAGE_SIZE);
   const [pageCount, setPageCount] = React.useState(1);
   const [total, setTotal] = React.useState(0);
   const [search, setSearch] = React.useState("");
@@ -81,7 +82,7 @@ export function ShippingSection() {
   React.useEffect(() => {
     let cancelled = false;
     setLoading(true);
-    listShipments({ page: page + 1, limit: PAGE_SIZE, filters: { tracking_number: debounced || undefined } })
+    listShipments({ page: page + 1, limit: pageSize, filters: { tracking_number: debounced || undefined } })
       .then((res) => {
         if (cancelled) return;
         setRows(res.rows);
@@ -91,7 +92,7 @@ export function ShippingSection() {
       .catch((err) => { if (!cancelled) toast.error(apiErrorMessage(err, "Couldn't load shipments.")); })
       .finally(() => !cancelled && setLoading(false));
     return () => { cancelled = true; };
-  }, [page, debounced, refreshKey]);
+  }, [page, pageSize, debounced, refreshKey]);
 
   const openDetail = async (row: ShipmentRow) => {
     setSelected(row);
@@ -217,7 +218,14 @@ export function ShippingSection() {
         data={rows}
         loading={loading}
         onRowClick={openDetail}
-        serverPagination={{ pageIndex: page, pageCount, total, onPageChange: setPage }}
+        serverPagination={{
+          pageIndex: page,
+          pageCount,
+          total,
+          onPageChange: setPage,
+          pageSize,
+          onPageSizeChange: setPageSize,
+        }}
       />
 
       {/* Detail Dialog */}

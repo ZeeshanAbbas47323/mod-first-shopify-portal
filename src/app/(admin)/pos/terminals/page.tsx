@@ -21,6 +21,7 @@ import { DataTable } from "@/components/data-table";
 import { ConfirmDeleteDialog } from "@/components/confirm-delete-dialog";
 import { StatusBadge } from "@/components/status-badge";
 import { apiErrorMessage } from "@/lib/auth-api";
+import { usePermissions } from "@/stores/menu-store";
 import { listBranches, type BranchRow } from "@/lib/admin-api";
 import {
   createTerminalLocation,
@@ -32,7 +33,7 @@ import {
   type TerminalReaderRow,
 } from "@/lib/pos-api";
 
-const PAGE_SIZE = 15;
+const DEFAULT_PAGE_SIZE = 15;
 
 export default function TerminalsPage() {
   const [tab, setTab] = React.useState<"readers" | "locations">("readers");
@@ -73,9 +74,11 @@ export default function TerminalsPage() {
 // ─── Readers ──────────────────────────────────────────────────────────────────
 
 function ReadersTab({ branches }: { branches: BranchRow[] }) {
+  const permissions = usePermissions("/pos/terminals");
   const [rows, setRows] = React.useState<TerminalReaderRow[]>([]);
   const [loading, setLoading] = React.useState(true);
   const [page, setPage] = React.useState(0);
+  const [pageSize, setPageSize] = React.useState<number>(DEFAULT_PAGE_SIZE);
   const [pageCount, setPageCount] = React.useState(1);
   const [total, setTotal] = React.useState(0);
   const [status, setStatus] = React.useState("all");
@@ -93,7 +96,7 @@ function ReadersTab({ branches }: { branches: BranchRow[] }) {
     setLoading(true);
     listReaders({
       page: page + 1,
-      limit: PAGE_SIZE,
+      limit: pageSize,
       filters: { status: status === "all" ? undefined : status },
     })
       .then((res) => {
@@ -111,7 +114,7 @@ function ReadersTab({ branches }: { branches: BranchRow[] }) {
     return () => {
       cancelled = true;
     };
-  }, [page, status, refreshKey]);
+  }, [page, pageSize, status, refreshKey]);
 
   const handleDelete = async () => {
     if (!deleteTarget) return;
@@ -223,17 +226,26 @@ function ReadersTab({ branches }: { branches: BranchRow[] }) {
             <SelectItem value="offline">Offline</SelectItem>
           </SelectContent>
         </Select>
-        <Button className="ml-auto" onClick={() => setDialogOpen(true)}>
-          <Plus className="size-4" />
-          Register reader
-        </Button>
+        {permissions.can_create && (
+          <Button className="ml-auto" onClick={() => setDialogOpen(true)}>
+            <Plus className="size-4" />
+            Register reader
+          </Button>
+        )}
       </div>
 
       <DataTable
         columns={columns}
         data={rows}
         loading={loading}
-        serverPagination={{ pageIndex: page, pageCount, total, onPageChange: setPage }}
+        serverPagination={{
+          pageIndex: page,
+          pageCount,
+          total,
+          onPageChange: setPage,
+          pageSize,
+          onPageSizeChange: setPageSize,
+        }}
       />
 
       <RegisterReaderDialog
@@ -381,6 +393,7 @@ function LocationsTab({ branches }: { branches: BranchRow[] }) {
   const [rows, setRows] = React.useState<TerminalLocationRow[]>([]);
   const [loading, setLoading] = React.useState(true);
   const [page, setPage] = React.useState(0);
+  const [pageSize, setPageSize] = React.useState<number>(DEFAULT_PAGE_SIZE);
   const [pageCount, setPageCount] = React.useState(1);
   const [total, setTotal] = React.useState(0);
   const [dialogOpen, setDialogOpen] = React.useState(false);
@@ -389,7 +402,7 @@ function LocationsTab({ branches }: { branches: BranchRow[] }) {
   React.useEffect(() => {
     let cancelled = false;
     setLoading(true);
-    listTerminalLocations({ page: page + 1, limit: PAGE_SIZE })
+    listTerminalLocations({ page: page + 1, limit: pageSize })
       .then((res) => {
         if (cancelled) return;
         setRows(res.rows);
@@ -405,7 +418,7 @@ function LocationsTab({ branches }: { branches: BranchRow[] }) {
     return () => {
       cancelled = true;
     };
-  }, [page, refreshKey]);
+  }, [page, pageSize, refreshKey]);
 
   const columns = React.useMemo<ColumnDef<TerminalLocationRow>[]>(
     () => [
@@ -468,7 +481,14 @@ function LocationsTab({ branches }: { branches: BranchRow[] }) {
         columns={columns}
         data={rows}
         loading={loading}
-        serverPagination={{ pageIndex: page, pageCount, total, onPageChange: setPage }}
+        serverPagination={{
+          pageIndex: page,
+          pageCount,
+          total,
+          onPageChange: setPage,
+          pageSize,
+          onPageSizeChange: setPageSize,
+        }}
       />
 
       <LocationDialog

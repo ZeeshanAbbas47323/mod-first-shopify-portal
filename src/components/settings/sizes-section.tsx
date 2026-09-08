@@ -34,7 +34,7 @@ import { StatusToggle } from "@/components/status-badge";
 import { apiErrorMessage } from "@/lib/auth-api";
 import { createSize, deleteRecord, listSizes, updateRecordStatus, updateSize, type SizeRow } from "@/lib/admin-api";
 
-const PAGE_SIZE = 10;
+const DEFAULT_PAGE_SIZE = 10;
 
 const STATUS_ITEMS = { all: "All statuses", active: "Active", inactive: "Inactive" };
 
@@ -86,6 +86,7 @@ export function SizesSection() {
   const [rows, setRows] = React.useState<SizeRow[]>([]);
   const [loading, setLoading] = React.useState(true);
   const [page, setPage] = React.useState(0);
+  const [pageSize, setPageSize] = React.useState<number>(DEFAULT_PAGE_SIZE);
   const [pageCount, setPageCount] = React.useState(1);
   const [total, setTotal] = React.useState(0);
 
@@ -110,9 +111,9 @@ export function SizesSection() {
     setLoading(true);
     listSizes({
       page: page + 1,
-      limit: PAGE_SIZE,
+      limit: pageSize,
       filters: {
-        display_name: debouncedSearch || undefined,
+        display_name: debouncedSearch ? { contains: debouncedSearch } : undefined,
         is_active: status === "all" ? undefined : status === "active",
       },
     })
@@ -131,7 +132,7 @@ export function SizesSection() {
     return () => {
       cancelled = true;
     };
-  }, [page, debouncedSearch, status, refreshKey]);
+  }, [page, pageSize, debouncedSearch, status, refreshKey]);
 
   const handleToggleStatus = async (row: SizeRow, next: boolean) => {
     try {
@@ -189,6 +190,8 @@ export function SizesSection() {
           pageCount,
           total,
           onPageChange: setPage,
+          pageSize,
+          onPageSizeChange: setPageSize,
         }}
       />
     </div>

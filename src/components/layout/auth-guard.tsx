@@ -5,13 +5,21 @@ import { useRouter } from "next/navigation";
 import { Loader2 } from "lucide-react";
 import { useAuthStore, getStoredRefreshToken } from "@/stores/auth-store";
 import { silentRefresh } from "@/lib/api";
+import { useMenuStore } from "@/stores/menu-store";
 
 type State = "loading" | "authenticated" | "unauthenticated";
 
 export function AuthGuard({ children }: { children: React.ReactNode }) {
   const router = useRouter();
   const logout = useAuthStore((s) => s.logout);
+  const resetMenus = useMenuStore((s) => s.reset);
   const [state, setState] = React.useState<State>("loading");
+
+  // The next person to sign in gets their own navigation, not the last one's.
+  const signOut = React.useCallback(() => {
+    resetMenus();
+    logout();
+  }, [logout, resetMenus]);
 
   React.useEffect(() => {
     async function init() {
@@ -21,6 +29,7 @@ export function AuthGuard({ children }: { children: React.ReactNode }) {
       const authenticated = useAuthStore.getState().isAuthenticated;
 
       if (!authenticated) {
+        resetMenus();
         setState("unauthenticated");
         router.replace("/login");
         return;
@@ -32,7 +41,7 @@ export function AuthGuard({ children }: { children: React.ReactNode }) {
       if (!inMemoryToken) {
         const hasRefreshToken = !!getStoredRefreshToken();
         if (!hasRefreshToken) {
-          logout();
+          signOut();
           setState("unauthenticated");
           router.replace("/login");
           return;
@@ -40,7 +49,7 @@ export function AuthGuard({ children }: { children: React.ReactNode }) {
 
         const newToken = await silentRefresh();
         if (!newToken) {
-          logout();
+          signOut();
           setState("unauthenticated");
           router.replace("/login");
           return;

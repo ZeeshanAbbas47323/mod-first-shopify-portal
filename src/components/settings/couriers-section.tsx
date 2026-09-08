@@ -29,7 +29,7 @@ import {
   type CourierRow,
 } from "@/lib/admin-api";
 
-const PAGE_SIZE = 10;
+const DEFAULT_PAGE_SIZE = 10;
 
 function getColumns(
   onToggleStatus: (row: CourierRow, next: boolean) => Promise<void>
@@ -97,6 +97,7 @@ export function CouriersSection() {
   const [rows, setRows] = React.useState<CourierRow[]>([]);
   const [loading, setLoading] = React.useState(true);
   const [page, setPage] = React.useState(0);
+  const [pageSize, setPageSize] = React.useState<number>(DEFAULT_PAGE_SIZE);
   const [pageCount, setPageCount] = React.useState(1);
   const [total, setTotal] = React.useState(0);
   const [search, setSearch] = React.useState("");
@@ -115,7 +116,7 @@ export function CouriersSection() {
   React.useEffect(() => {
     let cancelled = false;
     setLoading(true);
-    listCouriers({ page: page + 1, limit: PAGE_SIZE, filters: { name: debounced || undefined } })
+    listCouriers({ page: page + 1, limit: pageSize, filters: { name: debounced ? { contains: debounced } : undefined } })
       .then((res) => {
         if (cancelled) return;
         setRows(res.rows); setTotal(res.total); setPageCount(res.totalPages);
@@ -123,7 +124,7 @@ export function CouriersSection() {
       .catch((err) => { if (!cancelled) toast.error(apiErrorMessage(err, "Couldn't load couriers.")); })
       .finally(() => !cancelled && setLoading(false));
     return () => { cancelled = true; };
-  }, [page, debounced, refreshKey]);
+  }, [page, pageSize, debounced, refreshKey]);
 
   const handleToggleStatus = async (row: CourierRow, next: boolean) => {
     try {
@@ -158,7 +159,14 @@ export function CouriersSection() {
       <DataTable
         columns={columns} data={rows} loading={loading}
         onRowClick={(row) => { setEditing(row); setDialogOpen(true); }}
-        serverPagination={{ pageIndex: page, pageCount, total, onPageChange: setPage }}
+        serverPagination={{
+          pageIndex: page,
+          pageCount,
+          total,
+          onPageChange: setPage,
+          pageSize,
+          onPageSizeChange: setPageSize,
+        }}
       />
     </div>
   );

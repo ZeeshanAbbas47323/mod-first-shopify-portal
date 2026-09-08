@@ -15,7 +15,7 @@ import {
   type ShipmentRow,
 } from "@/lib/admin-api";
 
-const PAGE_LIMIT = 20;
+const DEFAULT_PAGE_SIZE = 20;
 
 const columns: ColumnDef<ShipmentRow>[] = [
   {
@@ -76,6 +76,7 @@ const columns: ColumnDef<ShipmentRow>[] = [
 
 export default function ShippingLabelsPage() {
   const [page, setPage] = React.useState(1);
+  const [pageSize, setPageSize] = React.useState<number>(DEFAULT_PAGE_SIZE);
   const [rows, setRows] = React.useState<ShipmentRow[]>([]);
   const [total, setTotal] = React.useState(0);
   const [totalPages, setTotalPages] = React.useState(1);
@@ -87,13 +88,13 @@ export default function ShippingLabelsPage() {
 
   const load = React.useCallback(() => {
     setLoading(true);
-    listShipments({ page, limit: PAGE_LIMIT, filters: search ? { search } : undefined })
+    listShipments({ page, limit: pageSize, search: search || undefined })
       .then(({ rows: r, total: t, totalPages: tp }) => {
         setRows(r); setTotal(t); setTotalPages(tp);
       })
       .catch((e) => toast.error(apiErrorMessage(e, "Couldn't load shipments.")))
       .finally(() => setLoading(false));
-  }, [page, search]);
+  }, [page, pageSize, search]);
 
   React.useEffect(() => { load(); }, [load]);
 
@@ -143,6 +144,8 @@ export default function ShippingLabelsPage() {
           pageCount: totalPages,
           total,
           onPageChange: (idx) => setPage(idx + 1),
+          pageSize,
+          onPageSizeChange: setPageSize,
         }}
       />
     </div>

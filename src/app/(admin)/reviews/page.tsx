@@ -41,7 +41,7 @@ import {
   type ReviewRow,
 } from "@/lib/admin-api";
 
-const PAGE_SIZE = 10;
+const DEFAULT_PAGE_SIZE = 10;
 
 const STATUS_FILTER_ITEMS: Record<string, string> = {
   all: "All statuses",
@@ -163,6 +163,7 @@ export default function ReviewsPage() {
   const [rows, setRows] = React.useState<ReviewRow[]>([]);
   const [loading, setLoading] = React.useState(true);
   const [page, setPage] = React.useState(0);
+  const [pageSize, setPageSize] = React.useState<number>(DEFAULT_PAGE_SIZE);
   const [pageCount, setPageCount] = React.useState(1);
   const [total, setTotal] = React.useState(0);
 
@@ -188,10 +189,10 @@ export default function ReviewsPage() {
     setLoading(true);
     listReviews({
       page: page + 1,
-      limit: PAGE_SIZE,
+      limit: pageSize,
       dateRange,
       filters: {
-        title: debounced || undefined,
+        title: debounced ? { contains: debounced } : undefined,
         status: status === "all" ? undefined : status,
       },
     })
@@ -210,7 +211,7 @@ export default function ReviewsPage() {
     return () => {
       cancelled = true;
     };
-  }, [page, debounced, status, dateRange, refreshKey]);
+  }, [page, pageSize, debounced, status, dateRange, refreshKey]);
 
   const openReview = async (row: ReviewRow) => {
     setEditing(row);
@@ -270,7 +271,14 @@ export default function ReviewsPage() {
         data={rows}
         loading={loading}
         onRowClick={openReview}
-        serverPagination={{ pageIndex: page, pageCount, total, onPageChange: setPage }}
+        serverPagination={{
+          pageIndex: page,
+          pageCount,
+          total,
+          onPageChange: setPage,
+          pageSize,
+          onPageSizeChange: setPageSize,
+        }}
       />
     </div>
   );

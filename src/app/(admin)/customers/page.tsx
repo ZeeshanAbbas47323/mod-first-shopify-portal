@@ -20,7 +20,7 @@ import { apiErrorMessage } from "@/lib/auth-api";
 import { listUsers, USER_ROLES, type UserRow } from "@/lib/admin-api";
 import type { DateRange } from "react-day-picker";
 
-const PAGE_LIMIT = 20;
+const DEFAULT_PAGE_SIZE = 20;
 
 const fmt$ = (n?: number | null) =>
   n != null ? `$${Number(n).toLocaleString("en-US", { minimumFractionDigits: 2 })}` : "—";
@@ -128,6 +128,7 @@ const columns: ColumnDef<UserRow>[] = [
 export default function CustomersPage() {
   const router = useRouter();
   const [page, setPage] = React.useState(1);
+  const [pageSize, setPageSize] = React.useState<number>(DEFAULT_PAGE_SIZE);
   const [rows, setRows] = React.useState<UserRow[]>([]);
   const [total, setTotal] = React.useState(0);
   const [totalPages, setTotalPages] = React.useState(1);
@@ -149,13 +150,13 @@ export default function CustomersPage() {
     if (isActive !== "all") filters.is_active = isActive === "active";
     if (search) filters.full_name = search;
 
-    listUsers({ page, limit: PAGE_LIMIT, dateRange, filters })
+    listUsers({ page, limit: pageSize, dateRange, filters })
       .then(({ rows: r, total: t, totalPages: tp }) => {
         setRows(r); setTotal(t); setTotalPages(tp);
       })
       .catch((e) => toast.error(apiErrorMessage(e, "Couldn't load customers.")))
       .finally(() => setLoading(false));
-  }, [page, dateRange, role, isActive, search]);
+  }, [page, pageSize, dateRange, role, isActive, search]);
 
   React.useEffect(() => { load(); }, [load]);
 
@@ -233,6 +234,8 @@ export default function CustomersPage() {
           pageCount: totalPages,
           total,
           onPageChange: (idx) => setPage(idx + 1),
+          pageSize,
+          onPageSizeChange: setPageSize,
         }}
       />
     </div>

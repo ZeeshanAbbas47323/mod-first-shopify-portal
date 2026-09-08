@@ -14,7 +14,7 @@ import { StatusBadge, type BadgeTone } from "@/components/status-badge";
 import { apiErrorMessage } from "@/lib/auth-api";
 import { listActivityLogs, type ActivityLogRow } from "@/lib/admin-api";
 
-const PAGE_SIZE = 25;
+const DEFAULT_PAGE_SIZE = 25;
 
 /** Colour the verb so create/update/delete are scannable. */
 const ACTION_TONES: Record<string, BadgeTone> = {
@@ -44,6 +44,7 @@ export function ActivityLogSection() {
   const [rows, setRows] = React.useState<ActivityLogRow[]>([]);
   const [loading, setLoading] = React.useState(true);
   const [page, setPage] = React.useState(0);
+  const [pageSize, setPageSize] = React.useState<number>(DEFAULT_PAGE_SIZE);
   const [pageCount, setPageCount] = React.useState(1);
   const [total, setTotal] = React.useState(0);
 
@@ -66,7 +67,7 @@ export function ActivityLogSection() {
     setLoading(true);
     listActivityLogs({
       page: page + 1,
-      limit: PAGE_SIZE,
+      limit: pageSize,
       dateRange,
       filters: {
         entity_type: debounced.entityType || undefined,
@@ -88,7 +89,7 @@ export function ActivityLogSection() {
     return () => {
       cancelled = true;
     };
-  }, [page, debounced, dateRange]);
+  }, [page, pageSize, debounced, dateRange]);
 
   const columns = React.useMemo<ColumnDef<ActivityLogRow>[]>(
     () => [
@@ -181,6 +182,8 @@ export function ActivityLogSection() {
           pageCount,
           total,
           onPageChange: setPage,
+          pageSize,
+          onPageSizeChange: setPageSize,
         }}
       />
     </div>

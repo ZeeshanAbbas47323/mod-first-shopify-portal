@@ -1056,7 +1056,8 @@ function ProductPickerDialog({
     listProducts({
       page: 1,
       limit: 30,
-      filters: { title: debounced || undefined, status: "published" },
+      search: debounced || undefined,
+      filters: { status: "published" },
     })
       .then((res) => setRows(res.rows))
       .catch(() => setRows([]))

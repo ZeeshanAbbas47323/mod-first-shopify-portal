@@ -25,6 +25,7 @@ import { DateRangePicker } from "@/components/date-range-picker";
 import { StatusBadge, StatusToggle } from "@/components/status-badge";
 import { ConfirmDeleteDialog } from "@/components/confirm-delete-dialog";
 import { apiErrorMessage } from "@/lib/auth-api";
+import { usePermissions } from "@/stores/menu-store";
 import { parseServerDate, toLocalDateInput } from "@/lib/utils";
 import {
   COUPON_TYPES,
@@ -39,7 +40,7 @@ import {
   type CouponType,
 } from "@/lib/admin-api";
 
-const PAGE_SIZE = 15;
+const DEFAULT_PAGE_SIZE = 15;
 
 const STATUS_FILTER_ITEMS: Record<string, string> = {
   all: "All statuses",
@@ -147,9 +148,11 @@ function getColumns(
 }
 
 export default function DiscountsPage() {
+  const permissions = usePermissions("/discounts");
   const [rows, setRows] = React.useState<CouponRow[]>([]);
   const [loading, setLoading] = React.useState(true);
   const [page, setPage] = React.useState(0);
+  const [pageSize, setPageSize] = React.useState<number>(DEFAULT_PAGE_SIZE);
   const [pageCount, setPageCount] = React.useState(1);
   const [total, setTotal] = React.useState(0);
 
@@ -176,10 +179,10 @@ export default function DiscountsPage() {
     setLoading(true);
     listCoupons({
       page: page + 1,
-      limit: PAGE_SIZE,
+      limit: pageSize,
       dateRange,
       filters: {
-        code: debounced || undefined,
+        code: debounced ? { contains: debounced } : undefined,
         status: status === "all" ? undefined : status,
         type: type === "all" ? undefined : type,
       },
@@ -195,7 +198,7 @@ export default function DiscountsPage() {
       })
       .finally(() => !cancelled && setLoading(false));
     return () => { cancelled = true; };
-  }, [page, debounced, status, type, dateRange, refreshKey]);
+  }, [page, pageSize, debounced, status, type, dateRange, refreshKey]);
 
   const handleToggleStatus = async (row: CouponRow, next: boolean) => {
     try {
@@ -216,9 +219,11 @@ export default function DiscountsPage() {
           <Button variant="outline" onClick={() => setValidateOpen(true)}>
             <CheckCircle2 className="size-4" /> Validate code
           </Button>
-          <Button onClick={() => { setEditing(null); setDialogOpen(true); }}>
-            <Plus className="size-4" /> Create coupon
-          </Button>
+          {permissions.can_create && (
+            <Button onClick={() => { setEditing(null); setDialogOpen(true); }}>
+              <Plus className="size-4" /> Create coupon
+            </Button>
+          )}
         </div>
       </div>
 
@@ -258,7 +263,14 @@ export default function DiscountsPage() {
       <DataTable
         columns={columns} data={rows} loading={loading}
         onRowClick={(row) => { setEditing(row); setDialogOpen(true); }}
-        serverPagination={{ pageIndex: page, pageCount, total, onPageChange: setPage }}
+        serverPagination={{
+          pageIndex: page,
+          pageCount,
+          total,
+          onPageChange: setPage,
+          pageSize,
+          onPageSizeChange: setPageSize,
+        }}
       />
     </div>
   );

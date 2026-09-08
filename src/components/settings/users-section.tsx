@@ -60,7 +60,7 @@ import {
   type UserRow,
 } from "@/lib/admin-api";
 
-const PAGE_SIZE = 10;
+const DEFAULT_PAGE_SIZE = 10;
 
 const STATUS_ITEMS = { all: "All statuses", active: "Active", inactive: "Inactive" };
 const ROLE_ITEMS = Object.fromEntries([["all", "All roles"], ...USER_ROLES.map((r) => [r, r.replace(/_/g, " ").replace(/\b\w/g, (c) => c.toUpperCase())])]);
@@ -203,6 +203,7 @@ export function UsersSection() {
   const [rows, setRows] = React.useState<UserRow[]>([]);
   const [loading, setLoading] = React.useState(true);
   const [page, setPage] = React.useState(0);
+  const [pageSize, setPageSize] = React.useState<number>(DEFAULT_PAGE_SIZE);
   const [pageCount, setPageCount] = React.useState(1);
   const [total, setTotal] = React.useState(0);
 
@@ -230,10 +231,10 @@ export function UsersSection() {
     setLoading(true);
     listUsers({
       page: page + 1,
-      limit: PAGE_SIZE,
+      limit: pageSize,
       dateRange,
       filters: {
-        full_name: debouncedSearch || undefined,
+        full_name: debouncedSearch ? { contains: debouncedSearch } : undefined,
         role: role === "all" ? undefined : role,
         is_active: status === "all" ? undefined : status === "active",
       },
@@ -253,7 +254,7 @@ export function UsersSection() {
     return () => {
       cancelled = true;
     };
-  }, [page, debouncedSearch, role, status, dateRange, refreshKey]);
+  }, [page, pageSize, debouncedSearch, role, status, dateRange, refreshKey]);
 
   const [branches, setBranches] = React.useState<BranchRow[]>([]);
   const [branchTarget, setBranchTarget] = React.useState<UserRow | null>(null);
@@ -436,6 +437,8 @@ export function UsersSection() {
           pageCount,
           total,
           onPageChange: setPage,
+          pageSize,
+          onPageSizeChange: setPageSize,
         }}
       />
     </div>

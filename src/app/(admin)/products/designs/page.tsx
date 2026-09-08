@@ -30,7 +30,7 @@ import {
 } from "@/lib/admin-api";
 import { PRINT_METHODS } from "@/lib/pos-api";
 
-const PAGE_SIZE = 20;
+const DEFAULT_PAGE_SIZE = 20;
 
 const DESIGN_STATUSES = ["pending", "approved", "rejected"] as const;
 
@@ -66,6 +66,7 @@ export default function DesignUploadsPage() {
   const [rows, setRows] = React.useState<DesignUploadRow[]>([]);
   const [loading, setLoading] = React.useState(true);
   const [page, setPage] = React.useState(0);
+  const [pageSize, setPageSize] = React.useState<number>(DEFAULT_PAGE_SIZE);
   const [pageCount, setPageCount] = React.useState(1);
   const [total, setTotal] = React.useState(0);
 
@@ -92,10 +93,12 @@ export default function DesignUploadsPage() {
     setLoading(true);
     listDesignUploads({
       page: page + 1,
-      limit: PAGE_SIZE,
+      limit: pageSize,
       dateRange,
+      // order_id resolves through the OrderItemDesign join, so it's a
+      // top-level input rather than a column filter.
+      order_id: debounced ? Number(debounced) : undefined,
       filters: {
-        order_id: debounced ? Number(debounced) : undefined,
         status: status === "all" ? undefined : status,
         print_method: method === "all" ? undefined : method,
       },
@@ -115,7 +118,7 @@ export default function DesignUploadsPage() {
     return () => {
       cancelled = true;
     };
-  }, [page, debounced, status, method, dateRange, refreshKey]);
+  }, [page, pageSize, debounced, status, method, dateRange, refreshKey]);
 
   const columns = React.useMemo<ColumnDef<DesignUploadRow>[]>(
     () => [
@@ -177,7 +180,7 @@ export default function DesignUploadsPage() {
         accessorKey: "status",
         header: "Status",
         cell: ({ row }) => {
-          const s = row.original.status ?? "pending";
+          const s = row.original.status ?? "approved";
           return (
             <StatusBadge
               status={STATUS_LABELS[s] ?? s}
@@ -252,7 +255,14 @@ export default function DesignUploadsPage() {
         data={rows}
         loading={loading}
         onRowClick={setDetail}
-        serverPagination={{ pageIndex: page, pageCount, total, onPageChange: setPage }}
+        serverPagination={{
+          pageIndex: page,
+          pageCount,
+          total,
+          onPageChange: setPage,
+          pageSize,
+          onPageSizeChange: setPageSize,
+        }}
       />
 
       <DesignDialog
@@ -275,13 +285,13 @@ function DesignDialog({
   onClose: () => void;
   onSaved: () => void;
 }) {
-  const [status, setStatus] = React.useState("pending");
+  const [status, setStatus] = React.useState("approved");
   const [notes, setNotes] = React.useState("");
   const [saving, setSaving] = React.useState(false);
 
   React.useEffect(() => {
     if (!design) return;
-    setStatus(design.status ?? "pending");
+    setStatus(design.status ?? "approved");
     setNotes(design.notes ?? "");
   }, [design]);
 

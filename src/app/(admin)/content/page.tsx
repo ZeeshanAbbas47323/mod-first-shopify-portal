@@ -46,7 +46,7 @@ import {
 import { FooterSectionsTab } from "@/components/content/footer-sections-tab";
 import { PopupsTab } from "@/components/content/popups-tab";
 
-const PAGE_SIZE = 10;
+const DEFAULT_PAGE_SIZE = 10;
 
 const STATUS_FILTER_ITEMS = {
   all: "All statuses",
@@ -130,6 +130,7 @@ export default function ContentPage() {
   const [rows, setRows] = React.useState<BlogRow[]>([]);
   const [loading, setLoading] = React.useState(true);
   const [page, setPage] = React.useState(0);
+  const [pageSize, setPageSize] = React.useState<number>(DEFAULT_PAGE_SIZE);
   const [pageCount, setPageCount] = React.useState(1);
   const [total, setTotal] = React.useState(0);
 
@@ -156,11 +157,11 @@ export default function ContentPage() {
     setLoading(true);
     listBlogs({
       page: page + 1,
-      limit: PAGE_SIZE,
+      limit: pageSize,
       dateRange,
       filters: {
-        title: debounced.search || undefined,
-        category: debounced.category || undefined,
+        title: debounced.search ? { contains: debounced.search } : undefined,
+        category: debounced.category ? { contains: debounced.category } : undefined,
         status: status === "all" ? undefined : status,
       },
     })
@@ -179,7 +180,7 @@ export default function ContentPage() {
     return () => {
       cancelled = true;
     };
-  }, [page, debounced, status, dateRange, refreshKey]);
+  }, [page, pageSize, debounced, status, dateRange, refreshKey]);
 
   return (
     <div className="flex flex-col gap-4">
@@ -271,6 +272,8 @@ export default function ContentPage() {
           pageCount,
           total,
           onPageChange: setPage,
+          pageSize,
+          onPageSizeChange: setPageSize,
         }}
       />
       </>}

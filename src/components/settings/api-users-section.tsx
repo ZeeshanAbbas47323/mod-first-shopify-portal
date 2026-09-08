@@ -51,7 +51,7 @@ import {
   type WebsiteSettingRow,
 } from "@/lib/admin-api";
 
-const PAGE_SIZE = 10;
+const DEFAULT_PAGE_SIZE = 10;
 
 const STATUS_ITEMS: Record<string, string> = {
   all: "All statuses",
@@ -69,6 +69,7 @@ export function ApiUsersSection() {
   const [rows, setRows] = React.useState<ApiUserRow[]>([]);
   const [loading, setLoading] = React.useState(true);
   const [page, setPage] = React.useState(0);
+  const [pageSize, setPageSize] = React.useState<number>(DEFAULT_PAGE_SIZE);
   const [pageCount, setPageCount] = React.useState(1);
   const [total, setTotal] = React.useState(0);
 
@@ -112,9 +113,9 @@ export function ApiUsersSection() {
     setLoading(true);
     listApiUsers({
       page: page + 1,
-      limit: PAGE_SIZE,
+      limit: pageSize,
       filters: {
-        name: debounced || undefined,
+        name: debounced ? { contains: debounced } : undefined,
         is_active: status === "all" ? undefined : status === "active",
       },
     })
@@ -133,7 +134,7 @@ export function ApiUsersSection() {
     return () => {
       cancelled = true;
     };
-  }, [page, debounced, status, refreshKey]);
+  }, [page, pageSize, debounced, status, refreshKey]);
 
   const branchName = React.useCallback(
     (row: ApiUserRow) =>
@@ -299,7 +300,14 @@ export function ApiUsersSection() {
           setEditing(row);
           setDialogOpen(true);
         }}
-        serverPagination={{ pageIndex: page, pageCount, total, onPageChange: setPage }}
+        serverPagination={{
+          pageIndex: page,
+          pageCount,
+          total,
+          onPageChange: setPage,
+          pageSize,
+          onPageSizeChange: setPageSize,
+        }}
       />
 
       <ApiUserDialog

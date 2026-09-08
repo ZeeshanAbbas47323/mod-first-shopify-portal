@@ -33,7 +33,7 @@ import {
 } from "@/lib/admin-api";
 import { STATUS_TONES } from "@/app/(admin)/inquiries/page";
 
-const PAGE_SIZE = 15;
+const DEFAULT_PAGE_SIZE = 15;
 
 const STATUS_FILTER_ITEMS: Record<string, string> = {
   all: "All statuses",
@@ -59,6 +59,7 @@ export default function Net30ApplicationsPage() {
   const [rows, setRows] = React.useState<Net30ApplicationRow[]>([]);
   const [loading, setLoading] = React.useState(true);
   const [page, setPage] = React.useState(0);
+  const [pageSize, setPageSize] = React.useState<number>(DEFAULT_PAGE_SIZE);
   const [pageCount, setPageCount] = React.useState(1);
   const [total, setTotal] = React.useState(0);
 
@@ -84,10 +85,10 @@ export default function Net30ApplicationsPage() {
     setLoading(true);
     listNet30Applications({
       page: page + 1,
-      limit: PAGE_SIZE,
+      limit: pageSize,
       dateRange,
       filters: {
-        company_name: debounced || undefined,
+        company_name: debounced ? { contains: debounced } : undefined,
         status: status === "all" ? undefined : status,
       },
     })
@@ -106,7 +107,7 @@ export default function Net30ApplicationsPage() {
     return () => {
       cancelled = true;
     };
-  }, [page, debounced, status, dateRange, refreshKey]);
+  }, [page, pageSize, debounced, status, dateRange, refreshKey]);
 
   const columns = React.useMemo<ColumnDef<Net30ApplicationRow>[]>(
     () => [
@@ -229,7 +230,14 @@ export default function Net30ApplicationsPage() {
         data={rows}
         loading={loading}
         onRowClick={setDetail}
-        serverPagination={{ pageIndex: page, pageCount, total, onPageChange: setPage }}
+        serverPagination={{
+          pageIndex: page,
+          pageCount,
+          total,
+          onPageChange: setPage,
+          pageSize,
+          onPageSizeChange: setPageSize,
+        }}
       />
 
       <ApplicationDialog

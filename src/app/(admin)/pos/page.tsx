@@ -103,7 +103,8 @@ export default function PosRegisterPage() {
     listProducts({
       page: 1,
       limit: 24,
-      filters: { title: debounced || undefined, status: "published" },
+      search: debounced || undefined,
+      filters: { status: "published" },
     })
       .then((res) => !cancelled && setProducts(res.rows))
       .catch((error) => {

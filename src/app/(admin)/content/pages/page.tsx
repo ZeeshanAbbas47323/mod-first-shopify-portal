@@ -18,13 +18,14 @@ import { DataTable } from "@/components/data-table";
 import { DateRangePicker } from "@/components/date-range-picker";
 import { StatusBadge } from "@/components/status-badge";
 import { apiErrorMessage } from "@/lib/auth-api";
+import { usePermissions } from "@/stores/menu-store";
 import {
   CONTENT_TYPE_LABELS,
   listContentPages,
   type ContentPageRow,
 } from "@/lib/admin-api";
 
-const PAGE_SIZE = 15;
+const DEFAULT_PAGE_SIZE = 15;
 
 const TYPE_FILTER_ITEMS: Record<string, string> = {
   all: "All types",
@@ -108,11 +109,13 @@ const columns: ColumnDef<ContentPageRow>[] = [
 ];
 
 export default function ContentPagesPage() {
+  const permissions = usePermissions("/content/pages");
   const router = useRouter();
 
   const [rows, setRows] = React.useState<ContentPageRow[]>([]);
   const [loading, setLoading] = React.useState(true);
   const [page, setPage] = React.useState(0);
+  const [pageSize, setPageSize] = React.useState<number>(DEFAULT_PAGE_SIZE);
   const [pageCount, setPageCount] = React.useState(1);
   const [total, setTotal] = React.useState(0);
 
@@ -137,11 +140,11 @@ export default function ContentPagesPage() {
     setLoading(true);
     listContentPages({
       page: page + 1,
-      limit: PAGE_SIZE,
+      limit: pageSize,
       dateRange,
       filters: {
-        title: debounced.search || undefined,
-        slug: debounced.slug || undefined,
+        title: debounced.search ? { contains: debounced.search } : undefined,
+        slug: debounced.slug ? { contains: debounced.slug } : undefined,
         content_type: contentType === "all" ? undefined : contentType,
         is_active: status === "all" ? undefined : status === "active",
       },
@@ -161,7 +164,7 @@ export default function ContentPagesPage() {
     return () => {
       cancelled = true;
     };
-  }, [page, debounced, contentType, status, dateRange]);
+  }, [page, pageSize, debounced, contentType, status, dateRange]);
 
   return (
     <div className="flex flex-col gap-4">
@@ -172,10 +175,12 @@ export default function ContentPagesPage() {
             Every storefront page — content, SEO and visibility.
           </p>
         </div>
-        <Button render={<Link href="/content/pages/new" />}>
-          <Plus className="size-4" />
-          Add page
-        </Button>
+        {permissions.can_create && (
+          <Button render={<Link href="/content/pages/new" />}>
+            <Plus className="size-4" />
+            Add page
+          </Button>
+        )}
       </div>
 
       <div className="flex flex-wrap items-center gap-2">
@@ -239,6 +244,8 @@ export default function ContentPagesPage() {
           pageCount,
           total,
           onPageChange: setPage,
+          pageSize,
+          onPageSizeChange: setPageSize,
         }}
       />
     </div>

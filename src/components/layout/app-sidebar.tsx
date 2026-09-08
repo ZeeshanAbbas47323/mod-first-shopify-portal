@@ -1,5 +1,6 @@
 "use client";
 
+import * as React from "react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import {
@@ -32,7 +33,8 @@ import {
   SidebarMenuSubButton,
   SidebarMenuSubItem,
 } from "@/components/ui/sidebar";
-import { orders } from "@/lib/mock-data";
+import { useMenuStore } from "@/stores/menu-store";
+import type { NavMenuNode } from "@/lib/admin-api";
 
 interface NavChild {
   title: string;
@@ -47,13 +49,33 @@ interface NavItem {
   children?: NavChild[];
 }
 
-const mainNav: NavItem[] = [
+/** Icon names stored on Menu.icon resolve through here. */
+const ICONS: Record<string, React.ComponentType<{ className?: string }>> = {
+  BarChart3,
+  FileText,
+  Globe,
+  Inbox,
+  Home,
+  Megaphone,
+  Package,
+  Settings,
+  ShoppingCart,
+  Store,
+  Star,
+  Tag,
+  Users,
+};
+
+/**
+ * Shown until the database menus arrive, and if that request fails. Keeping it
+ * means a navigation outage never leaves someone staring at an empty shell.
+ */
+const fallbackNav: NavItem[] = [
   { title: "Home", href: "/", icon: Home },
   {
     title: "Orders",
     href: "/orders",
     icon: ShoppingCart,
-    badge: orders.filter((o) => o.fulfillmentStatus === "Unfulfilled").length,
     children: [
       { title: "Drafts", href: "/orders/drafts" },
       { title: "Shipping labels", href: "/orders/shipping-labels" },
@@ -114,8 +136,40 @@ const mainNav: NavItem[] = [
 const itemClasses =
   "cursor-pointer font-medium transition-colors duration-150 hover:bg-[#e0e0e0] active:bg-[#e0e0e0] data-active:bg-white data-active:shadow-sm data-active:hover:bg-white";
 
+/** Settings sits in the footer, so it never belongs in the main list. */
+const FOOTER_ROUTE = "/settings";
+
+const routeOf = (node: NavMenuNode) => node.link_value || node.slug;
+
+/** Database menus → the shape this sidebar already knows how to render. */
+function toNavItems(menus: NavMenuNode[]): NavItem[] {
+  return menus
+    .filter((menu) => routeOf(menu) !== FOOTER_ROUTE)
+    .map((menu) => ({
+      title: menu.name,
+      href: routeOf(menu),
+      icon: ICONS[menu.icon ?? ""] ?? Package,
+      children: (menu.children ?? []).map((child) => ({
+        title: child.name,
+        href: routeOf(child),
+      })),
+    }))
+    .filter((item) => !!item.href);
+}
+
 export function AppSidebar() {
   const pathname = usePathname();
+  const { menus, loaded, load, permissions } = useMenuStore();
+
+  React.useEffect(() => {
+    if (!loaded) void load();
+  }, [loaded, load]);
+
+  // Until the menus land — or if the request failed — use the built-in list.
+  const mainNav = menus.length ? toNavItems(menus) : fallbackNav;
+
+  // Only hide Settings once we actually know the user can't see it.
+  const showSettings = !loaded || !menus.length || !!permissions[FOOTER_ROUTE];
 
   return (
     <Sidebar
@@ -174,20 +228,22 @@ export function AppSidebar() {
           </SidebarGroupContent>
         </SidebarGroup>
       </SidebarContent>
-      <SidebarFooter>
-        <SidebarMenu>
-          <SidebarMenuItem>
-            <SidebarMenuButton
-              render={<Link href="/settings" />}
-              isActive={pathname.startsWith("/settings")}
-              className={itemClasses}
-            >
-              <Settings className="size-4" />
-              <span>Settings</span>
-            </SidebarMenuButton>
-          </SidebarMenuItem>
-        </SidebarMenu>
-      </SidebarFooter>
+      {showSettings && (
+        <SidebarFooter>
+          <SidebarMenu>
+            <SidebarMenuItem>
+              <SidebarMenuButton
+                render={<Link href="/settings" />}
+                isActive={pathname.startsWith("/settings")}
+                className={itemClasses}
+              >
+                <Settings className="size-4" />
+                <span>Settings</span>
+              </SidebarMenuButton>
+            </SidebarMenuItem>
+          </SidebarMenu>
+        </SidebarFooter>
+      )}
     </Sidebar>
   );
 }

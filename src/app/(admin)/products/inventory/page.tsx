@@ -29,7 +29,7 @@ import {
   type ProductCategoryRow,
 } from "@/lib/admin-api";
 
-const LOGS_PAGE_SIZE = 20;
+const DEFAULT_LOGS_PAGE_SIZE = 20;
 const DEFAULT_THRESHOLD = 5;
 
 const fmtN = (n?: number | null) =>
@@ -136,6 +136,7 @@ export default function InventoryPage() {
   const [logs, setLogs] = React.useState<InventoryLogRow[]>([]);
   const [logsLoading, setLogsLoading] = React.useState(false);
   const [logPage, setLogPage] = React.useState(0);
+  const [logPageSize, setLogPageSize] = React.useState<number>(DEFAULT_LOGS_PAGE_SIZE);
   const [logPageCount, setLogPageCount] = React.useState(1);
   const [logTotal, setLogTotal] = React.useState(0);
 
@@ -174,7 +175,7 @@ export default function InventoryPage() {
     if (tab !== "activity") return;
     let cancelled = false;
     setLogsLoading(true);
-    listInventoryLogs({ page: logPage + 1, limit: LOGS_PAGE_SIZE })
+    listInventoryLogs({ page: logPage + 1, limit: logPageSize })
       .then((res) => {
         if (cancelled) return;
         setLogs(res.rows);
@@ -540,6 +541,8 @@ export default function InventoryPage() {
             pageCount: logPageCount,
             total: logTotal,
             onPageChange: setLogPage,
+            pageSize: logPageSize,
+            onPageSizeChange: setLogPageSize,
           }}
         />
       )}
