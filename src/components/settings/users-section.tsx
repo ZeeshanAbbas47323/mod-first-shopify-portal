@@ -235,7 +235,8 @@ export function UsersSection() {
       dateRange,
       filters: {
         full_name: debouncedSearch ? { contains: debouncedSearch } : undefined,
-        role: role === "all" ? undefined : role,
+        // Staff only — customers have their own page.
+        role: role === "all" ? { nin: "customer" } : role,
         is_active: status === "all" ? undefined : status === "active",
       },
     })

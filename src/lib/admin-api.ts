@@ -3653,3 +3653,23 @@ export async function markAllNotificationsRead(): Promise<void> {
 export async function deleteNotification(id: number | string): Promise<void> {
   await api.delete(`notifications/${id}`);
 }
+
+// ─── Abandoned carts ──────────────────────────────────────────────────────────
+
+export interface AbandonedCartRow {
+  user_id: number;
+  user?: { id: number; full_name?: string; email?: string; phone?: string } | null;
+  item_count: number;
+  total_quantity: number;
+  cart_value: number;
+  last_activity_at?: string | null;
+  last_order_at?: string | null;
+  items?: Json[];
+}
+
+export async function listAbandonedCarts(
+  params: ListParams
+): Promise<ListResult<AbandonedCartRow>> {
+  const { data } = await api.post("cart-items/abandoned", buildBody(params));
+  return parseList<AbandonedCartRow>(data, params.limit);
+}

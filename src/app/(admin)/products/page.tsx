@@ -143,7 +143,12 @@ const columns: ColumnDef<ProductRow>[] = [
     cell: ({ row }) => {
       const v = row.original.vendor;
       if (!v) return "—";
-      if (typeof v === "object" && v !== null) return (v as { name?: string }).name ?? "—";
+      // The API's column is vendor_name; `name` is kept as a fallback for the
+      // other shapes this row type is reused with.
+      if (typeof v === "object" && v !== null) {
+        const o = v as { vendor_name?: string; name?: string };
+        return o.vendor_name ?? o.name ?? "—";
+      }
       return String(v);
     },
   },

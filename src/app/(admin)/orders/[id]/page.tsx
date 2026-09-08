@@ -356,7 +356,7 @@ export default function OrderDetailPage() {
                       <div className="flex size-12 shrink-0 items-center justify-center overflow-hidden rounded-lg border bg-muted">
                         {img ? (
                           // eslint-disable-next-line @next/next/no-img-element
-                          <img src={img} alt={title} className="size-full object-cover" />
+                          <img src={imgUrl(img)} alt={title} className="size-full object-cover" />
                         ) : (
                           <Package className="size-5 text-muted-foreground" />
                         )}

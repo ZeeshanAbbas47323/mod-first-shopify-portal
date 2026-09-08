@@ -17,7 +17,7 @@ import { DataTable } from "@/components/data-table";
 import { DateRangePicker } from "@/components/date-range-picker";
 import { StatusBadge } from "@/components/status-badge";
 import { apiErrorMessage } from "@/lib/auth-api";
-import { listUsers, USER_ROLES, type UserRow } from "@/lib/admin-api";
+import { listUsers, type UserRow } from "@/lib/admin-api";
 import type { DateRange } from "react-day-picker";
 
 const DEFAULT_PAGE_SIZE = 20;
@@ -67,14 +67,6 @@ const columns: ColumnDef<UserRow>[] = [
           </div>
         </div>
       );
-    },
-  },
-  {
-    accessorKey: "role",
-    header: "Role",
-    cell: ({ row }) => {
-      const r = row.getValue<string>("role") ?? "";
-      return <span className="capitalize text-sm">{r.replace(/_/g, " ")}</span>;
     },
   },
   {
@@ -135,18 +127,16 @@ export default function CustomersPage() {
   const [loading, setLoading] = React.useState(false);
 
   const [dateRange, setDateRange] = React.useState<DateRange | undefined>();
-  // This page lists store customers; the dropdown can widen it to other roles.
-  const [role, setRole] = React.useState("customer");
+  // Customers only. Staff accounts live under Settings → Users.
   const [isActive, setIsActive] = React.useState("all");
   const [searchInput, setSearchInput] = React.useState("");
   const [search, setSearch] = React.useState("");
 
-  React.useEffect(() => { setPage(1); }, [dateRange, role, isActive, search]);
+  React.useEffect(() => { setPage(1); }, [dateRange, isActive, search]);
 
   const load = React.useCallback(() => {
     setLoading(true);
-    const filters: Record<string, unknown> = {};
-    if (role !== "all") filters.role = role;
+    const filters: Record<string, unknown> = { role: "customer" };
     if (isActive !== "all") filters.is_active = isActive === "active";
     if (search) filters.full_name = search;
 
@@ -156,7 +146,7 @@ export default function CustomersPage() {
       })
       .catch((e) => toast.error(apiErrorMessage(e, "Couldn't load customers.")))
       .finally(() => setLoading(false));
-  }, [page, pageSize, dateRange, role, isActive, search]);
+  }, [page, pageSize, dateRange, isActive, search]);
 
   React.useEffect(() => { load(); }, [load]);
 
@@ -173,20 +163,6 @@ export default function CustomersPage() {
       {/* Filter bar */}
       <div className="flex flex-wrap items-center gap-2">
         <DateRangePicker value={dateRange} onChange={setDateRange} />
-
-        <Select value={role} onValueChange={(v) => setRole(v ?? "all")}>
-          <SelectTrigger className="h-9 w-44 bg-card">
-            <SelectValue placeholder="All roles" />
-          </SelectTrigger>
-          <SelectContent>
-            <SelectItem value="all">All roles</SelectItem>
-            {USER_ROLES.map((r) => (
-              <SelectItem key={r} value={r}>
-                {r.replace(/_/g, " ").replace(/\b\w/g, (c) => c.toUpperCase())}
-              </SelectItem>
-            ))}
-          </SelectContent>
-        </Select>
 
         <Select value={isActive} onValueChange={(v) => setIsActive(v ?? "all")}>
           <SelectTrigger className="h-9 w-36 bg-card">

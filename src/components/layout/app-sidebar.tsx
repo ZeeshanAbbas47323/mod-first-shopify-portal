@@ -6,7 +6,6 @@ import { usePathname } from "next/navigation";
 import {
   BarChart3,
   FileText,
-  Globe,
   Inbox,
   Home,
   Megaphone,
@@ -53,7 +52,6 @@ interface NavItem {
 const ICONS: Record<string, React.ComponentType<{ className?: string }>> = {
   BarChart3,
   FileText,
-  Globe,
   Inbox,
   Home,
   Megaphone,
@@ -88,7 +86,6 @@ const fallbackNav: NavItem[] = [
     icon: Package,
     children: [
       { title: "Categories", href: "/products/categories" },
-      { title: "Collections", href: "/products/collections" },
       { title: "Inventory", href: "/products/inventory" },
       { title: "Design uploads", href: "/products/designs" },
     ],
@@ -129,7 +126,6 @@ const fallbackNav: NavItem[] = [
     children: [{ title: "Net 30 applications", href: "/inquiries/net30" }],
   },
   { title: "Reviews", href: "/reviews", icon: Star },
-  { title: "Markets", href: "/markets", icon: Globe },
   { title: "Analytics", href: "/analytics", icon: BarChart3 },
 ];
 
@@ -159,17 +155,21 @@ function toNavItems(menus: NavMenuNode[]): NavItem[] {
 
 export function AppSidebar() {
   const pathname = usePathname();
-  const { menus, loaded, load, permissions } = useMenuStore();
+  const { menus, loaded, failed, load, permissions } = useMenuStore();
 
   React.useEffect(() => {
     if (!loaded) void load();
   }, [loaded, load]);
 
-  // Until the menus land — or if the request failed — use the built-in list.
-  const mainNav = menus.length ? toNavItems(menus) : fallbackNav;
+  // Showing the built-in list while the real one loads flashes menus the user
+  // may not be allowed to see, which then vanish. Render placeholders instead,
+  // and only fall back for real if the request actually failed.
+  const mainNav = menus.length ? toNavItems(menus) : failed ? fallbackNav : [];
+  const showSkeleton = !loaded && !menus.length;
 
-  // Only hide Settings once we actually know the user can't see it.
-  const showSettings = !loaded || !menus.length || !!permissions[FOOTER_ROUTE];
+  const showSettings = menus.length
+    ? !!permissions[FOOTER_ROUTE]
+    : failed || !loaded;
 
   return (
     <Sidebar
@@ -180,6 +180,12 @@ export function AppSidebar() {
         <SidebarGroup className="pt-3">
           <SidebarGroupContent>
             <SidebarMenu>
+              {showSkeleton &&
+                Array.from({ length: 8 }).map((_, i) => (
+                  <SidebarMenuItem key={`skeleton-${i}`}>
+                    <div className="mx-2 my-1 h-8 animate-pulse rounded-md bg-white/5" />
+                  </SidebarMenuItem>
+                ))}
               {mainNav.map((item) => {
                 const sectionActive =
                   item.href === "/"

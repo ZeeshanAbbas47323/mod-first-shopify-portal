@@ -19,6 +19,9 @@ interface MenuState {
   permissions: Record<string, MenuPermissions>;
   loading: boolean;
   loaded: boolean;
+  /** True only when the request failed, so the sidebar can tell "still loading"
+   *  from "could not load" and avoid flashing menus the user may not have. */
+  failed: boolean;
   load: () => Promise<void>;
   reset: () => void;
 }
@@ -42,21 +45,23 @@ export const useMenuStore = create<MenuState>()((set, get) => ({
   permissions: {},
   loading: false,
   loaded: false,
+  failed: false,
 
   load: async () => {
     if (get().loading) return;
     set({ loading: true });
     try {
       const menus = await fetchMyMenus();
-      set({ menus, permissions: flatten(menus), loading: false, loaded: true });
+      set({ menus, permissions: flatten(menus), loading: false, loaded: true, failed: false });
     } catch {
       // A navigation failure must not blank the shell — the sidebar falls back
       // to its built-in list and the user keeps working.
-      set({ loading: false, loaded: true });
+      set({ loading: false, loaded: true, failed: true });
     }
   },
 
-  reset: () => set({ menus: [], permissions: {}, loading: false, loaded: false }),
+  reset: () =>
+    set({ menus: [], permissions: {}, loading: false, loaded: false, failed: false }),
 }));
 
 /**

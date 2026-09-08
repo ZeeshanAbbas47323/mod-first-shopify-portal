@@ -1,6 +1,7 @@
 "use client";
 
 import * as React from "react";
+import Image from "next/image";
 import { useRouter } from "next/navigation";
 import {
   AppWindow,
@@ -287,7 +288,12 @@ export default function SettingsPage() {
           {/* Settings navigation */}
           <aside className="sticky top-8 hidden w-72 shrink-0 flex-col rounded-xl bg-card ring-1 ring-black/8 md:flex">
             <div className="px-4 pt-4 pb-2">
-              <p className="text-sm font-semibold">Mod First</p>
+              <Image
+                src="/images/branding/logo-dark.svg"
+                alt="ModFirst"
+                width={120}
+                height={26}
+              />
               <p className="text-xs text-muted-foreground">1 store</p>
             </div>
             <div className="px-3 pb-2">
