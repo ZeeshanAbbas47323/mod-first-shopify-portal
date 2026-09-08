@@ -1,17 +1,33 @@
 "use client";
 
 import * as React from "react";
+import { useRouter } from "next/navigation";
 import { format } from "date-fns";
 import { type ColumnDef } from "@tanstack/react-table";
-import { Search, X, Eye, Plus } from "lucide-react";
+import { Loader2, Package, Plus, Search, X } from "lucide-react";
 import { toast } from "sonner";
+import type { DateRange } from "react-day-picker";
 
 import { Button } from "@/components/ui/button";
 import { DataTable } from "@/components/data-table";
+import { DateRangePicker } from "@/components/date-range-picker";
+import {
+  Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle,
+} from "@/components/ui/dialog";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import {
+  Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
+} from "@/components/ui/select";
 import { StatusBadge } from "@/components/status-badge";
 import { apiErrorMessage } from "@/lib/auth-api";
 import {
+  createShipmentRate,
+  listCouriers,
+  listOrders,
   listShipments,
+  type CourierRow,
+  type OrderRow,
   type ShipmentRow,
 } from "@/lib/admin-api";
 
@@ -63,18 +79,10 @@ const columns: ColumnDef<ShipmentRow>[] = [
       return v ? format(new Date(v), "MMM d, yyyy") : "—";
     },
   },
-  {
-    id: "actions",
-    header: "",
-    cell: () => (
-      <Button variant="ghost" size="icon" className="size-8">
-        <Eye className="size-4" />
-      </Button>
-    ),
-  },
 ];
 
 export default function ShippingLabelsPage() {
+  const router = useRouter();
   const [page, setPage] = React.useState(1);
   const [pageSize, setPageSize] = React.useState<number>(DEFAULT_PAGE_SIZE);
   const [rows, setRows] = React.useState<ShipmentRow[]>([]);
@@ -83,18 +91,20 @@ export default function ShippingLabelsPage() {
   const [loading, setLoading] = React.useState(false);
   const [search, setSearch] = React.useState("");
   const [searchInput, setSearchInput] = React.useState("");
+  const [dateRange, setDateRange] = React.useState<DateRange | undefined>();
+  const [createOpen, setCreateOpen] = React.useState(false);
 
-  React.useEffect(() => { setPage(1); }, [search]);
+  React.useEffect(() => { setPage(1); }, [search, dateRange]);
 
   const load = React.useCallback(() => {
     setLoading(true);
-    listShipments({ page, limit: pageSize, search: search || undefined })
+    listShipments({ page, limit: pageSize, search: search || undefined, dateRange })
       .then(({ rows: r, total: t, totalPages: tp }) => {
         setRows(r); setTotal(t); setTotalPages(tp);
       })
       .catch((e) => toast.error(apiErrorMessage(e, "Couldn't load shipments.")))
       .finally(() => setLoading(false));
-  }, [page, pageSize, search]);
+  }, [page, pageSize, search, dateRange]);
 
   React.useEffect(() => { load(); }, [load]);
 
@@ -103,13 +113,13 @@ export default function ShippingLabelsPage() {
       {/* Header */}
       <div className="flex flex-wrap items-center justify-between gap-3">
         <h1 className="text-xl font-bold">Shipping & Delivery</h1>
-        <Button>
+        <Button onClick={() => setCreateOpen(true)}>
           <Plus className="size-4" /> Create shipment
         </Button>
       </div>
 
-      {/* Search bar */}
-      <div className="flex items-center gap-2">
+      {/* Search + date range */}
+      <div className="flex flex-wrap items-center gap-2">
         <div className="relative">
           <Search className="absolute left-2.5 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" />
           <input
@@ -132,6 +142,7 @@ export default function ShippingLabelsPage() {
         <Button size="sm" variant="outline" onClick={() => setSearch(searchInput)}>
           Go
         </Button>
+        <DateRangePicker value={dateRange} onChange={setDateRange} />
       </div>
 
       {/* Table */}
@@ -139,6 +150,7 @@ export default function ShippingLabelsPage() {
         columns={columns}
         data={rows}
         loading={loading}
+        onRowClick={(row) => router.push(`/orders/${row.order_id}`)}
         serverPagination={{
           pageIndex: page - 1,
           pageCount: totalPages,
@@ -148,6 +160,213 @@ export default function ShippingLabelsPage() {
           onPageSizeChange: setPageSize,
         }}
       />
+
+      <CreateShipmentDialog
+        open={createOpen}
+        onOpenChange={setCreateOpen}
+        onCreated={load}
+      />
+    </div>
+  );
+}
+
+// ─── Create shipment ────────────────────────────────────────────────────────
+
+function CreateShipmentDialog({
+  open,
+  onOpenChange,
+  onCreated,
+}: {
+  open: boolean;
+  onOpenChange: (v: boolean) => void;
+  onCreated: () => void;
+}) {
+  const [order, setOrder] = React.useState<OrderRow | null>(null);
+  const [couriers, setCouriers] = React.useState<CourierRow[]>([]);
+  const [courierId, setCourierId] = React.useState("");
+  const [saving, setSaving] = React.useState(false);
+
+  React.useEffect(() => {
+    if (!open) return;
+    setOrder(null);
+    listCouriers({ page: 1, limit: 100, filters: { is_active: true } })
+      .then((res) => {
+        setCouriers(res.rows);
+        setCourierId(res.rows[0] ? String(res.rows[0].id) : "");
+      })
+      .catch(() => setCouriers([]));
+  }, [open]);
+
+  const submit = async () => {
+    if (!order || !courierId) return;
+    setSaving(true);
+    try {
+      // Address and package details are optional — the backend falls back to
+      // the order's own shipping address and line items when they're omitted.
+      toast.success(await createShipmentRate({ courier_id: Number(courierId), order_id: order.id }));
+      onOpenChange(false);
+      onCreated();
+    } catch (err) {
+      toast.error(apiErrorMessage(err, "Couldn't create the shipment."));
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  return (
+    <Dialog open={open} onOpenChange={onOpenChange}>
+      <DialogContent className="sm:max-w-md">
+        <DialogHeader>
+          <DialogTitle>Create shipment</DialogTitle>
+          <DialogDescription>
+            Rates and a label are requested from the courier using the order&apos;s
+            own shipping address and items.
+          </DialogDescription>
+        </DialogHeader>
+
+        <div className="space-y-4">
+          <div className="space-y-1.5">
+            <Label>Order</Label>
+            {order ? (
+              <div className="flex items-center justify-between rounded-lg border border-border p-2.5">
+                <div className="min-w-0">
+                  <p className="truncate text-sm font-medium">
+                    {order.order_number ?? `#${order.id}`}
+                  </p>
+                  <p className="truncate text-xs text-muted-foreground">
+                    {typeof order.customer === "string"
+                      ? order.customer
+                      : order.customer?.full_name ?? order.email ?? "—"}
+                  </p>
+                </div>
+                <button
+                  type="button"
+                  aria-label="Change order"
+                  onClick={() => setOrder(null)}
+                  className="rounded p-1 text-muted-foreground hover:bg-muted"
+                >
+                  <X className="size-4" />
+                </button>
+              </div>
+            ) : (
+              <OrderSearch onPick={setOrder} />
+            )}
+          </div>
+
+          <div className="space-y-1.5">
+            <Label>Courier</Label>
+            <Select
+              items={Object.fromEntries(couriers.map((c) => [String(c.id), c.name]))}
+              value={courierId}
+              onValueChange={(v) => setCourierId(v as string)}
+            >
+              <SelectTrigger className="w-full">
+                <SelectValue placeholder="Select a courier" />
+              </SelectTrigger>
+              <SelectContent className="max-h-64">
+                {couriers.map((c) => (
+                  <SelectItem key={c.id} value={String(c.id)}>
+                    {c.name}
+                    {c.code ? ` · ${c.code}` : ""}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+            {couriers.length === 0 && (
+              <p className="text-xs text-destructive">
+                No active couriers — add one under Settings → Couriers.
+              </p>
+            )}
+          </div>
+        </div>
+
+        <DialogFooter>
+          <Button variant="outline" onClick={() => onOpenChange(false)}>
+            Cancel
+          </Button>
+          <Button onClick={submit} disabled={!order || !courierId || saving}>
+            {saving && <Loader2 className="size-4 animate-spin" />}
+            {saving ? "Creating…" : "Create shipment"}
+          </Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
+  );
+}
+
+function OrderSearch({ onPick }: { onPick: (o: OrderRow) => void }) {
+  const [search, setSearch] = React.useState("");
+  const [results, setResults] = React.useState<OrderRow[]>([]);
+  const [searching, setSearching] = React.useState(false);
+  const [open, setOpen] = React.useState(false);
+
+  React.useEffect(() => {
+    const term = search.trim();
+    if (!term) {
+      setResults([]);
+      setSearching(false);
+      return;
+    }
+    setSearching(true);
+    const t = setTimeout(() => {
+      listOrders({ page: 1, limit: 8, search: term })
+        .then((res) => setResults(res.rows))
+        .catch(() => setResults([]))
+        .finally(() => setSearching(false));
+    }, 350);
+    return () => clearTimeout(t);
+  }, [search]);
+
+  return (
+    <div className="relative">
+      <Search className="absolute top-1/2 left-2.5 size-4 -translate-y-1/2 text-muted-foreground" />
+      <Input
+        value={search}
+        onChange={(e) => {
+          setSearch(e.target.value);
+          setOpen(true);
+        }}
+        onFocus={() => setOpen(true)}
+        placeholder="Search by order number, name, email or phone"
+        className="pl-8"
+      />
+      {open && search.trim() !== "" && (
+        <div className="absolute z-20 mt-1 w-full overflow-hidden rounded-lg border border-border bg-card shadow-md">
+          {searching ? (
+            <p className="flex items-center gap-2 px-3 py-2.5 text-sm text-muted-foreground">
+              <Loader2 className="size-3.5 animate-spin" />
+              Searching…
+            </p>
+          ) : results.length === 0 ? (
+            <p className="px-3 py-2.5 text-sm text-muted-foreground">
+              No order matches “{search.trim()}”.
+            </p>
+          ) : (
+            results.map((o) => (
+              <button
+                key={o.id}
+                type="button"
+                onClick={() => {
+                  onPick(o);
+                  setOpen(false);
+                  setSearch("");
+                }}
+                className="flex w-full items-center gap-2 px-3 py-2 text-left text-sm hover:bg-muted"
+              >
+                <Package className="size-3.5 shrink-0 text-muted-foreground" />
+                <span className="min-w-0 flex-1 truncate">
+                  <span className="font-medium">{o.order_number ?? `#${o.id}`}</span>
+                  <span className="block truncate text-xs text-muted-foreground">
+                    {typeof o.customer === "string"
+                      ? o.customer
+                      : o.customer?.full_name ?? o.email ?? "—"}
+                  </span>
+                </span>
+              </button>
+            ))
+          )}
+        </div>
+      )}
     </div>
   );
 }

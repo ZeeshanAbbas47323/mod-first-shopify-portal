@@ -937,15 +937,22 @@ export async function listProducts(
         | number
         | undefined;
 
-    // Stock lives per variant once a product has any, so the product-level
-    // column has to add them up — otherwise every variant product reads as
-    // out of stock.
+    // Stock is never a plain `quantity` column — it lives on the separate
+    // Inventory row, one-to-one per variant (`variant.inventory.quantity`) or,
+    // for a product with no variants, one product-level row
+    // (`product.inventory[0].quantity`). Reading `v.quantity` directly (as this
+    // used to) is always undefined, which is why every variant product showed
+    // "Out of stock" regardless of its real stock.
     const variantQty = variants.length
-      ? variants.reduce((sum, v) => sum + (Number(v.quantity) || 0), 0)
+      ? variants.reduce((sum, v) => {
+          const inv = v.inventory as Json | null | undefined;
+          return sum + (Number(inv?.quantity ?? v.quantity) || 0);
+        }, 0)
       : undefined;
+    const productInventory = Array.isArray(r.inventory) ? (r.inventory as Json[])[0] : r.inventory;
     const productQty = [
-      r.quantity, r.total_quantity, r.stock, r.stock_quantity,
-      r.available_quantity, r.inventory_quantity,
+      productInventory?.quantity, r.quantity, r.total_quantity, r.stock,
+      r.stock_quantity, r.available_quantity, r.inventory_quantity,
     ].find((v) => v != null);
     const quantity =
       variantQty != null && (productQty == null || Number(productQty) === 0)
@@ -3174,8 +3181,18 @@ export interface CartItemRow {
   [k: string]: unknown;
 }
 
-export async function listCartItems(params: ListParams): Promise<ListResult<CartItemRow>> {
-  const { data } = await api.post("cart-items/list", buildBody(params));
+/**
+ * Staff view of one customer's cart (Customers → detail). `cart-items/list` is
+ * customer-only — it needs storefront API-key headers this client never sends
+ * and always scopes to the caller's own cart — so this goes through the admin
+ * endpoint instead, with `user_id` required and sent at the top level rather
+ * than inside `filters`.
+ */
+export async function listCartItems(
+  params: ListParams & { userId: number | string }
+): Promise<ListResult<CartItemRow>> {
+  const body = { ...buildBody(params), user_id: params.userId };
+  const { data } = await api.post("cart-items/admin/list", body);
   return parseList<CartItemRow>(data, params.limit);
 }
 
@@ -3434,6 +3451,7 @@ export interface DraftListParams {
   page: number;
   limit: number;
   search?: string;
+  dateRange?: DateRange;
   sortBy?: "created_at" | "updated_at" | "draft_number" | "total_amount" | "status";
   sortOrder?: "asc" | "desc";
   filters?: Json;
@@ -3443,6 +3461,8 @@ export async function listDraftOrders(
   params: DraftListParams
 ): Promise<ListResult<DraftOrderRow>> {
   const body: Json = { page: params.page, limit: params.limit };
+  if (params.dateRange?.from) body.startDate = format(params.dateRange.from, "yyyy-MM-dd");
+  if (params.dateRange?.to) body.endDate = format(params.dateRange.to, "yyyy-MM-dd");
   if (params.search) body.search = params.search;
   if (params.sortBy) body.sortBy = params.sortBy;
   if (params.sortOrder) body.sortOrder = params.sortOrder;
@@ -3652,6 +3672,56 @@ export async function markAllNotificationsRead(): Promise<void> {
 
 export async function deleteNotification(id: number | string): Promise<void> {
   await api.delete(`notifications/${id}`);
+}
+
+/** Staff roles a broadcast can target — matches the API's own enum. */
+export const NOTIFIABLE_ROLES: Record<string, string> = {
+  super_admin: "Super admin",
+  admin: "Admin",
+  manager: "Manager",
+  designer: "Designer",
+  sales: "Sales",
+  support: "Support",
+  content_writer: "Content writer",
+  production: "Production",
+  accountant: "Accountant",
+  pos_user: "POS user",
+};
+
+export interface AdminNotificationRow extends NotificationRow {
+  recipient?: { id: number; full_name: string; role: string } | null;
+}
+
+/** Every notification sent, across every recipient — Settings → Notifications. */
+export async function listNotifications(params: {
+  page: number;
+  limit: number;
+  search?: string;
+}): Promise<NotificationListResult> {
+  const body: Json = { page: params.page, limit: params.limit };
+  if (params.search) body.filters = { search: params.search };
+  const { data } = await api.post("notifications/list", body);
+  const rows = (data?.payload ?? data?.data ?? []) as AdminNotificationRow[];
+  const pagination = data?.pagination ?? {};
+  const summary = data?.summary ?? {};
+  return {
+    rows: Array.isArray(rows) ? rows : [],
+    total: pagination.total ?? summary.total ?? rows.length,
+    totalPages:
+      pagination.totalPages ?? Math.max(1, Math.ceil((pagination.total ?? 0) / params.limit)),
+    unreadCount: summary.unread_count ?? 0,
+  };
+}
+
+/** Broadcast a notification to whole roles, specific staff, or both. */
+export async function sendNotification(body: {
+  title: string;
+  body: string;
+  roles?: string[];
+  user_ids?: number[];
+}): Promise<string> {
+  const { data } = await api.post("notifications", body);
+  return (data?.message as string) ?? "Notification sent.";
 }
 
 // ─── Abandoned carts ──────────────────────────────────────────────────────────

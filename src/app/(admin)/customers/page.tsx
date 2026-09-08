@@ -4,7 +4,7 @@ import * as React from "react";
 import { useRouter } from "next/navigation";
 import { format } from "date-fns";
 import { type ColumnDef } from "@tanstack/react-table";
-import { Download, Search, X } from "lucide-react";
+import { Download, Loader2, Search, Unlock, X } from "lucide-react";
 import { toast } from "sonner";
 
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
@@ -17,7 +17,8 @@ import { DataTable } from "@/components/data-table";
 import { DateRangePicker } from "@/components/date-range-picker";
 import { StatusBadge } from "@/components/status-badge";
 import { apiErrorMessage } from "@/lib/auth-api";
-import { listUsers, type UserRow } from "@/lib/admin-api";
+import { usePermissions } from "@/stores/menu-store";
+import { listUsers, unlockUser, type UserRow } from "@/lib/admin-api";
 import type { DateRange } from "react-day-picker";
 
 const DEFAULT_PAGE_SIZE = 20;
@@ -28,7 +29,12 @@ const fmt$ = (n?: number | null) =>
 const initials = (name: string) =>
   name.split(/\s+/).map((p) => p[0] ?? "").join("").slice(0, 2).toUpperCase() || "??";
 
-const columns: ColumnDef<UserRow>[] = [
+function buildColumns(
+  canEdit: boolean,
+  unlockingId: string | number | null,
+  onUnlock: (row: UserRow) => void
+): ColumnDef<UserRow>[] {
+  return [
   {
     id: "select",
     header: ({ table }) => (
@@ -87,10 +93,34 @@ const columns: ColumnDef<UserRow>[] = [
   {
     accessorKey: "is_locked",
     header: "Locked",
-    cell: ({ row }) =>
-      row.getValue("is_locked") ? (
-        <StatusBadge status="Locked" tone="critical" />
-      ) : null,
+    cell: ({ row }) => {
+      if (!row.getValue("is_locked")) return null;
+      const busy = unlockingId === row.original.id;
+      return (
+        <div className="flex items-center gap-2">
+          <StatusBadge status="Locked" tone="critical" />
+          {canEdit && (
+            <Button
+              size="sm"
+              variant="ghost"
+              className="h-7 px-2 text-xs"
+              disabled={busy}
+              onClick={(e) => {
+                e.stopPropagation();
+                onUnlock(row.original);
+              }}
+            >
+              {busy ? (
+                <Loader2 className="size-3.5 animate-spin" />
+              ) : (
+                <Unlock className="size-3.5" />
+              )}
+              Unlock
+            </Button>
+          )}
+        </div>
+      );
+    },
   },
   {
     accessorKey: "total_orders",
@@ -115,10 +145,13 @@ const columns: ColumnDef<UserRow>[] = [
       return v ? format(new Date(v), "MMM d, yyyy") : "—";
     },
   },
-];
+  ];
+}
 
 export default function CustomersPage() {
   const router = useRouter();
+  const permissions = usePermissions("/customers");
+  const [unlockingId, setUnlockingId] = React.useState<string | number | null>(null);
   const [page, setPage] = React.useState(1);
   const [pageSize, setPageSize] = React.useState<number>(DEFAULT_PAGE_SIZE);
   const [rows, setRows] = React.useState<UserRow[]>([]);
@@ -149,6 +182,23 @@ export default function CustomersPage() {
   }, [page, pageSize, dateRange, isActive, search]);
 
   React.useEffect(() => { load(); }, [load]);
+
+  const handleUnlock = async (row: UserRow) => {
+    setUnlockingId(row.id);
+    try {
+      toast.success(await unlockUser(row.id));
+      load();
+    } catch (error) {
+      toast.error(apiErrorMessage(error, "Couldn't unlock the customer."));
+    } finally {
+      setUnlockingId(null);
+    }
+  };
+
+  const columns = React.useMemo(
+    () => buildColumns(!!permissions.can_edit, unlockingId, handleUnlock),
+    [permissions.can_edit, unlockingId]
+  );
 
   return (
     <div className="flex flex-col gap-4">

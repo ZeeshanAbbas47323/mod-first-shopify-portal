@@ -21,8 +21,8 @@ function Skeleton() {
   return (
     <div className="flex flex-col gap-5 animate-pulse">
       <div className="h-8 w-48 rounded-lg bg-muted" />
-      <div className="grid gap-5 lg:grid-cols-[1fr_320px]">
-        <div className="space-y-4">
+      <div className="grid gap-5 lg:grid-cols-[minmax(0,1fr)_320px]">
+        <div className="min-w-0 space-y-4">
           <div className="h-48 rounded-xl bg-muted" />
           <div className="h-64 rounded-xl bg-muted" />
         </div>

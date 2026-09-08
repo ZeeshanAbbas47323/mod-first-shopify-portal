@@ -4,31 +4,21 @@ import * as React from "react";
 import Image from "next/image";
 import { useRouter } from "next/navigation";
 import {
-  AppWindow,
   Bell,
   Building2,
-  CreditCard,
   Eye,
   EyeOff,
-  FileText,
-  Globe,
-  Landmark,
-  Languages,
   ListTree,
   Loader2,
   MapPin,
-  Package,
   Layers,
   History,
   KeyRound,
   LockKeyhole,
   Palette,
-  Percent,
   Ruler,
   Search,
-  Share2,
   ShieldCheck,
-  ShoppingCart,
   Store,
   Truck,
   UserRound,
@@ -56,6 +46,7 @@ import { WebsiteSettingsSection } from "@/components/settings/website-settings-s
 import { ShippingSection } from "@/components/settings/shipping-section";
 import { CouriersSection } from "@/components/settings/couriers-section";
 import { PickupLocationsSection } from "@/components/settings/pickup-locations-section";
+import { NotificationsSection } from "@/components/settings/notifications-section";
 import { useAuthStore } from "@/stores/auth-store";
 import { cn } from "@/lib/utils";
 import { useForm } from "react-hook-form";
@@ -83,7 +74,8 @@ type SectionKey =
   | "activity"
   | "shipping"
   | "couriers"
-  | "pickup-locations";
+  | "pickup-locations"
+  | "notifications";
 
 const settingsNav: {
   label: string;
@@ -102,23 +94,10 @@ const settingsNav: {
   { label: "Menu rights", icon: ShieldCheck, key: "menu-rights" },
   { label: "API users", icon: KeyRound, key: "api-users" },
   { label: "Activity log", icon: History, key: "activity" },
-  { label: "Plan", icon: Package },
-  { label: "Payments", icon: CreditCard },
-  { label: "Checkout", icon: ShoppingCart },
-  { label: "Customer accounts", icon: UserRound },
   { label: "Shipping and delivery", icon: Truck, key: "shipping" },
   { label: "Couriers", icon: Truck, key: "couriers" },
   { label: "Pickup locations", icon: MapPin, key: "pickup-locations" },
-  { label: "Taxes and duties", icon: Percent },
-  { label: "Locations", icon: MapPin },
-  { label: "Apps", icon: AppWindow },
-  { label: "Sales channels", icon: Share2 },
-  { label: "Domains", icon: Globe },
-  { label: "Notifications", icon: Bell },
-  { label: "Languages", icon: Languages },
-  { label: "Customer privacy", icon: ShieldCheck },
-  { label: "Policies", icon: FileText },
-  { label: "Billing", icon: Landmark },
+  { label: "Notifications", icon: Bell, key: "notifications" },
 ];
 
 const sectionMeta: Record<
@@ -140,6 +119,7 @@ const sectionMeta: Record<
   shipping: { title: "Shipping & Delivery", icon: Truck },
   couriers: { title: "Couriers", icon: Truck },
   "pickup-locations": { title: "Pickup Locations", icon: MapPin },
+  notifications: { title: "Notifications", icon: Bell },
 };
 
 function ChangePasswordSection() {
@@ -388,6 +368,7 @@ export default function SettingsPage() {
             {section === "shipping" && <ShippingSection />}
             {section === "couriers" && <CouriersSection />}
             {section === "pickup-locations" && <PickupLocationsSection />}
+            {section === "notifications" && <NotificationsSection />}
           </div>
         </div>
       </div>

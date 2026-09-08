@@ -47,9 +47,18 @@ import {
   TableRow,
 } from "@/components/ui/table";
 
-/** "fulfillmentStatus" → "Fulfillment status" */
+/**
+ * "fulfillmentStatus" → "Fulfillment status", "order_number" → "Order number".
+ * Column ids come from `accessorKey`, which is a raw API field name — some
+ * camelCase, some snake_case — so both need splitting or the picker showed
+ * "Order_number" verbatim.
+ */
 function humanizeColumnId(id: string) {
-  const spaced = id.replace(/([a-z])([A-Z])/g, "$1 $2").toLowerCase();
+  const spaced = id
+    .replace(/([a-z])([A-Z])/g, "$1 $2")
+    .replace(/_/g, " ")
+    .toLowerCase()
+    .trim();
   return spaced.charAt(0).toUpperCase() + spaced.slice(1);
 }
 

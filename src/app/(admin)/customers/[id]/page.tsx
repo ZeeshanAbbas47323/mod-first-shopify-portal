@@ -76,7 +76,7 @@ export default function CustomerDetailPage() {
     listAddresses({ page: 1, limit: 20, filters: { user_id: Number(id) } })
       .then((res) => !cancelled && setAddresses(res.rows))
       .catch(() => {});
-    listCartItems({ page: 1, limit: 20, filters: { user_id: Number(id) } })
+    listCartItems({ page: 1, limit: 20, userId: Number(id) })
       .then((res) => !cancelled && setCart(res.rows))
       .catch(() => {});
     listWishlists({ page: 1, limit: 20, filters: { user_id: Number(id) } })
@@ -145,9 +145,9 @@ export default function CustomerDetailPage() {
         </div>
       </div>
 
-      <div className="grid gap-4 lg:grid-cols-[1fr_340px]">
+      <div className="grid gap-4 lg:grid-cols-[minmax(0,1fr)_340px]">
         {/* ── Left ── */}
-        <div className="flex flex-col gap-4">
+        <div className="flex min-w-0 flex-col gap-4">
           {/* Orders */}
           <Card>
             <CardHeader className="flex-row items-center gap-2 pb-3">

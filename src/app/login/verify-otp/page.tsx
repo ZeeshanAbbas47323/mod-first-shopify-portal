@@ -89,14 +89,14 @@ function VerifyOtpForm() {
   };
 
   return (
-    <AuthShell>
-      <h1 className="text-center text-xl font-semibold text-foreground">
-        Enter verification code
-      </h1>
-      <p className="mt-1 mb-6 text-center text-sm text-muted-foreground">
-        We sent a 6-digit code to <span className="font-medium">{email}</span>
-      </p>
-
+    <AuthShell
+      title="Enter verification code"
+      subtitle={
+        <>
+          We sent a 6-digit code to <span className="font-medium">{email}</span>
+        </>
+      }
+    >
       <OtpInput
         value={otp}
         onChange={setOtp}

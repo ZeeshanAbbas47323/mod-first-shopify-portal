@@ -382,9 +382,13 @@ export function DraftOrderForm({ draft }: { draft?: DraftOrderRow }) {
         </div>
       )}
 
-      <div className={cn("grid gap-4 lg:grid-cols-[1fr_340px]", locked && "pointer-events-none opacity-70")}>
+      <div className={cn("grid gap-4 lg:grid-cols-[minmax(0,1fr)_340px]", locked && "pointer-events-none opacity-70")}>
         {/* ── Left ── */}
-        <div className="flex flex-col gap-4">
+        {/* `min-w-0`: a grid item's default min-width is its content's natural
+            width, not 0, so a normal row (product title + price + qty inputs)
+            was pushing this column — and the whole page — wider than the
+            viewport, showing as a stray horizontal scrollbar. */}
+        <div className="flex min-w-0 flex-col gap-4">
           {/* Products */}
           <Card>
             <CardHeader className="flex-row items-center gap-2 pb-3">

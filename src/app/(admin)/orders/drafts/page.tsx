@@ -7,6 +7,7 @@ import { type ColumnDef } from "@tanstack/react-table";
 import { format } from "date-fns";
 import { Plus, Search } from "lucide-react";
 import { toast } from "sonner";
+import type { DateRange } from "react-day-picker";
 
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -14,6 +15,7 @@ import {
   Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
 } from "@/components/ui/select";
 import { DataTable } from "@/components/data-table";
+import { DateRangePicker } from "@/components/date-range-picker";
 import { StatusBadge, type BadgeTone } from "@/components/status-badge";
 import { apiErrorMessage } from "@/lib/auth-api";
 import { usePermissions } from "@/stores/menu-store";
@@ -64,6 +66,9 @@ export default function DraftOrdersPage() {
   const [debounced, setDebounced] = React.useState("");
   const [status, setStatus] = React.useState("all");
   const [channel, setChannel] = React.useState("all");
+  // Unset by default — drafts can sit open far longer than an order, so
+  // scoping to "last 30 days" the way Orders does would hide most of them.
+  const [dateRange, setDateRange] = React.useState<DateRange | undefined>();
 
   React.useEffect(() => {
     const t = setTimeout(() => setDebounced(search), 400);
@@ -72,7 +77,7 @@ export default function DraftOrdersPage() {
 
   React.useEffect(() => {
     setPage(0);
-  }, [debounced, status, channel]);
+  }, [debounced, status, channel, dateRange]);
 
   React.useEffect(() => {
     let cancelled = false;
@@ -81,6 +86,7 @@ export default function DraftOrdersPage() {
       page: page + 1,
       limit: pageSize,
       search: debounced || undefined,
+      dateRange,
       sortBy: "created_at",
       sortOrder: "desc",
       filters: {
@@ -103,7 +109,7 @@ export default function DraftOrdersPage() {
     return () => {
       cancelled = true;
     };
-  }, [page, pageSize, debounced, status, channel]);
+  }, [page, pageSize, debounced, status, channel, dateRange]);
 
   const columns = React.useMemo<ColumnDef<DraftOrderRow>[]>(
     () => [
@@ -239,6 +245,7 @@ export default function DraftOrdersPage() {
             ))}
           </SelectContent>
         </Select>
+        <DateRangePicker value={dateRange} onChange={setDateRange} />
       </div>
 
       <DataTable

@@ -258,9 +258,9 @@ export default function PosRegisterPage() {
         </div>
       )}
 
-      <div className="grid gap-4 lg:grid-cols-[1fr_380px]">
+      <div className="grid gap-4 lg:grid-cols-[minmax(0,1fr)_380px]">
         {/* ── Catalogue ─────────────────────────────────────────────────── */}
-        <Card className="shadow-none">
+        <Card className="min-w-0 shadow-none">
           <CardHeader className="pb-3">
             <div className="relative">
               <Search className="absolute top-1/2 left-2.5 size-4 -translate-y-1/2 text-muted-foreground" />
