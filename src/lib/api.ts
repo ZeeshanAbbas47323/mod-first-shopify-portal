@@ -33,6 +33,39 @@ let refreshPromise: Promise<string | null> | null = null;
  * If the server rotates the refresh token, persists the new one.
  * Returns the new access token, or null if the refresh failed.
  */
+/**
+ * Reads `fullName` / `email` out of an access token and updates the stored user
+ * when they differ. Decode only — the signature is the server's to verify.
+ */
+function syncUserFromToken(accessToken: string): void {
+  try {
+    const [, body] = accessToken.split(".");
+    if (!body) return;
+    const json = JSON.parse(
+      decodeURIComponent(
+        atob(body.replace(/-/g, "+").replace(/_/g, "/"))
+          .split("")
+          .map((c) => "%" + c.charCodeAt(0).toString(16).padStart(2, "0"))
+          .join("")
+      )
+    );
+    const name: string = (json.fullName ?? json.full_name ?? "").trim();
+    const email: string = (json.email ?? "").trim();
+    if (!name) return;
+
+    const store = useAuthStore.getState();
+    const current = store.user;
+    if (current && current.name === name) return;
+    store.login(
+      { name, email: email || current?.email || "" },
+      accessToken,
+      getStoredRefreshToken()
+    );
+  } catch {
+    // A token we cannot decode just leaves the cached user as it is.
+  }
+}
+
 export async function silentRefresh(): Promise<string | null> {
   const refreshToken = getStoredRefreshToken();
   if (!refreshToken) return null;
@@ -56,6 +89,11 @@ export async function silentRefresh(): Promise<string | null> {
 
     // Update in-memory access token only
     useAuthStore.getState().setToken(newAccessToken);
+
+    // The cached user is persisted, so a session that signed in before
+    // `full_name` was read correctly would keep showing the email prefix until
+    // the next sign-out. The access token carries the name, so correct it here.
+    syncUserFromToken(newAccessToken);
 
     // Rotate refresh token if the server issued a new one
     if (newRefreshToken) setStoredRefreshToken(newRefreshToken);

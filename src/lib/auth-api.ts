@@ -53,12 +53,16 @@ function pickUser(payload: Json, fallbackEmail: string): AuthUser | null {
   const u = d?.user ?? d?.profile ?? null;
   if (!u && !fallbackEmail) return null;
   const email: string = u?.email ?? fallbackEmail;
-  const name: string =
-    u?.name ??
-    [u?.first_name ?? u?.firstName, u?.last_name ?? u?.lastName]
-      .filter(Boolean)
-      .join(" ") ??
-    email.split("@")[0];
+  // The API returns `full_name`; without it every candidate below was empty and
+  // the UI fell through to the email prefix. `join("")` also returns "" rather
+  // than null, so ?? never moved past it — hence the explicit trims.
+  const candidates = [
+    u?.full_name,
+    u?.fullName,
+    u?.name,
+    [u?.first_name ?? u?.firstName, u?.last_name ?? u?.lastName].filter(Boolean).join(" "),
+  ];
+  const name = candidates.map((c) => (typeof c === "string" ? c.trim() : "")).find(Boolean);
   return { name: name || email.split("@")[0], email };
 }
 
