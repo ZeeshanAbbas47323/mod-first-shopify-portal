@@ -8,6 +8,7 @@ import type { DateRange } from "react-day-picker";
 import { toast } from "sonner";
 
 import { Checkbox } from "@/components/ui/checkbox";
+import { fetchAllPages } from "@/lib/export";
 import { Input } from "@/components/ui/input";
 import { MultiSelectFilter } from "@/components/multi-select-filter";
 import { SummaryStatStrip, type SummaryTile } from "@/components/summary-stat-strip";
@@ -125,12 +126,10 @@ export default function WishlistsPage() {
   }, [page, pageSize, activeFilters]);
 
   const fetchAllForExport = async () =>
-    (
-              await listWishlists({
-                page: 1, limit: EXPORT_CAP, dateRange: activeFilters.dateRange,
+    fetchAllPages((page, limit) => listWishlists({
+                page, limit, dateRange: activeFilters.dateRange,
                 filters: { product_id: activeFilters.product_id, is_active: activeFilters.is_active },
-              })
-            ).rows;
+              }), EXPORT_CAP);
 
   const topProducts = React.useMemo(() => {
     const counts = new Map<string, { name: string; count: number }>();

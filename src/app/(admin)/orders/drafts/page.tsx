@@ -10,6 +10,7 @@ import { toast } from "sonner";
 import type { DateRange } from "react-day-picker";
 
 import { Button } from "@/components/ui/button";
+import { fetchAllPages } from "@/lib/export";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Input } from "@/components/ui/input";
 import { DataTable, type ColumnFilterDef } from "@/components/data-table";
@@ -196,18 +197,16 @@ export default function DraftOrdersPage() {
   }, [activeFilters]);
 
   const fetchAllForExport = async () =>
-    (
-              await listDraftOrders({
-                page: 1,
-                limit: EXPORT_CAP,
+    fetchAllPages((page, limit) => listDraftOrders({
+                page,
+                limit,
                 search: activeFilters.search,
                 dateRange: activeFilters.dateRange,
                 filters: {
                   status: activeFilters.status.length ? activeFilters.status : undefined,
                   channel: activeFilters.channel.length ? activeFilters.channel : undefined,
                 },
-              })
-            ).rows;
+              }), EXPORT_CAP);
 
   const tiles: SummaryTile[] = [
     { label: "Drafts", value: summary.drafts.current.toLocaleString("en-US"), changePercent: summary.drafts.change_percent },

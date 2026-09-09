@@ -24,7 +24,7 @@ import {
 import { DataTable, type ColumnFilterDef } from "@/components/data-table";
 import { StatusToggle } from "@/components/status-badge";
 import { apiErrorMessage } from "@/lib/auth-api";
-import { exportRows as writeExport, type ExportFormat } from "@/lib/export";
+import { exportRows as writeExport, type ExportFormat, fetchAllPages } from "@/lib/export";
 import { ExportFormatMenu } from "@/components/export-menu";
 import {
   listCouriers, createCourier, updateCourier, deleteCourier, updateRecordStatus,

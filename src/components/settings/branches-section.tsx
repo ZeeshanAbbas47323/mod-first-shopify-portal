@@ -34,7 +34,7 @@ import { DataTable, type ColumnFilterDef } from "@/components/data-table";
 import { DateRangePicker } from "@/components/date-range-picker";
 import { StatusToggle } from "@/components/status-badge";
 import { apiErrorMessage } from "@/lib/auth-api";
-import { exportRows as writeExport, type ExportFormat } from "@/lib/export";
+import { exportRows as writeExport, type ExportFormat, fetchAllPages } from "@/lib/export";
 import { ExportFormatMenu } from "@/components/export-menu";
 import { createBranch, deleteRecord, listBranches, updateBranch, updateRecordStatus, type BranchRow } from "@/lib/admin-api";
 

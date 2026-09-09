@@ -34,7 +34,7 @@ import { Checkbox } from "@/components/ui/checkbox";
 import { MultiSelectFilter } from "@/components/multi-select-filter";
 import { apiErrorMessage } from "@/lib/auth-api";
 import { cn } from "@/lib/utils";
-import { exportRows as writeExport, type ExportFormat } from "@/lib/export";
+import { exportRows as writeExport, type ExportFormat, fetchAllPages } from "@/lib/export";
 import { ExportFormatMenu } from "@/components/export-menu";
 import {
   createMenuRight,

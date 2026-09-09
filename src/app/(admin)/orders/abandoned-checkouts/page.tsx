@@ -8,6 +8,7 @@ import type { DateRange } from "react-day-picker";
 import { toast } from "sonner";
 
 import { Checkbox } from "@/components/ui/checkbox";
+import { fetchAllPages } from "@/lib/export";
 import { DataTable } from "@/components/data-table";
 import { ExportMenu } from "@/components/export-menu";
 import { SummaryStatStrip, type SummaryTile } from "@/components/summary-stat-strip";

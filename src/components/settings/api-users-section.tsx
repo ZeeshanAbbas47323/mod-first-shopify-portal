@@ -27,7 +27,7 @@ import { ConfirmDeleteDialog } from "@/components/confirm-delete-dialog";
 import { DataTable, type ColumnFilterDef } from "@/components/data-table";
 import { StatusBadge } from "@/components/status-badge";
 import { apiErrorMessage } from "@/lib/auth-api";
-import { exportRows as writeExport, type ExportFormat } from "@/lib/export";
+import { exportRows as writeExport, type ExportFormat, fetchAllPages } from "@/lib/export";
 import { ExportFormatMenu } from "@/components/export-menu";
 import {
   createApiUser,

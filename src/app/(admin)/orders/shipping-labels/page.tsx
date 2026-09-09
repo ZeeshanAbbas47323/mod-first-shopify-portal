@@ -9,6 +9,7 @@ import { toast } from "sonner";
 import type { DateRange } from "react-day-picker";
 
 import { Button } from "@/components/ui/button";
+import { fetchAllPages } from "@/lib/export";
 import { Checkbox } from "@/components/ui/checkbox";
 import { DataTable, type ColumnFilterDef } from "@/components/data-table";
 import { ExportMenu } from "@/components/export-menu";
@@ -197,12 +198,10 @@ export default function ShippingLabelsPage() {
   }, [activeFilters]);
 
   const fetchAllForExport = async () =>
-    (
-              await listShipments({
-                page: 1, limit: EXPORT_CAP, search: activeFilters.search, dateRange: activeFilters.dateRange,
+    fetchAllPages((page, limit) => listShipments({
+                page, limit, search: activeFilters.search, dateRange: activeFilters.dateRange,
                 filters: activeFilters.status.length ? { status: activeFilters.status } : undefined,
-              })
-            ).rows;
+              }), EXPORT_CAP);
 
   const tiles: SummaryTile[] = [
     { label: "Shipments", value: summary.shipments.current.toLocaleString("en-US"), changePercent: summary.shipments.change_percent },

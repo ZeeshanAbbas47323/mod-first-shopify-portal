@@ -8,6 +8,7 @@ import type { DateRange } from "react-day-picker";
 import { toast } from "sonner";
 
 import { Button } from "@/components/ui/button";
+import { fetchAllPages } from "@/lib/export";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -159,14 +160,12 @@ export default function DesignUploadsPage() {
   }, [page, pageSize, activeFilters, refreshKey]);
 
   const fetchAllForExport = async () =>
-    (
-              await listDesignUploads({
-                page: 1, limit: EXPORT_CAP,
+    fetchAllPages((page, limit) => listDesignUploads({
+                page, limit,
                 dateRange: activeFilters.dateRange,
                 order_id: activeFilters.order_id,
                 filters: { status: activeFilters.status, print_method: activeFilters.print_method },
-              })
-            ).rows;
+              }), EXPORT_CAP);
 
   const columns = React.useMemo<ColumnDef<DesignUploadRow>[]>(
     () => [

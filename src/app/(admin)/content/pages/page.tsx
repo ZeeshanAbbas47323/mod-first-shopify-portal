@@ -10,6 +10,7 @@ import type { DateRange } from "react-day-picker";
 import { toast } from "sonner";
 
 import { Button } from "@/components/ui/button";
+import { fetchAllPages } from "@/lib/export";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Input } from "@/components/ui/input";
 import { MultiSelectFilter } from "@/components/multi-select-filter";
@@ -239,15 +240,13 @@ export default function ContentPagesPage() {
   }, [activeFilters]);
 
   const fetchAllForExport = async () =>
-    (
-              await listContentPages({
-                page: 1, limit: EXPORT_CAP, dateRange: activeFilters.dateRange,
+    fetchAllPages((page, limit) => listContentPages({
+                page, limit, dateRange: activeFilters.dateRange,
                 filters: {
                   title: activeFilters.title, slug: activeFilters.slug,
                   content_type: activeFilters.content_type, is_active: activeFilters.is_active,
                 },
-              })
-            ).rows;
+              }), EXPORT_CAP);
 
   const tiles: SummaryTile[] = [
     { label: "Total pages", value: summary.total_pages.toLocaleString("en-US") },

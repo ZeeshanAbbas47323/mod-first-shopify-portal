@@ -11,6 +11,7 @@ import type { DateRange } from "react-day-picker";
 import { toast } from "sonner";
 
 import { Button } from "@/components/ui/button";
+import { fetchAllPages } from "@/lib/export";
 import { Checkbox } from "@/components/ui/checkbox";
 import {
   Dialog,
@@ -293,12 +294,10 @@ export default function ReviewsPage() {
   }, [activeFilters]);
 
   const fetchAllForExport = async () =>
-    (
-              await listReviews({
-                page: 1, limit: EXPORT_CAP, dateRange: activeFilters.dateRange,
+    fetchAllPages((page, limit) => listReviews({
+                page, limit, dateRange: activeFilters.dateRange,
                 filters: { title: activeFilters.title, status: activeFilters.status },
-              })
-            ).rows;
+              }), EXPORT_CAP);
 
   const openReview = async (row: ReviewRow) => {
     setEditing(row);

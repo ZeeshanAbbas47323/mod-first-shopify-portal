@@ -8,6 +8,7 @@ import type { DateRange } from "react-day-picker";
 import { toast } from "sonner";
 
 import { Button } from "@/components/ui/button";
+import { fetchAllPages } from "@/lib/export";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -164,12 +165,10 @@ export default function ContactSubmissionsPage() {
   }, [activeFilters]);
 
   const fetchAllForExport = async () =>
-    (
-              await listContactSubmissions({
-                page: 1, limit: EXPORT_CAP, dateRange: activeFilters.dateRange,
+    fetchAllPages((page, limit) => listContactSubmissions({
+                page, limit, dateRange: activeFilters.dateRange,
                 filters: { email: activeFilters.email, status: activeFilters.status, help_topic: activeFilters.help_topic },
-              })
-            ).rows;
+              }), EXPORT_CAP);
 
   const columns = React.useMemo<ColumnDef<ContactSubmissionRow>[]>(
     () => [

@@ -11,6 +11,7 @@ import type { DateRange } from "react-day-picker";
 import { toast } from "sonner";
 
 import { Button } from "@/components/ui/button";
+import { fetchAllPages } from "@/lib/export";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -272,12 +273,10 @@ export default function DiscountsPage() {
   }, [activeFilters]);
 
   const fetchAllForExport = async () =>
-    (
-              await listCoupons({
-                page: 1, limit: EXPORT_CAP, dateRange: activeFilters.dateRange,
+    fetchAllPages((page, limit) => listCoupons({
+                page, limit, dateRange: activeFilters.dateRange,
                 filters: { code: activeFilters.code, status: activeFilters.status, type: activeFilters.type },
-              })
-            ).rows;
+              }), EXPORT_CAP);
 
   const handleToggleStatus = async (row: CouponRow, next: boolean) => {
     try {

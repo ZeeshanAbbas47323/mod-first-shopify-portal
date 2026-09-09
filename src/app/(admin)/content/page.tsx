@@ -11,6 +11,7 @@ import type { DateRange } from "react-day-picker";
 import { toast } from "sonner";
 
 import { Button } from "@/components/ui/button";
+import { fetchAllPages } from "@/lib/export";
 import { Checkbox } from "@/components/ui/checkbox";
 import {
   Dialog,
@@ -261,12 +262,10 @@ export default function ContentPage() {
   }, [activeTab, activeFilters]);
 
   const fetchAllForExport = async () =>
-    (
-              await listBlogs({
-                page: 1, limit: EXPORT_CAP, dateRange: activeFilters.dateRange,
+    fetchAllPages((page, limit) => listBlogs({
+                page, limit, dateRange: activeFilters.dateRange,
                 filters: { title: activeFilters.title, category: activeFilters.category, status: activeFilters.status },
-              })
-            ).rows;
+              }), EXPORT_CAP);
 
   const tiles: SummaryTile[] = [
     { label: "Total posts", value: summary.total_posts.toLocaleString("en-US") },

@@ -9,6 +9,7 @@ import { toast } from "sonner";
 import type { DateRange } from "react-day-picker";
 
 import { Button } from "@/components/ui/button";
+import { fetchAllPages } from "@/lib/export";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Input } from "@/components/ui/input";
 import { MultiSelectFilter } from "@/components/multi-select-filter";
@@ -313,13 +314,11 @@ export default function ProductsPage() {
 
   const fetchAllForExport = React.useCallback(
     async () =>
-      (
-        await listProducts({
-          page: 1, limit: EXPORT_CAP,
+      fetchAllPages((page, limit) => listProducts({
+          page, limit,
           dateRange: activeFilters.dateRange, search: activeFilters.search,
           filters: { status: activeFilters.status },
-        })
-      ).rows,
+        }), EXPORT_CAP),
     [activeFilters]
   );
 

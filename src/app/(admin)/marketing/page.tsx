@@ -11,6 +11,7 @@ import type { DateRange } from "react-day-picker";
 import { toast } from "sonner";
 
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
+import { fetchAllPages } from "@/lib/export";
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
 import {
@@ -718,12 +719,10 @@ function SubscribersTab() {
   }, [page, pageSize, activeFilters, refreshKey]);
 
   const fetchAllForExport = async () =>
-    (
-              await listSubscribers({
-                page: 1, limit: EXPORT_CAP, dateRange: activeFilters.dateRange,
+    fetchAllPages((page, limit) => listSubscribers({
+                page, limit, dateRange: activeFilters.dateRange,
                 filters: { email: activeFilters.email, status: activeFilters.status, source: activeFilters.source },
-              })
-            ).rows;
+              }), EXPORT_CAP);
 
   return (
     <div className="flex flex-col gap-3">
