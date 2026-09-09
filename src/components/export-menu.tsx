@@ -9,6 +9,7 @@ import { Button } from "@/components/ui/button";
 import {
   DropdownMenu,
   DropdownMenuContent,
+  DropdownMenuGroup,
   DropdownMenuItem,
   DropdownMenuLabel,
   DropdownMenuSeparator,
@@ -134,31 +135,35 @@ export function ExportMenu<T>({
       <DropdownMenuContent align="end" className="w-60">
         {selected.length > 0 && (
           <>
-            <DropdownMenuLabel className="text-xs font-normal text-muted-foreground">
-              {selected.length} selected
-            </DropdownMenuLabel>
-            {FORMATS.map(({ format, label, Icon }) => (
-              <DropdownMenuItem
-                key={`selected-${format}`}
-                onClick={() => run(format, "selected")}
-              >
-                <Icon className="size-4" />
-                {label}
-              </DropdownMenuItem>
-            ))}
+            <DropdownMenuGroup>
+              <DropdownMenuLabel className="text-xs font-normal text-muted-foreground">
+                {selected.length} selected
+              </DropdownMenuLabel>
+              {FORMATS.map(({ format, label, Icon }) => (
+                <DropdownMenuItem
+                  key={`selected-${format}`}
+                  onClick={() => run(format, "selected")}
+                >
+                  <Icon className="size-4" />
+                  {label}
+                </DropdownMenuItem>
+              ))}
+            </DropdownMenuGroup>
             <DropdownMenuSeparator />
           </>
         )}
-        <DropdownMenuLabel className="text-xs font-normal text-muted-foreground">
-          All {plural}
-          {total != null ? ` (${total})` : ""}
-        </DropdownMenuLabel>
-        {FORMATS.map(({ format, label, Icon }) => (
-          <DropdownMenuItem key={`all-${format}`} onClick={() => run(format)}>
-            <Icon className="size-4" />
-            {label}
-          </DropdownMenuItem>
-        ))}
+        <DropdownMenuGroup>
+          <DropdownMenuLabel className="text-xs font-normal text-muted-foreground">
+            All {plural}
+            {total != null ? ` (${total})` : ""}
+          </DropdownMenuLabel>
+          {FORMATS.map(({ format, label, Icon }) => (
+            <DropdownMenuItem key={`all-${format}`} onClick={() => run(format)}>
+              <Icon className="size-4" />
+              {label}
+            </DropdownMenuItem>
+          ))}
+        </DropdownMenuGroup>
       </DropdownMenuContent>
     </DropdownMenu>
   );
