@@ -864,11 +864,33 @@ export interface BlogRow {
   meta_description?: string | null;
   is_active?: boolean;
   created_at?: string;
+  [k: string]: unknown;
 }
 
 export async function listBlogs(params: ListParams): Promise<ListResult<BlogRow>> {
   const { data } = await api.post("blogs/list", buildBody(params));
   return parseList<BlogRow>(data, params.limit);
+}
+
+export interface BlogsSummary {
+  total_posts: number;
+  published: number;
+  draft: number;
+  archived: number;
+}
+
+const EMPTY_BLOGS_SUMMARY: BlogsSummary = { total_posts: 0, published: 0, draft: 0, archived: 0 };
+
+export async function getBlogsSummary(params: {
+  dateRange?: DateRange;
+  filters?: Json;
+}): Promise<BlogsSummary> {
+  const body: Json = {};
+  if (params.dateRange?.from) body.startDate = format(params.dateRange.from, "yyyy-MM-dd");
+  if (params.dateRange?.to) body.endDate = format(params.dateRange.to, "yyyy-MM-dd");
+  if (params.filters && Object.keys(params.filters).length) body.filters = params.filters;
+  const { data } = await api.post("blogs/summary", body);
+  return (dashParse<Json>(data) as BlogsSummary) ?? EMPTY_BLOGS_SUMMARY;
 }
 
 export const createBlog = (body: Json) =>
@@ -1256,6 +1278,7 @@ export interface ReviewRow {
   helpful_count?: number;
   is_active?: boolean;
   created_at?: string;
+  [k: string]: unknown;
 }
 
 export async function listReviews(
@@ -1263,6 +1286,34 @@ export async function listReviews(
 ): Promise<ListResult<ReviewRow>> {
   const { data } = await api.post("reviews/list", buildBody(params));
   return parseList<ReviewRow>(data, params.limit);
+}
+
+export interface ReviewsSummary {
+  total_reviews: number;
+  average_rating: number;
+  rating_distribution: Record<number, number>;
+  verified_reviews_count: number;
+  recommendation_percentage: number;
+}
+
+const EMPTY_REVIEWS_SUMMARY: ReviewsSummary = {
+  total_reviews: 0, average_rating: 0,
+  rating_distribution: { 1: 0, 2: 0, 3: 0, 4: 0, 5: 0 },
+  verified_reviews_count: 0, recommendation_percentage: 0,
+};
+
+/**
+ * `reviews/list` already computes this alongside the rows (rating
+ * distribution, verified count, …) — asked for with `limit: 1` since only
+ * the summary is needed here, not another copy of the page's own rows.
+ */
+export async function getReviewsSummary(params: {
+  dateRange?: DateRange;
+  filters?: Json;
+}): Promise<ReviewsSummary> {
+  const body = buildBody({ page: 1, limit: 1, dateRange: params.dateRange, filters: params.filters });
+  const { data } = await api.post("reviews/list", body);
+  return (data?.summary as ReviewsSummary) ?? EMPTY_REVIEWS_SUMMARY;
 }
 
 export async function getReviewById(id: number | string): Promise<ReviewRow> {
