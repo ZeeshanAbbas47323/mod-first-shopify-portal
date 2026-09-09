@@ -155,7 +155,7 @@ export function CouriersSection() {
   const runExport = async (fileFormat: ExportFormat) => {
     setExportBusy(true);
     try {
-      const exportRows = (await listCouriers({ page: 1, limit: EXPORT_CAP, filters: buildFilters() })).rows;
+      const exportRows = fetchAllPages((page, limit) => listCouriers({ page, limit, filters: buildFilters() }), EXPORT_CAP);
       if (!exportRows.length) {
         toast.error("Nothing to export.");
         return;

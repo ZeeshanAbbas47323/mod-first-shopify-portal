@@ -91,3 +91,25 @@ export async function exportRows<T>(
   if (format === "xlsx") await exportRowsToExcel(filename, columns, rows);
   else exportRowsToCsv(filename, columns, rows);
 }
+
+export const EXPORT_PAGE_SIZE = 200;
+
+export async function fetchAllPages<T>(
+  fetchPage: (page: number, limit: number) => Promise<{ rows: T[]; totalPages?: number }>,
+  cap = 5000,
+  pageSize = EXPORT_PAGE_SIZE
+): Promise<T[]> {
+  const all: T[] = [];
+  let page = 1;
+  let totalPages = 1;
+
+  while (page <= totalPages && all.length < cap) {
+    const result = await fetchPage(page, Math.min(pageSize, cap - all.length));
+    all.push(...result.rows);
+    totalPages = result.totalPages ?? 1;
+    if (!result.rows.length) break;
+    page += 1;
+  }
+
+  return all;
+}

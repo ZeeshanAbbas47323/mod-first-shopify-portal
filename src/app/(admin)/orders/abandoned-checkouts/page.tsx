@@ -170,7 +170,7 @@ export default function AbandonedCheckoutsPage() {
   }, [dateRange]);
 
   const fetchAllForExport = async () =>
-    (await listAbandonedCarts({ page: 1, limit: EXPORT_CAP, dateRange })).rows;
+    fetchAllPages((page, limit) => listAbandonedCarts({ page, limit, dateRange }), EXPORT_CAP);
 
   const tiles: SummaryTile[] = [
     { label: "Abandoned checkouts", value: summary.abandoned_carts.toLocaleString("en-US") },

@@ -122,7 +122,7 @@ export function ActivityLogSection() {
   const runExport = async (fileFormat: ExportFormat) => {
     setExportBusy(true);
     try {
-      const exportRows = (await listActivityLogs({ page: 1, limit: EXPORT_CAP, dateRange, filters: buildFilters() })).rows;
+      const exportRows = fetchAllPages((page, limit) => listActivityLogs({ page, limit, dateRange, filters: buildFilters() }), EXPORT_CAP);
       if (!exportRows.length) {
         toast.error("Nothing to export.");
         return;

@@ -253,7 +253,7 @@ export default function CustomersPage() {
 
   const fetchAllForExport = React.useCallback(
     async () =>
-      (await listUsers({ page: 1, limit: EXPORT_CAP, dateRange, filters: buildFilters() })).rows,
+      fetchAllPages((page, limit) => listUsers({ page, limit, dateRange, filters: buildFilters() }), EXPORT_CAP),
     [dateRange, buildFilters]
   );
 

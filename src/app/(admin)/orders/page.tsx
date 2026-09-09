@@ -333,7 +333,7 @@ export default function OrdersPage() {
   };
 
   const fetchAllForExport = React.useCallback(
-    async () => (await listOrders({ page: 1, limit: EXPORT_CAP, ...activeFilters })).rows,
+    async () => fetchAllPages((page, limit) => listOrders({ page, limit, ...activeFilters }), EXPORT_CAP),
     [activeFilters]
   );
 

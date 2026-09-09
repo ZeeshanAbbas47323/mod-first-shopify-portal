@@ -214,7 +214,7 @@ export function BranchesSection() {
   const runExport = async (fileFormat: ExportFormat) => {
     setExportBusy(true);
     try {
-      const exportRows = (await listBranches({ page: 1, limit: EXPORT_CAP, dateRange, filters: buildFilters() })).rows;
+      const exportRows = fetchAllPages((page, limit) => listBranches({ page, limit, dateRange, filters: buildFilters() }), EXPORT_CAP);
       if (!exportRows.length) {
         toast.error("Nothing to export.");
         return;

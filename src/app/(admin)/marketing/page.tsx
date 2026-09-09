@@ -248,7 +248,7 @@ function CampaignsTab() {
   }, [page, pageSize, activeFilters, refreshKey]);
 
   const fetchAllForExport = async () =>
-    (await listCampaigns({ page: 1, limit: EXPORT_CAP, filters: activeFilters })).rows;
+    fetchAllPages((page, limit) => listCampaigns({ page, limit, filters: activeFilters }), EXPORT_CAP);
 
   return (
     <div className="flex flex-col gap-3">

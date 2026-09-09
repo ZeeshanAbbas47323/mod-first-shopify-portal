@@ -141,7 +141,7 @@ export function NotificationsSection() {
   const runExport = async (fileFormat: ExportFormat) => {
     setExportBusy(true);
     try {
-      const exportRows = (await listNotifications({ page: 1, limit: EXPORT_CAP, search: search || undefined })).rows;
+      const exportRows = fetchAllPages((page, limit) => listNotifications({ page, limit, search: search || undefined }), EXPORT_CAP);
       if (!exportRows.length) {
         toast.error("Nothing to export.");
         return;

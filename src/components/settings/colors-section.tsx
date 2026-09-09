@@ -173,7 +173,7 @@ export function ColorsSection() {
   const runExport = async (fileFormat: ExportFormat) => {
     setExportBusy(true);
     try {
-      const exportRows = (await listColors({ page: 1, limit: EXPORT_CAP, filters: buildFilters() })).rows;
+      const exportRows = fetchAllPages((page, limit) => listColors({ page, limit, filters: buildFilters() }), EXPORT_CAP);
       if (!exportRows.length) {
         toast.error("Nothing to export.");
         return;
