@@ -317,50 +317,66 @@ function MenuPicker({
   assignedLoading?: boolean;
 }) {
   const [query, setQuery] = React.useState("");
+  const [hideAssigned, setHideAssigned] = React.useState(true);
 
   const byId = React.useMemo(
     () => new Map(menus.map((m) => [Number(m.id), m])),
     [menus]
   );
 
+  const isTaken = React.useCallback(
+    (menu: MenuRow) => !!assigned?.has(Number(menu.id)),
+    [assigned]
+  );
+
+  const takenCount = React.useMemo(
+    () => menus.filter(isTaken).length,
+    [menus, isTaken]
+  );
+
   const visible = React.useMemo(() => {
     const q = query.trim().toLowerCase();
-    if (!q) return menus;
-    return menus.filter(
+    let list = menus;
+    if (hideAssigned && !disabled) list = list.filter((m) => !isTaken(m));
+    if (!q) return list;
+    return list.filter(
       (m) =>
         m.name.toLowerCase().includes(q) || (m.slug ?? "").toLowerCase().includes(q)
     );
-  }, [menus, query]);
+  }, [menus, query, hideAssigned, disabled, isTaken]);
 
   const toggle = (id: number) =>
     onChange(value.includes(id) ? value.filter((v) => v !== id) : [...value, id]);
 
-  const allVisibleIds = visible
+  const selectableIds = visible
     .map((m) => Number(m.id))
     .filter((id) => !assigned?.has(id));
   const allSelected =
-    allVisibleIds.length > 0 && allVisibleIds.every((id) => value.includes(id));
+    selectableIds.length > 0 && selectableIds.every((id) => value.includes(id));
+
+  const everythingTaken =
+    !loading && !assignedLoading && menus.length > 0 && takenCount === menus.length;
 
   return (
     <div className="rounded-lg border border-input bg-card">
-      <div className="flex items-center gap-2 border-b border-input p-2">
+      <div className="flex flex-wrap items-center gap-2 border-b border-input p-2">
         <Input
           value={query}
           onChange={(e) => setQuery(e.target.value)}
           placeholder="Search menus"
           disabled={disabled}
-          className="h-8 text-sm"
+          className="h-8 min-w-32 flex-1 text-sm"
         />
         <Button
           type="button"
           size="sm"
           variant="outline"
-          disabled={disabled || !allVisibleIds.length}
+          disabled={disabled || !selectableIds.length}
           onClick={() =>
             onChange(
               allSelected
-                ? value.filter((id) => !allVisibleIds.includes(id))
-                : [...new Set([...value, ...allVisibleIds])]
+                ? value.filter((id) => !selectableIds.includes(id))
+                : [...new Set([...value, ...selectableIds])]
             )
           }
         >
@@ -368,44 +384,61 @@ function MenuPicker({
         </Button>
       </div>
 
+      {!disabled && takenCount > 0 && (
+        <label className="flex cursor-pointer items-center gap-2 border-b border-input bg-muted/30 px-2 py-1.5 text-xs text-muted-foreground">
+          <Checkbox
+            checked={hideAssigned}
+            onCheckedChange={(v) => setHideAssigned(!!v)}
+          />
+          <span>Hide the {takenCount} this role already has</span>
+        </label>
+      )}
+
       <div className="max-h-56 overflow-y-auto p-1">
         {loading ? (
           <p className="flex items-center gap-2 px-2 py-6 text-sm text-muted-foreground">
             <Loader2 className="size-4 animate-spin" />
             Loading menus…
           </p>
+        ) : everythingTaken ? (
+          <p className="px-3 py-6 text-center text-sm text-muted-foreground">
+            This role already has every dashboard menu. Close this and click an
+            existing row to change its permissions.
+          </p>
         ) : !visible.length ? (
-          <p className="px-2 py-6 text-center text-sm text-muted-foreground">
-            {menus.length ? "No menus match that search." : "No dashboard menus found."}
+          <p className="px-3 py-6 text-center text-sm text-muted-foreground">
+            {menus.length
+              ? "No menus match that search."
+              : "No dashboard menus found."}
           </p>
         ) : (
           visible.map((menu) => {
             const id = Number(menu.id);
-            const taken = !!assigned?.has(id);
+            const taken = isTaken(menu);
             return (
               <label
                 key={id}
                 className={cn(
                   "flex items-center gap-2 rounded-md px-2 py-1.5 text-sm",
-                  taken ? "cursor-not-allowed opacity-55" : "cursor-pointer hover:bg-muted"
+                  taken
+                    ? "cursor-not-allowed opacity-60"
+                    : "cursor-pointer hover:bg-muted"
                 )}
                 style={{ paddingLeft: 8 + menuDepth(menu, byId) * 14 }}
               >
                 <Checkbox
-                  checked={taken || value.includes(id)}
+                  checked={!taken && value.includes(id)}
                   onCheckedChange={() => !taken && toggle(id)}
                   disabled={disabled || taken}
                 />
-                <span className="truncate">{menu.name}</span>
+                <span className="min-w-0 flex-1 truncate">{menu.name}</span>
                 {menu.slug && (
-                  <span className="truncate font-mono text-xs text-muted-foreground">
+                  <span className="hidden shrink-0 font-mono text-xs text-muted-foreground sm:inline">
                     /{menu.slug}
                   </span>
                 )}
                 {taken && (
-                  <span className="ml-auto shrink-0 text-xs text-muted-foreground">
-                    Already added
-                  </span>
+                  <span className="shrink-0 text-xs text-muted-foreground">Added</span>
                 )}
               </label>
             );
@@ -413,7 +446,7 @@ function MenuPicker({
         )}
       </div>
 
-      <div className="flex items-center gap-2 border-t border-input px-3 py-1.5 text-xs text-muted-foreground">
+      <div className="flex flex-wrap items-center gap-2 border-t border-input px-3 py-1.5 text-xs text-muted-foreground">
         <span>{value.length} selected</span>
         {assignedLoading && (
           <span className="ml-auto flex items-center gap-1">
@@ -425,6 +458,7 @@ function MenuPicker({
     </div>
   );
 }
+
 
 function MenuRightDialog({
   editing,
@@ -610,7 +644,7 @@ function MenuRightDialog({
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="sm:max-w-sm">
+      <DialogContent className="max-h-[90vh] overflow-y-auto sm:max-w-lg">
         <DialogHeader>
           <DialogTitle>{editing ? "Edit menu right" : "Add menu right"}</DialogTitle>
           <DialogDescription>
@@ -671,7 +705,7 @@ function MenuRightDialog({
 
           <div className="space-y-1.5">
             <Label>Permissions</Label>
-            <div className="grid grid-cols-2 gap-2">
+            <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
               {perm("can_view", "View")}
               {perm("can_create", "Create")}
               {perm("can_edit", "Edit")}
