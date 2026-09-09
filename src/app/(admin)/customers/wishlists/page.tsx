@@ -3,30 +3,29 @@
 import * as React from "react";
 import { type ColumnDef } from "@tanstack/react-table";
 import { format } from "date-fns";
-import { Heart, Search } from "lucide-react";
+import { Download, Heart, Loader2, Search } from "lucide-react";
 import type { DateRange } from "react-day-picker";
 import { toast } from "sonner";
 
-import { Card, CardContent } from "@/components/ui/card";
+import { Button } from "@/components/ui/button";
+import { Checkbox } from "@/components/ui/checkbox";
 import { Input } from "@/components/ui/input";
-import { Skeleton } from "@/components/ui/skeleton";
+import { MultiSelectFilter } from "@/components/multi-select-filter";
+import { SummaryStatStrip, type SummaryTile } from "@/components/summary-stat-strip";
 import {
-  Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
-} from "@/components/ui/select";
+  DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
 import { DataTable } from "@/components/data-table";
 import { DateRangePicker } from "@/components/date-range-picker";
 import { StatusBadge } from "@/components/status-badge";
 import { apiErrorMessage } from "@/lib/auth-api";
-import { imgUrl } from "@/lib/utils";
+import { exportRowsToCsv, imgUrl } from "@/lib/utils";
 import { listWishlists, type WishlistRow } from "@/lib/admin-api";
 
 const DEFAULT_PAGE_SIZE = 20;
+const EXPORT_CAP = 5000;
 
-const STATUS_ITEMS: Record<string, string> = {
-  all: "All saves",
-  active: "Active",
-  inactive: "Removed",
-};
+const STATUS_OPTIONS = ["active", "inactive"] as const;
 
 const money = (v?: number | string | null) =>
   v != null
@@ -39,26 +38,14 @@ const productName = (row: WishlistRow) =>
 const customerName = (row: WishlistRow) =>
   row.user?.full_name ?? row.user?.name ?? (row.user_id != null ? `User #${row.user_id}` : "—");
 
-function SummaryCard({
-  label,
-  value,
-  loading,
-}: {
-  label: string;
-  value: string;
-  loading: boolean;
-}) {
-  return (
-    <div className="flex flex-col gap-1 p-4">
-      <span className="text-xs font-medium text-muted-foreground">{label}</span>
-      {loading ? (
-        <Skeleton className="mt-1 h-6 w-20" />
-      ) : (
-        <span className="text-xl font-bold tracking-tight">{value}</span>
-      )}
-    </div>
-  );
-}
+const exportColumns = [
+  { key: "product", label: "Product", value: (r: WishlistRow) => productName(r) },
+  { key: "customer", label: "Customer", value: (r: WishlistRow) => customerName(r) },
+  { key: "email", label: "Email", value: (r: WishlistRow) => r.user?.email ?? "" },
+  { key: "stock", label: "Stock", value: (r: WishlistRow) => r.product?.quantity ?? "" },
+  { key: "status", label: "Status", value: (r: WishlistRow) => (r.is_active === false ? "Removed" : "Saved") },
+  { key: "created_at", label: "Saved on", value: (r: WishlistRow) => r.created_at ?? "" },
+];
 
 export default function WishlistsPage() {
   const [rows, setRows] = React.useState<WishlistRow[]>([]);
@@ -68,9 +55,13 @@ export default function WishlistsPage() {
   const [pageCount, setPageCount] = React.useState(1);
   const [total, setTotal] = React.useState(0);
 
+  const [selected, setSelected] = React.useState<WishlistRow[]>([]);
+  const [clearKey, setClearKey] = React.useState(0);
+  const [exportBusy, setExportBusy] = React.useState(false);
+
   const [productId, setProductId] = React.useState("");
   const [debouncedProduct, setDebouncedProduct] = React.useState("");
-  const [status, setStatus] = React.useState("active");
+  const [statuses, setStatuses] = React.useState<string[]>(["active"]);
   const [dateRange, setDateRange] = React.useState<DateRange | undefined>();
 
   React.useEffect(() => {
@@ -80,7 +71,17 @@ export default function WishlistsPage() {
 
   React.useEffect(() => {
     setPage(0);
-  }, [debouncedProduct, status, dateRange]);
+  }, [debouncedProduct, statuses, dateRange]);
+
+  const activeFilters = React.useMemo(
+    () => ({
+      dateRange,
+      product_id: debouncedProduct ? Number(debouncedProduct) : undefined,
+      // Both picked (or neither) means no opinion; one pick narrows it.
+      is_active: statuses.length === 1 ? statuses[0] === "active" : undefined,
+    }),
+    [dateRange, debouncedProduct, statuses]
+  );
 
   React.useEffect(() => {
     let cancelled = false;
@@ -88,11 +89,8 @@ export default function WishlistsPage() {
     listWishlists({
       page: page + 1,
       limit: pageSize,
-      dateRange,
-      filters: {
-        product_id: debouncedProduct ? Number(debouncedProduct) : undefined,
-        is_active: status === "all" ? undefined : status === "active",
-      },
+      dateRange: activeFilters.dateRange,
+      filters: { product_id: activeFilters.product_id, is_active: activeFilters.is_active },
     })
       .then((res) => {
         if (cancelled) return;
@@ -109,7 +107,32 @@ export default function WishlistsPage() {
     return () => {
       cancelled = true;
     };
-  }, [page, pageSize, debouncedProduct, status, dateRange]);
+  }, [page, pageSize, activeFilters]);
+
+  const runExport = async (scope: "selected" | "all") => {
+    setExportBusy(true);
+    try {
+      const exportRows =
+        scope === "selected"
+          ? selected
+          : (
+              await listWishlists({
+                page: 1, limit: EXPORT_CAP, dateRange: activeFilters.dateRange,
+                filters: { product_id: activeFilters.product_id, is_active: activeFilters.is_active },
+              })
+            ).rows;
+      if (!exportRows.length) {
+        toast.error("Nothing to export.");
+        return;
+      }
+      exportRowsToCsv(`wishlists-${format(new Date(), "yyyy-MM-dd")}`, exportColumns, exportRows);
+      toast.success(`Exported ${exportRows.length} save${exportRows.length === 1 ? "" : "s"}.`);
+    } catch (error) {
+      toast.error(apiErrorMessage(error, "Couldn't export wishlists."));
+    } finally {
+      setExportBusy(false);
+    }
+  };
 
   // Most-saved products on the current page — a quick demand signal.
   const topProducts = React.useMemo(() => {
@@ -125,6 +148,27 @@ export default function WishlistsPage() {
 
   const columns = React.useMemo<ColumnDef<WishlistRow>[]>(
     () => [
+      {
+        id: "select",
+        header: ({ table }) => (
+          <Checkbox
+            checked={table.getIsAllPageRowsSelected()}
+            indeterminate={table.getIsSomePageRowsSelected() && !table.getIsAllPageRowsSelected()}
+            onCheckedChange={(v) => table.toggleAllPageRowsSelected(!!v)}
+            aria-label="Select all"
+          />
+        ),
+        cell: ({ row }) => (
+          <Checkbox
+            checked={row.getIsSelected()}
+            onCheckedChange={(v) => row.toggleSelected(!!v)}
+            onClick={(e) => e.stopPropagation()}
+            aria-label="Select row"
+          />
+        ),
+        enableSorting: false,
+        enableHiding: false,
+      },
       {
         accessorKey: "product_id",
         header: "Product",
@@ -203,32 +247,45 @@ export default function WishlistsPage() {
     []
   );
 
+  const tiles: SummaryTile[] = [
+    { label: "Total saves", value: total.toLocaleString("en-US") },
+    ...topProducts.map((p, i) => ({
+      label: `Most saved${i > 0 ? ` #${i + 1}` : ""}`,
+      value: `${p.name} · ${p.count}`,
+    })),
+  ];
+
   return (
     <div className="flex flex-col gap-4">
-      <div>
-        <h1 className="text-xl font-bold">Wishlists</h1>
-        <p className="text-sm text-muted-foreground">
-          Products customers have saved — what they want but haven&apos;t bought yet.
-        </p>
+      <div className="flex flex-wrap items-center justify-between gap-3">
+        <div>
+          <h1 className="text-xl font-bold">Wishlists</h1>
+          <p className="text-sm text-muted-foreground">
+            Products customers have saved — what they want but haven&apos;t bought yet.
+          </p>
+        </div>
+        <DropdownMenu>
+          <DropdownMenuTrigger
+            disabled={exportBusy}
+            render={
+              <Button variant="outline">
+                {exportBusy ? <Loader2 className="size-4 animate-spin" /> : <Download className="size-4" />}
+                Export
+              </Button>
+            }
+          />
+          <DropdownMenuContent align="end" className="w-64">
+            <DropdownMenuItem disabled={!selected.length} onClick={() => runExport("selected")}>
+              Export {selected.length || ""} selected save{selected.length === 1 ? "" : "s"}
+            </DropdownMenuItem>
+            <DropdownMenuItem onClick={() => runExport("all")}>
+              Export all matching filters ({total})
+            </DropdownMenuItem>
+          </DropdownMenuContent>
+        </DropdownMenu>
       </div>
 
-      <Card className="py-0 shadow-none">
-        <CardContent className="grid grid-cols-2 divide-y p-0 lg:grid-cols-4 lg:divide-x lg:divide-y-0">
-          <SummaryCard
-            label="Total saves"
-            value={total.toLocaleString("en-US")}
-            loading={loading}
-          />
-          {topProducts.map((p, i) => (
-            <SummaryCard
-              key={p.name}
-              label={`Most saved${i > 0 ? ` #${i + 1}` : ""}`}
-              value={`${p.name} · ${p.count}`}
-              loading={loading}
-            />
-          ))}
-        </CardContent>
-      </Card>
+      <SummaryStatStrip tiles={tiles} loading={loading} />
 
       <div className="flex flex-wrap items-center gap-2">
         <div className="relative min-w-44 sm:max-w-48">
@@ -241,25 +298,35 @@ export default function WishlistsPage() {
             className="bg-card pl-8"
           />
         </div>
-        <Select items={STATUS_ITEMS} value={status} onValueChange={(v) => setStatus(v as string)}>
-          <SelectTrigger className="min-w-32 bg-card">
-            <SelectValue />
-          </SelectTrigger>
-          <SelectContent>
-            {Object.entries(STATUS_ITEMS).map(([v, label]) => (
-              <SelectItem key={v} value={v}>
-                {label}
-              </SelectItem>
-            ))}
-          </SelectContent>
-        </Select>
+        <MultiSelectFilter label="Status" options={STATUS_OPTIONS} value={statuses} onChange={setStatuses} />
         <DateRangePicker value={dateRange} onChange={setDateRange} />
       </div>
+
+      {selected.length > 0 && (
+        <div className="flex flex-wrap items-center gap-3 rounded-xl border border-border bg-card px-3 py-2">
+          <span className="text-sm font-medium">
+            {selected.length} save{selected.length === 1 ? "" : "s"} selected
+          </span>
+          <Button size="sm" variant="outline" disabled={exportBusy} onClick={() => runExport("selected")}>
+            {exportBusy ? <Loader2 className="size-4 animate-spin" /> : <Download className="size-4" />}
+            Export selected
+          </Button>
+          <button
+            type="button"
+            onClick={() => setClearKey((k) => k + 1)}
+            className="text-xs text-muted-foreground hover:text-foreground"
+          >
+            Clear selection
+          </button>
+        </div>
+      )}
 
       <DataTable
         columns={columns}
         data={rows}
         loading={loading}
+        onSelectionChange={setSelected}
+        clearSelectionKey={clearKey}
         serverPagination={{
           pageIndex: page,
           pageCount,

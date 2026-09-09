@@ -10,24 +10,52 @@ import { toast } from "sonner";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
+import { MultiSelectFilter } from "@/components/multi-select-filter";
+import { SummaryStatStrip, type SummaryTile } from "@/components/summary-stat-strip";
 import {
-  Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
-} from "@/components/ui/select";
+  DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
 import { DataTable } from "@/components/data-table";
 import { DateRangePicker } from "@/components/date-range-picker";
 import { StatusBadge } from "@/components/status-badge";
 import { apiErrorMessage } from "@/lib/auth-api";
 import { usePermissions } from "@/stores/menu-store";
-import { listUsers, unlockUser, type UserRow } from "@/lib/admin-api";
+import { exportRowsToCsv } from "@/lib/utils";
+import { listUsers, getUsersSummary, unlockUser, type UserRow, type UsersSummary } from "@/lib/admin-api";
 import type { DateRange } from "react-day-picker";
 
 const DEFAULT_PAGE_SIZE = 20;
+const EXPORT_CAP = 5000;
+
+const STATUS_OPTIONS = ["active", "inactive"] as const;
+const SUBSCRIPTION_OPTIONS = ["subscribed", "not_subscribed"] as const;
 
 const fmt$ = (n?: number | null) =>
   n != null ? `$${Number(n).toLocaleString("en-US", { minimumFractionDigits: 2 })}` : "—";
 
 const initials = (name: string) =>
   name.split(/\s+/).map((p) => p[0] ?? "").join("").slice(0, 2).toUpperCase() || "??";
+
+const location = (row: UserRow) =>
+  [row.location?.city, row.location?.state, row.location?.country].filter(Boolean).join(", ") || "";
+
+const EMPTY_SUMMARY: UsersSummary = {
+  total_customers: 0,
+  new_customers: { current: 0, previous: 0, change_percent: null },
+  subscribed: 0,
+  locked: 0,
+};
+
+const exportColumns = [
+  { key: "full_name", label: "Customer", value: (r: UserRow) => r.full_name },
+  { key: "email", label: "Email", value: (r: UserRow) => r.email },
+  { key: "phone", label: "Phone", value: (r: UserRow) => r.phone ?? "" },
+  { key: "email_subscribed", label: "Email subscription", value: (r: UserRow) => (r.email_subscribed ? "Subscribed" : "Not subscribed") },
+  { key: "location", label: "Location", value: (r: UserRow) => location(r) || "" },
+  { key: "total_orders", label: "Orders", value: (r: UserRow) => r.total_orders ?? 0 },
+  { key: "total_spent", label: "Amount spent", value: (r: UserRow) => r.total_spent ?? 0 },
+  { key: "created_at", label: "Joined", value: (r: UserRow) => r.created_at ?? "" },
+];
 
 function buildColumns(
   canEdit: boolean,
@@ -49,6 +77,7 @@ function buildColumns(
       <Checkbox
         checked={row.getIsSelected()}
         onCheckedChange={(v) => row.toggleSelected(!!v)}
+        onClick={(e) => e.stopPropagation()}
         aria-label="Select row"
       />
     ),
@@ -57,7 +86,7 @@ function buildColumns(
   },
   {
     accessorKey: "full_name",
-    header: "Customer",
+    header: "Customer name",
     cell: ({ row }) => {
       const name = row.getValue<string>("full_name") ?? "";
       return (
@@ -76,19 +105,22 @@ function buildColumns(
     },
   },
   {
-    accessorKey: "phone",
-    header: "Phone",
-    cell: ({ row }) => row.getValue("phone") ?? "—",
-  },
-  {
-    accessorKey: "is_active",
-    header: "Status",
+    id: "email_subscription",
+    header: "Email subscription",
     cell: ({ row }) => (
       <StatusBadge
-        status={row.getValue("is_active") ? "Active" : "Inactive"}
-        tone={row.getValue("is_active") ? "success" : "neutral"}
+        status={row.original.email_subscribed ? "Subscribed" : "Not subscribed"}
+        tone={row.original.email_subscribed ? "success" : "neutral"}
       />
     ),
+  },
+  {
+    id: "location",
+    header: "Location",
+    cell: ({ row }) => {
+      const loc = location(row.original);
+      return loc ? <span className="text-sm">{loc}</span> : <span className="text-muted-foreground">—</span>;
+    },
   },
   {
     accessorKey: "is_locked",
@@ -137,14 +169,6 @@ function buildColumns(
       <div className="text-right font-medium">{fmt$(row.getValue("total_spent"))}</div>
     ),
   },
-  {
-    accessorKey: "created_at",
-    header: "Joined",
-    cell: ({ row }) => {
-      const v = row.getValue<string>("created_at");
-      return v ? format(new Date(v), "MMM d, yyyy") : "—";
-    },
-  },
   ];
 }
 
@@ -158,30 +182,52 @@ export default function CustomersPage() {
   const [total, setTotal] = React.useState(0);
   const [totalPages, setTotalPages] = React.useState(1);
   const [loading, setLoading] = React.useState(false);
+  const [selected, setSelected] = React.useState<UserRow[]>([]);
+  const [clearKey, setClearKey] = React.useState(0);
+  const [exportBusy, setExportBusy] = React.useState(false);
+  const [summary, setSummary] = React.useState<UsersSummary>(EMPTY_SUMMARY);
+  const [summaryLoading, setSummaryLoading] = React.useState(true);
 
   const [dateRange, setDateRange] = React.useState<DateRange | undefined>();
   // Customers only. Staff accounts live under Settings → Users.
-  const [isActive, setIsActive] = React.useState("all");
+  const [statuses, setStatuses] = React.useState<string[]>([]);
+  const [subscriptions, setSubscriptions] = React.useState<string[]>([]);
   const [searchInput, setSearchInput] = React.useState("");
   const [search, setSearch] = React.useState("");
 
-  React.useEffect(() => { setPage(1); }, [dateRange, isActive, search]);
+  React.useEffect(() => { setPage(1); }, [dateRange, statuses, subscriptions, search]);
+
+  const buildFilters = React.useCallback((): Record<string, unknown> => {
+    const filters: Record<string, unknown> = { role: "customer" };
+    if (statuses.length === 1) filters.is_active = statuses[0] === "active";
+    // Both selected (or neither) means no opinion — only a single pick narrows it.
+    if (subscriptions.length === 1) filters.email_subscribed = subscriptions[0] === "subscribed";
+    if (search) filters.full_name = search;
+    return filters;
+  }, [statuses, subscriptions, search]);
 
   const load = React.useCallback(() => {
     setLoading(true);
-    const filters: Record<string, unknown> = { role: "customer" };
-    if (isActive !== "all") filters.is_active = isActive === "active";
-    if (search) filters.full_name = search;
-
-    listUsers({ page, limit: pageSize, dateRange, filters })
+    listUsers({ page, limit: pageSize, dateRange, filters: buildFilters() })
       .then(({ rows: r, total: t, totalPages: tp }) => {
-        setRows(r); setTotal(t); setTotalPages(tp);
+        setRows(r);
+        setTotal(t); setTotalPages(tp);
       })
       .catch((e) => toast.error(apiErrorMessage(e, "Couldn't load customers.")))
       .finally(() => setLoading(false));
-  }, [page, pageSize, dateRange, isActive, search]);
+  }, [page, pageSize, dateRange, buildFilters]);
 
   React.useEffect(() => { load(); }, [load]);
+
+  React.useEffect(() => {
+    let cancelled = false;
+    setSummaryLoading(true);
+    getUsersSummary({ dateRange, filters: buildFilters() })
+      .then((s) => !cancelled && setSummary(s))
+      .catch(() => !cancelled && setSummary(EMPTY_SUMMARY))
+      .finally(() => !cancelled && setSummaryLoading(false));
+    return () => { cancelled = true; };
+  }, [dateRange, buildFilters]);
 
   const handleUnlock = async (row: UserRow) => {
     setUnlockingId(row.id);
@@ -195,35 +241,82 @@ export default function CustomersPage() {
     }
   };
 
+  const runExport = async (scope: "selected" | "all") => {
+    setExportBusy(true);
+    try {
+      const exportRows =
+        scope === "selected"
+          ? selected
+          : (await listUsers({ page: 1, limit: EXPORT_CAP, dateRange, filters: buildFilters() })).rows;
+      if (!exportRows.length) {
+        toast.error("Nothing to export.");
+        return;
+      }
+      exportRowsToCsv(`customers-${format(new Date(), "yyyy-MM-dd")}`, exportColumns, exportRows);
+      toast.success(`Exported ${exportRows.length} customer${exportRows.length === 1 ? "" : "s"}.`);
+    } catch (error) {
+      toast.error(apiErrorMessage(error, "Couldn't export customers."));
+    } finally {
+      setExportBusy(false);
+    }
+  };
+
   const columns = React.useMemo(
     () => buildColumns(!!permissions.can_edit, unlockingId, handleUnlock),
     [permissions.can_edit, unlockingId]
   );
+
+  const tiles: SummaryTile[] = [
+    { label: "Total customers", value: summary.total_customers.toLocaleString("en-US") },
+    {
+      label: "New customers",
+      value: summary.new_customers.current.toLocaleString("en-US"),
+      changePercent: summary.new_customers.change_percent,
+    },
+    { label: "Subscribed to email", value: summary.subscribed.toLocaleString("en-US") },
+    { label: "Locked accounts", value: summary.locked.toLocaleString("en-US") },
+  ];
 
   return (
     <div className="flex flex-col gap-4">
       {/* Header */}
       <div className="flex flex-wrap items-center justify-between gap-3">
         <h1 className="text-xl font-bold">Customers</h1>
-        <Button variant="outline">
-          <Download className="size-4" /> Export
-        </Button>
+        <DropdownMenu>
+          <DropdownMenuTrigger
+            disabled={exportBusy}
+            render={
+              <Button variant="outline">
+                {exportBusy ? <Loader2 className="size-4 animate-spin" /> : <Download className="size-4" />}
+                Export
+              </Button>
+            }
+          />
+          <DropdownMenuContent align="end" className="w-64">
+            <DropdownMenuItem disabled={!selected.length} onClick={() => runExport("selected")}>
+              Export {selected.length || ""} selected customer{selected.length === 1 ? "" : "s"}
+            </DropdownMenuItem>
+            <DropdownMenuItem onClick={() => runExport("all")}>
+              Export all customers matching filters ({total})
+            </DropdownMenuItem>
+          </DropdownMenuContent>
+        </DropdownMenu>
       </div>
+
+      {/* Summary stat strip */}
+      <SummaryStatStrip tiles={tiles} loading={summaryLoading} />
 
       {/* Filter bar */}
       <div className="flex flex-wrap items-center gap-2">
         <DateRangePicker value={dateRange} onChange={setDateRange} />
 
-        <Select value={isActive} onValueChange={(v) => setIsActive(v ?? "all")}>
-          <SelectTrigger className="h-9 w-36 bg-card">
-            <SelectValue placeholder="Status" />
-          </SelectTrigger>
-          <SelectContent>
-            <SelectItem value="all">All statuses</SelectItem>
-            <SelectItem value="active">Active</SelectItem>
-            <SelectItem value="inactive">Inactive</SelectItem>
-          </SelectContent>
-        </Select>
+        <MultiSelectFilter label="Status" options={STATUS_OPTIONS} value={statuses} onChange={setStatuses} />
+        <MultiSelectFilter
+          label="Email subscription"
+          options={SUBSCRIPTION_OPTIONS}
+          value={subscriptions}
+          onChange={setSubscriptions}
+        />
 
         <div className="flex items-center gap-1">
           <div className="relative">
@@ -249,11 +342,32 @@ export default function CustomersPage() {
         </div>
       </div>
 
+      {selected.length > 0 && (
+        <div className="flex flex-wrap items-center gap-3 rounded-xl border border-border bg-card px-3 py-2">
+          <span className="text-sm font-medium">
+            {selected.length} customer{selected.length === 1 ? "" : "s"} selected
+          </span>
+          <Button size="sm" variant="outline" disabled={exportBusy} onClick={() => runExport("selected")}>
+            {exportBusy ? <Loader2 className="size-4 animate-spin" /> : <Download className="size-4" />}
+            Export selected
+          </Button>
+          <button
+            type="button"
+            onClick={() => setClearKey((k) => k + 1)}
+            className="text-xs text-muted-foreground hover:text-foreground"
+          >
+            Clear selection
+          </button>
+        </div>
+      )}
+
       {/* Table */}
       <DataTable
         columns={columns}
         data={rows}
         loading={loading}
+        onSelectionChange={setSelected}
+        clearSelectionKey={clearKey}
         onRowClick={(row) => router.push(`/customers/${row.id}`)}
         serverPagination={{
           pageIndex: page - 1,

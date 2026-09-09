@@ -3,7 +3,7 @@
 import * as React from "react";
 import { type ColumnDef } from "@tanstack/react-table";
 import { format } from "date-fns";
-import { Loader2, Plus, Search, Send } from "lucide-react";
+import { Download, Loader2, Plus, Search, Send } from "lucide-react";
 import { useForm, Controller } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
@@ -12,6 +12,7 @@ import { toast } from "sonner";
 
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import { Button } from "@/components/ui/button";
+import { Checkbox } from "@/components/ui/checkbox";
 import {
   Dialog,
   DialogContent,
@@ -23,6 +24,10 @@ import {
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { RichTextEditor } from "@/components/ui/rich-text-editor";
+import { MultiSelectFilter } from "@/components/multi-select-filter";
+import {
+  DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
 import {
   Select,
   SelectContent,
@@ -36,6 +41,7 @@ import { DateRangePicker } from "@/components/date-range-picker";
 import { MediaUpload } from "@/components/media-upload";
 import { StatusBadge } from "@/components/status-badge";
 import { apiErrorMessage } from "@/lib/auth-api";
+import { exportRowsToCsv } from "@/lib/utils";
 import {
   CAMPAIGN_STATUSES,
   SUBSCRIBER_SOURCES,
@@ -52,6 +58,7 @@ import {
 } from "@/lib/admin-api";
 
 const DEFAULT_PAGE_SIZE = 10;
+const EXPORT_CAP = 5000;
 const cap = (s?: string | null) =>
   s ? s.charAt(0).toUpperCase() + s.slice(1) : "—";
 
@@ -93,7 +100,36 @@ const campaignStatusTone = (s?: string) =>
         ? "critical"
         : "info";
 
+const campaignExportColumns = [
+  { key: "subject", label: "Campaign", value: (r: CampaignRow) => r.subject },
+  { key: "status", label: "Status", value: (r: CampaignRow) => cap(r.status ?? "draft") },
+  { key: "scheduled_at", label: "Scheduled", value: (r: CampaignRow) => r.scheduled_at ?? "" },
+  { key: "sent_at", label: "Sent", value: (r: CampaignRow) => r.sent_at ?? "" },
+  { key: "created_at", label: "Created", value: (r: CampaignRow) => r.created_at ?? "" },
+];
+
 const campaignColumns: ColumnDef<CampaignRow>[] = [
+  {
+    id: "select",
+    header: ({ table }) => (
+      <Checkbox
+        checked={table.getIsAllPageRowsSelected()}
+        indeterminate={table.getIsSomePageRowsSelected() && !table.getIsAllPageRowsSelected()}
+        onCheckedChange={(v) => table.toggleAllPageRowsSelected(!!v)}
+        aria-label="Select all"
+      />
+    ),
+    cell: ({ row }) => (
+      <Checkbox
+        checked={row.getIsSelected()}
+        onCheckedChange={(v) => row.toggleSelected(!!v)}
+        onClick={(e) => e.stopPropagation()}
+        aria-label="Select row"
+      />
+    ),
+    enableSorting: false,
+    enableHiding: false,
+  },
   {
     accessorKey: "subject",
     header: "Campaign",
@@ -140,11 +176,6 @@ const campaignColumns: ColumnDef<CampaignRow>[] = [
   },
 ];
 
-const CAMPAIGN_STATUS_ITEMS: Record<string, string> = Object.fromEntries([
-  ["all", "All statuses"],
-  ...CAMPAIGN_STATUSES.map((s) => [s, cap(s)]),
-]);
-
 function CampaignsTab() {
   const [rows, setRows] = React.useState<CampaignRow[]>([]);
   const [loading, setLoading] = React.useState(true);
@@ -152,9 +183,12 @@ function CampaignsTab() {
   const [pageSize, setPageSize] = React.useState<number>(DEFAULT_PAGE_SIZE);
   const [pageCount, setPageCount] = React.useState(1);
   const [total, setTotal] = React.useState(0);
+  const [selected, setSelected] = React.useState<CampaignRow[]>([]);
+  const [clearKey, setClearKey] = React.useState(0);
+  const [exportBusy, setExportBusy] = React.useState(false);
 
   const [search, setSearch] = React.useState("");
-  const [status, setStatus] = React.useState("all");
+  const [statuses, setStatuses] = React.useState<string[]>([]);
   const [dialogOpen, setDialogOpen] = React.useState(false);
   const [editing, setEditing] = React.useState<CampaignRow | null>(null);
   const [refreshKey, setRefreshKey] = React.useState(0);
@@ -167,19 +201,20 @@ function CampaignsTab() {
 
   React.useEffect(() => {
     setPage(0);
-  }, [debouncedSearch, status]);
+  }, [debouncedSearch, statuses]);
+
+  const activeFilters = React.useMemo(
+    () => ({
+      subject: debouncedSearch ? { contains: debouncedSearch } : undefined,
+      status: statuses.length ? statuses : undefined,
+    }),
+    [debouncedSearch, statuses]
+  );
 
   React.useEffect(() => {
     let cancelled = false;
     setLoading(true);
-    listCampaigns({
-      page: page + 1,
-      limit: pageSize,
-      filters: {
-        subject: debouncedSearch ? { contains: debouncedSearch } : undefined,
-        status: status === "all" ? undefined : status,
-      },
-    })
+    listCampaigns({ page: page + 1, limit: pageSize, filters: activeFilters })
       .then((res) => {
         if (cancelled) return;
         setRows(res.rows);
@@ -195,7 +230,27 @@ function CampaignsTab() {
     return () => {
       cancelled = true;
     };
-  }, [page, pageSize, debouncedSearch, status, refreshKey]);
+  }, [page, pageSize, activeFilters, refreshKey]);
+
+  const runExport = async (scope: "selected" | "all") => {
+    setExportBusy(true);
+    try {
+      const exportRows =
+        scope === "selected"
+          ? selected
+          : (await listCampaigns({ page: 1, limit: EXPORT_CAP, filters: activeFilters })).rows;
+      if (!exportRows.length) {
+        toast.error("Nothing to export.");
+        return;
+      }
+      exportRowsToCsv(`campaigns-${format(new Date(), "yyyy-MM-dd")}`, campaignExportColumns, exportRows);
+      toast.success(`Exported ${exportRows.length} campaign${exportRows.length === 1 ? "" : "s"}.`);
+    } catch (error) {
+      toast.error(apiErrorMessage(error, "Couldn't export campaigns."));
+    } finally {
+      setExportBusy(false);
+    }
+  };
 
   return (
     <div className="flex flex-col gap-3">
@@ -209,22 +264,26 @@ function CampaignsTab() {
             className="bg-card pl-8"
           />
         </div>
-        <Select
-          items={CAMPAIGN_STATUS_ITEMS}
-          value={status}
-          onValueChange={(v) => setStatus(v as string)}
-        >
-          <SelectTrigger className="min-w-32 bg-card">
-            <SelectValue />
-          </SelectTrigger>
-          <SelectContent>
-            {Object.entries(CAMPAIGN_STATUS_ITEMS).map(([v, label]) => (
-              <SelectItem key={v} value={v}>
-                {label}
-              </SelectItem>
-            ))}
-          </SelectContent>
-        </Select>
+        <MultiSelectFilter label="Status" options={CAMPAIGN_STATUSES} value={statuses} onChange={setStatuses} />
+        <DropdownMenu>
+          <DropdownMenuTrigger
+            disabled={exportBusy}
+            render={
+              <Button variant="outline">
+                {exportBusy ? <Loader2 className="size-4 animate-spin" /> : <Download className="size-4" />}
+                Export
+              </Button>
+            }
+          />
+          <DropdownMenuContent align="end" className="w-64">
+            <DropdownMenuItem disabled={!selected.length} onClick={() => runExport("selected")}>
+              Export {selected.length || ""} selected
+            </DropdownMenuItem>
+            <DropdownMenuItem onClick={() => runExport("all")}>
+              Export all matching filters ({total})
+            </DropdownMenuItem>
+          </DropdownMenuContent>
+        </DropdownMenu>
         <Button
           className="ml-auto"
           onClick={() => {
@@ -237,6 +296,21 @@ function CampaignsTab() {
         </Button>
       </div>
 
+      {selected.length > 0 && (
+        <div className="flex flex-wrap items-center gap-3 rounded-xl border border-border bg-card px-3 py-2">
+          <span className="text-sm font-medium">
+            {selected.length} campaign{selected.length === 1 ? "" : "s"} selected
+          </span>
+          <button
+            type="button"
+            onClick={() => setClearKey((k) => k + 1)}
+            className="text-xs text-muted-foreground hover:text-foreground"
+          >
+            Clear selection
+          </button>
+        </div>
+      )}
+
       <CampaignDialog
         editing={editing}
         open={dialogOpen}
@@ -248,6 +322,8 @@ function CampaignsTab() {
         columns={campaignColumns}
         data={rows}
         loading={loading}
+        onSelectionChange={setSelected}
+        clearSelectionKey={clearKey}
         onRowClick={(row) => {
           setEditing(row);
           setDialogOpen(true);
@@ -479,7 +555,36 @@ function CampaignDialog({
 const subStatusTone = (s?: string) =>
   s === "subscribed" ? "success" : s === "pending" ? "attention" : "neutral";
 
+const subscriberExportColumns = [
+  { key: "full_name", label: "Name", value: (r: SubscriberRow) => r.full_name ?? "" },
+  { key: "email", label: "Email", value: (r: SubscriberRow) => r.email },
+  { key: "status", label: "Status", value: (r: SubscriberRow) => cap(r.status ?? "subscribed") },
+  { key: "source", label: "Source", value: (r: SubscriberRow) => cap(r.source) },
+  { key: "created_at", label: "Subscribed", value: (r: SubscriberRow) => r.created_at ?? "" },
+];
+
 const subscriberColumns: ColumnDef<SubscriberRow>[] = [
+  {
+    id: "select",
+    header: ({ table }) => (
+      <Checkbox
+        checked={table.getIsAllPageRowsSelected()}
+        indeterminate={table.getIsSomePageRowsSelected() && !table.getIsAllPageRowsSelected()}
+        onCheckedChange={(v) => table.toggleAllPageRowsSelected(!!v)}
+        aria-label="Select all"
+      />
+    ),
+    cell: ({ row }) => (
+      <Checkbox
+        checked={row.getIsSelected()}
+        onCheckedChange={(v) => row.toggleSelected(!!v)}
+        onClick={(e) => e.stopPropagation()}
+        aria-label="Select row"
+      />
+    ),
+    enableSorting: false,
+    enableHiding: false,
+  },
   {
     accessorKey: "email",
     header: "Subscriber",
@@ -537,15 +642,6 @@ const subscriberColumns: ColumnDef<SubscriberRow>[] = [
   },
 ];
 
-const SUB_STATUS_ITEMS: Record<string, string> = Object.fromEntries([
-  ["all", "All statuses"],
-  ...SUBSCRIBER_STATUSES.map((s) => [s, cap(s)]),
-]);
-const SUB_SOURCE_ITEMS: Record<string, string> = Object.fromEntries([
-  ["all", "All sources"],
-  ...SUBSCRIBER_SOURCES.map((s) => [s, cap(s)]),
-]);
-
 function SubscribersTab() {
   const [rows, setRows] = React.useState<SubscriberRow[]>([]);
   const [loading, setLoading] = React.useState(true);
@@ -553,10 +649,13 @@ function SubscribersTab() {
   const [pageSize, setPageSize] = React.useState<number>(DEFAULT_PAGE_SIZE);
   const [pageCount, setPageCount] = React.useState(1);
   const [total, setTotal] = React.useState(0);
+  const [selected, setSelected] = React.useState<SubscriberRow[]>([]);
+  const [clearKey, setClearKey] = React.useState(0);
+  const [exportBusy, setExportBusy] = React.useState(false);
 
   const [search, setSearch] = React.useState("");
-  const [status, setStatus] = React.useState("all");
-  const [source, setSource] = React.useState("all");
+  const [statuses, setStatuses] = React.useState<string[]>([]);
+  const [sources, setSources] = React.useState<string[]>([]);
   const [dateRange, setDateRange] = React.useState<DateRange | undefined>();
   const [dialogOpen, setDialogOpen] = React.useState(false);
   const [editing, setEditing] = React.useState<SubscriberRow | null>(null);
@@ -570,7 +669,17 @@ function SubscribersTab() {
 
   React.useEffect(() => {
     setPage(0);
-  }, [debouncedSearch, status, source, dateRange]);
+  }, [debouncedSearch, statuses, sources, dateRange]);
+
+  const activeFilters = React.useMemo(
+    () => ({
+      dateRange,
+      email: debouncedSearch ? { contains: debouncedSearch } : undefined,
+      status: statuses.length ? statuses : undefined,
+      source: sources.length ? sources : undefined,
+    }),
+    [dateRange, debouncedSearch, statuses, sources]
+  );
 
   React.useEffect(() => {
     let cancelled = false;
@@ -578,12 +687,8 @@ function SubscribersTab() {
     listSubscribers({
       page: page + 1,
       limit: pageSize,
-      dateRange,
-      filters: {
-        email: debouncedSearch ? { contains: debouncedSearch } : undefined,
-        status: status === "all" ? undefined : status,
-        source: source === "all" ? undefined : source,
-      },
+      dateRange: activeFilters.dateRange,
+      filters: { email: activeFilters.email, status: activeFilters.status, source: activeFilters.source },
     })
       .then((res) => {
         if (cancelled) return;
@@ -600,7 +705,32 @@ function SubscribersTab() {
     return () => {
       cancelled = true;
     };
-  }, [page, pageSize, debouncedSearch, status, source, dateRange, refreshKey]);
+  }, [page, pageSize, activeFilters, refreshKey]);
+
+  const runExport = async (scope: "selected" | "all") => {
+    setExportBusy(true);
+    try {
+      const exportRows =
+        scope === "selected"
+          ? selected
+          : (
+              await listSubscribers({
+                page: 1, limit: EXPORT_CAP, dateRange: activeFilters.dateRange,
+                filters: { email: activeFilters.email, status: activeFilters.status, source: activeFilters.source },
+              })
+            ).rows;
+      if (!exportRows.length) {
+        toast.error("Nothing to export.");
+        return;
+      }
+      exportRowsToCsv(`subscribers-${format(new Date(), "yyyy-MM-dd")}`, subscriberExportColumns, exportRows);
+      toast.success(`Exported ${exportRows.length} subscriber${exportRows.length === 1 ? "" : "s"}.`);
+    } catch (error) {
+      toast.error(apiErrorMessage(error, "Couldn't export subscribers."));
+    } finally {
+      setExportBusy(false);
+    }
+  };
 
   return (
     <div className="flex flex-col gap-3">
@@ -614,39 +744,28 @@ function SubscribersTab() {
             className="bg-card pl-8"
           />
         </div>
-        <Select
-          items={SUB_STATUS_ITEMS}
-          value={status}
-          onValueChange={(v) => setStatus(v as string)}
-        >
-          <SelectTrigger className="min-w-32 bg-card">
-            <SelectValue />
-          </SelectTrigger>
-          <SelectContent>
-            {Object.entries(SUB_STATUS_ITEMS).map(([v, label]) => (
-              <SelectItem key={v} value={v}>
-                {label}
-              </SelectItem>
-            ))}
-          </SelectContent>
-        </Select>
-        <Select
-          items={SUB_SOURCE_ITEMS}
-          value={source}
-          onValueChange={(v) => setSource(v as string)}
-        >
-          <SelectTrigger className="min-w-32 bg-card">
-            <SelectValue />
-          </SelectTrigger>
-          <SelectContent>
-            {Object.entries(SUB_SOURCE_ITEMS).map(([v, label]) => (
-              <SelectItem key={v} value={v}>
-                {label}
-              </SelectItem>
-            ))}
-          </SelectContent>
-        </Select>
+        <MultiSelectFilter label="Status" options={SUBSCRIBER_STATUSES} value={statuses} onChange={setStatuses} />
+        <MultiSelectFilter label="Source" options={SUBSCRIBER_SOURCES} value={sources} onChange={setSources} />
         <DateRangePicker value={dateRange} onChange={setDateRange} />
+        <DropdownMenu>
+          <DropdownMenuTrigger
+            disabled={exportBusy}
+            render={
+              <Button variant="outline">
+                {exportBusy ? <Loader2 className="size-4 animate-spin" /> : <Download className="size-4" />}
+                Export
+              </Button>
+            }
+          />
+          <DropdownMenuContent align="end" className="w-64">
+            <DropdownMenuItem disabled={!selected.length} onClick={() => runExport("selected")}>
+              Export {selected.length || ""} selected
+            </DropdownMenuItem>
+            <DropdownMenuItem onClick={() => runExport("all")}>
+              Export all matching filters ({total})
+            </DropdownMenuItem>
+          </DropdownMenuContent>
+        </DropdownMenu>
         <Button
           className="ml-auto"
           onClick={() => {
@@ -659,6 +778,21 @@ function SubscribersTab() {
         </Button>
       </div>
 
+      {selected.length > 0 && (
+        <div className="flex flex-wrap items-center gap-3 rounded-xl border border-border bg-card px-3 py-2">
+          <span className="text-sm font-medium">
+            {selected.length} subscriber{selected.length === 1 ? "" : "s"} selected
+          </span>
+          <button
+            type="button"
+            onClick={() => setClearKey((k) => k + 1)}
+            className="text-xs text-muted-foreground hover:text-foreground"
+          >
+            Clear selection
+          </button>
+        </div>
+      )}
+
       <SubscriberDialog
         editing={editing}
         open={dialogOpen}
@@ -670,6 +804,8 @@ function SubscribersTab() {
         columns={subscriberColumns}
         data={rows}
         loading={loading}
+        onSelectionChange={setSelected}
+        clearSelectionKey={clearKey}
         onRowClick={(row) => {
           setEditing(row);
           setDialogOpen(true);

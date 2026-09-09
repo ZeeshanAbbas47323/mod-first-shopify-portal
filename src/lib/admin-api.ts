@@ -39,6 +39,17 @@ export interface UserRow {
   is_admin?: boolean;
   image?: string | null;
   created_at?: string;
+  total_orders?: number;
+  total_spent?: number;
+  location?: { city?: string | null; state?: string | null; country?: string | null } | null;
+  email_subscribed?: boolean;
+  stats?: {
+    total_orders: number;
+    total_spent: number;
+    avg_order_value: number;
+    last_order_at: string | null;
+  };
+  [k: string]: unknown;
 }
 
 export interface BranchRow {
@@ -523,6 +534,37 @@ export async function getUserById(id: number | string): Promise<UserRow | null> 
   return (data?.payload ?? data?.data ?? data ?? null) as UserRow | null;
 }
 
+export interface UsersSummary {
+  total_customers: number;
+  new_customers: DashboardMetric;
+  subscribed: number;
+  locked: number;
+}
+
+const EMPTY_USERS_SUMMARY: UsersSummary = {
+  total_customers: 0, new_customers: { current: 0, previous: 0, change_percent: null },
+  subscribed: 0, locked: 0,
+};
+
+export async function getUsersSummary(params: {
+  dateRange?: DateRange;
+  filters?: Json;
+}): Promise<UsersSummary> {
+  const body: Json = {};
+  if (params.dateRange?.from) body.startDate = format(params.dateRange.from, "yyyy-MM-dd");
+  if (params.dateRange?.to) body.endDate = format(params.dateRange.to, "yyyy-MM-dd");
+  if (params.filters && Object.keys(params.filters).length) body.filters = params.filters;
+
+  const { data } = await api.post("users/summary", body);
+  const p = dashParse<Json>(data) ?? {};
+  return {
+    total_customers: Number(p.total_customers ?? 0),
+    new_customers: p.new_customers ?? EMPTY_USERS_SUMMARY.new_customers,
+    subscribed: Number(p.subscribed ?? 0),
+    locked: Number(p.locked ?? 0),
+  };
+}
+
 export async function listBranches(
   params: ListParams
 ): Promise<ListResult<BranchRow>> {
@@ -861,6 +903,7 @@ export interface CampaignRow {
   sent_at?: string | null;
   is_active?: boolean;
   created_at?: string;
+  [k: string]: unknown;
 }
 
 export interface SubscriberRow {
@@ -871,6 +914,7 @@ export interface SubscriberRow {
   source?: string | null;
   is_active?: boolean;
   created_at?: string;
+  [k: string]: unknown;
 }
 
 export async function listCampaigns(

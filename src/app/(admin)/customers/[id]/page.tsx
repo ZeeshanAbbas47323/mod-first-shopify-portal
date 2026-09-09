@@ -17,6 +17,7 @@ import { toast } from "sonner";
 
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { SummaryStatStrip } from "@/components/summary-stat-strip";
 import { StatusBadge } from "@/components/status-badge";
 import { apiErrorMessage } from "@/lib/auth-api";
 import { cn, imgUrl } from "@/lib/utils";
@@ -143,6 +144,16 @@ export default function CustomerDetailPage() {
           {customer.is_locked && <StatusBadge status="Locked" tone="critical" />}
         </div>
       </div>
+
+      {/* Summary */}
+      <SummaryStatStrip
+        tiles={[
+          { label: "Total orders", value: (customer.stats?.total_orders ?? 0).toLocaleString("en-US") },
+          { label: "Total spent", value: money(customer.stats?.total_spent) },
+          { label: "Avg. order value", value: money(customer.stats?.avg_order_value) },
+          { label: "Last order", value: fmtDate(customer.stats?.last_order_at ?? undefined) },
+        ]}
+      />
 
       <div className="grid gap-4 lg:grid-cols-[minmax(0,1fr)_340px]">
         {/* ── Left ── */}
