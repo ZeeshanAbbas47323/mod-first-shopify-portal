@@ -3,7 +3,7 @@
 import * as React from "react";
 import { type ColumnDef } from "@tanstack/react-table";
 import { format } from "date-fns";
-import { Check, Loader2, Minus, Plus, Trash2 } from "lucide-react";
+import { Check, Download, Loader2, Minus, Plus, Trash2 } from "lucide-react";
 import { useForm, Controller } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
@@ -30,7 +30,9 @@ import {
 } from "@/components/ui/select";
 import { DataTable } from "@/components/data-table";
 import { StatusBadge } from "@/components/status-badge";
+import { MultiSelectFilter } from "@/components/multi-select-filter";
 import { apiErrorMessage } from "@/lib/auth-api";
+import { exportRowsToCsv } from "@/lib/utils";
 import {
   createMenuRight,
   deleteRecord,
@@ -41,11 +43,10 @@ import {
 } from "@/lib/admin-api";
 
 const DEFAULT_PAGE_SIZE = 10;
+const EXPORT_CAP = 5000;
 
-const ROLE_ITEMS: Record<string, string> = Object.fromEntries([
-  ["all", "All roles"],
-  ...USER_ROLES.map((r) => [r, r.replace(/_/g, " ").replace(/\b\w/g, (c) => c.toUpperCase())]),
-]);
+// Menu access is a dashboard-only concept — the "customer" role never signs into it.
+const STAFF_ROLES = USER_ROLES.filter((r) => r !== "customer");
 
 const humanizeRole = (role?: string) =>
   role ? role.replace(/_/g, " ").replace(/\b\w/g, (c) => c.toUpperCase()) : "—";
@@ -128,17 +129,28 @@ export function MenuRightsSection() {
   const [pageCount, setPageCount] = React.useState(1);
   const [total, setTotal] = React.useState(0);
 
-  const [role, setRole] = React.useState("all");
+  const [roles, setRoles] = React.useState<string[]>([]);
   const [canView, setCanView] = React.useState<Tri>("all");
   const [canEdit, setCanEdit] = React.useState<Tri>("all");
   const [canDelete, setCanDelete] = React.useState<Tri>("all");
   const [dialogOpen, setDialogOpen] = React.useState(false);
   const [editing, setEditing] = React.useState<MenuRightRow | null>(null);
   const [refreshKey, setRefreshKey] = React.useState(0);
+  const [exportBusy, setExportBusy] = React.useState(false);
 
   React.useEffect(() => {
     setPage(0);
-  }, [role, canView, canEdit, canDelete]);
+  }, [roles, canView, canEdit, canDelete]);
+
+  const buildFilters = React.useCallback(
+    () => ({
+      role: roles.length ? { in: roles } : undefined,
+      can_view: triToBool(canView),
+      can_edit: triToBool(canEdit),
+      can_delete: triToBool(canDelete),
+    }),
+    [roles, canView, canEdit, canDelete]
+  );
 
   React.useEffect(() => {
     let cancelled = false;
@@ -146,12 +158,7 @@ export function MenuRightsSection() {
     listMenuRights({
       page: page + 1,
       limit: pageSize,
-      filters: {
-        role: role === "all" ? undefined : role,
-        can_view: triToBool(canView),
-        can_edit: triToBool(canEdit),
-        can_delete: triToBool(canDelete),
-      },
+      filters: buildFilters(),
     })
       .then((res) => {
         if (cancelled) return;
@@ -168,7 +175,31 @@ export function MenuRightsSection() {
     return () => {
       cancelled = true;
     };
-  }, [page, pageSize, role, canView, canEdit, canDelete, refreshKey]);
+  }, [page, pageSize, buildFilters, refreshKey]);
+
+  const runExport = async () => {
+    setExportBusy(true);
+    try {
+      const exportRows = (await listMenuRights({ page: 1, limit: EXPORT_CAP, filters: buildFilters() })).rows;
+      if (!exportRows.length) {
+        toast.error("Nothing to export.");
+        return;
+      }
+      exportRowsToCsv("menu-rights", [
+        { key: "menu", label: "Menu", value: (r: MenuRightRow) => r.menu?.name ?? `Menu #${r.menu_id}` },
+        { key: "role", label: "Role", value: (r: MenuRightRow) => humanizeRole(r.role) },
+        { key: "can_view", label: "View", value: (r: MenuRightRow) => (r.can_view ? "Yes" : "No") },
+        { key: "can_create", label: "Create", value: (r: MenuRightRow) => (r.can_create ? "Yes" : "No") },
+        { key: "can_edit", label: "Edit", value: (r: MenuRightRow) => (r.can_edit ? "Yes" : "No") },
+        { key: "can_delete", label: "Delete", value: (r: MenuRightRow) => (r.can_delete ? "Yes" : "No") },
+      ], exportRows);
+      toast.success(`Exported ${exportRows.length} row${exportRows.length === 1 ? "" : "s"}.`);
+    } catch (error) {
+      toast.error(apiErrorMessage(error, "Couldn't export menu rights."));
+    } finally {
+      setExportBusy(false);
+    }
+  };
 
   const triSelect = (label: string, value: Tri, onChange: (v: Tri) => void) => (
     <Select
@@ -190,22 +221,19 @@ export function MenuRightsSection() {
   return (
     <div className="flex flex-col gap-3">
       <div className="flex flex-wrap items-center gap-2">
-        <Select items={ROLE_ITEMS} value={role} onValueChange={(v) => setRole(v as string)}>
-          <SelectTrigger className="min-w-36 bg-card">
-            <SelectValue />
-          </SelectTrigger>
-          <SelectContent>
-            <SelectItem value="all">All roles</SelectItem>
-            {USER_ROLES.map((r) => (
-              <SelectItem key={r} value={r}>
-                {humanizeRole(r)}
-              </SelectItem>
-            ))}
-          </SelectContent>
-        </Select>
+        <MultiSelectFilter
+          label="Role"
+          options={STAFF_ROLES.map((r) => ({ value: r, label: humanizeRole(r) }))}
+          value={roles}
+          onChange={setRoles}
+        />
         {triSelect("View", canView, setCanView)}
         {triSelect("Edit", canEdit, setCanEdit)}
         {triSelect("Delete", canDelete, setCanDelete)}
+        <Button variant="outline" onClick={runExport} disabled={exportBusy}>
+          {exportBusy ? <Loader2 className="size-4 animate-spin" /> : <Download className="size-4" />}
+          Export
+        </Button>
         <Button
           className="ml-auto"
           onClick={() => {

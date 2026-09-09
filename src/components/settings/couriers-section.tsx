@@ -3,7 +3,7 @@
 import * as React from "react";
 import { type ColumnDef } from "@tanstack/react-table";
 import { format } from "date-fns";
-import { Loader2, Plus, Search, Trash2 } from "lucide-react";
+import { Download, Loader2, Plus, Search, Trash2 } from "lucide-react";
 import { useForm, Controller } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
@@ -24,12 +24,14 @@ import {
 import { DataTable } from "@/components/data-table";
 import { StatusToggle } from "@/components/status-badge";
 import { apiErrorMessage } from "@/lib/auth-api";
+import { exportRowsToCsv } from "@/lib/utils";
 import {
   listCouriers, createCourier, updateCourier, deleteCourier, updateRecordStatus,
   type CourierRow,
 } from "@/lib/admin-api";
 
 const DEFAULT_PAGE_SIZE = 10;
+const EXPORT_CAP = 5000;
 
 function getColumns(
   onToggleStatus: (row: CourierRow, next: boolean) => Promise<void>
@@ -105,6 +107,7 @@ export function CouriersSection() {
   const [dialogOpen, setDialogOpen] = React.useState(false);
   const [editing, setEditing] = React.useState<CourierRow | null>(null);
   const [refreshKey, setRefreshKey] = React.useState(0);
+  const [exportBusy, setExportBusy] = React.useState(false);
 
   React.useEffect(() => {
     const t = setTimeout(() => setDebounced(search), 400);
@@ -113,10 +116,15 @@ export function CouriersSection() {
 
   React.useEffect(() => { setPage(0); }, [debounced]);
 
+  const buildFilters = React.useCallback(
+    () => ({ name: debounced ? { contains: debounced } : undefined }),
+    [debounced]
+  );
+
   React.useEffect(() => {
     let cancelled = false;
     setLoading(true);
-    listCouriers({ page: page + 1, limit: pageSize, filters: { name: debounced ? { contains: debounced } : undefined } })
+    listCouriers({ page: page + 1, limit: pageSize, filters: buildFilters() })
       .then((res) => {
         if (cancelled) return;
         setRows(res.rows); setTotal(res.total); setPageCount(res.totalPages);
@@ -124,7 +132,31 @@ export function CouriersSection() {
       .catch((err) => { if (!cancelled) toast.error(apiErrorMessage(err, "Couldn't load couriers.")); })
       .finally(() => !cancelled && setLoading(false));
     return () => { cancelled = true; };
-  }, [page, pageSize, debounced, refreshKey]);
+  }, [page, pageSize, buildFilters, refreshKey]);
+
+  const runExport = async () => {
+    setExportBusy(true);
+    try {
+      const exportRows = (await listCouriers({ page: 1, limit: EXPORT_CAP, filters: buildFilters() })).rows;
+      if (!exportRows.length) {
+        toast.error("Nothing to export.");
+        return;
+      }
+      exportRowsToCsv("couriers", [
+        { key: "name", label: "Courier", value: (r: CourierRow) => r.name ?? "" },
+        { key: "code", label: "Code", value: (r: CourierRow) => r.code ?? "" },
+        { key: "email", label: "Email", value: (r: CourierRow) => r.email ?? "" },
+        { key: "contact_number", label: "Phone", value: (r: CourierRow) => r.contact_number ?? "" },
+        { key: "tracking_url", label: "Tracking URL", value: (r: CourierRow) => r.tracking_url ?? "" },
+        { key: "is_active", label: "Active", value: (r: CourierRow) => (r.is_active === false ? "No" : "Yes") },
+      ], exportRows);
+      toast.success(`Exported ${exportRows.length} courier${exportRows.length === 1 ? "" : "s"}.`);
+    } catch (error) {
+      toast.error(apiErrorMessage(error, "Couldn't export couriers."));
+    } finally {
+      setExportBusy(false);
+    }
+  };
 
   const handleToggleStatus = async (row: CourierRow, next: boolean) => {
     try {
@@ -145,6 +177,10 @@ export function CouriersSection() {
           <Input value={search} onChange={(e) => setSearch(e.target.value)}
             placeholder="Search couriers" className="bg-card pl-8" />
         </div>
+        <Button variant="outline" onClick={runExport} disabled={exportBusy}>
+          {exportBusy ? <Loader2 className="size-4 animate-spin" /> : <Download className="size-4" />}
+          Export
+        </Button>
         <Button className="ml-auto" onClick={() => { setEditing(null); setDialogOpen(true); }}>
           <Plus className="size-4" /> Add courier
         </Button>

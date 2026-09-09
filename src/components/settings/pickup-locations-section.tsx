@@ -3,7 +3,7 @@
 import * as React from "react";
 import { type ColumnDef } from "@tanstack/react-table";
 import { format } from "date-fns";
-import { Loader2, MapPin, Plus, Search, Trash2 } from "lucide-react";
+import { Download, Loader2, MapPin, Plus, Search, Trash2 } from "lucide-react";
 import { useForm, Controller } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
@@ -23,12 +23,14 @@ import {
 import { DataTable } from "@/components/data-table";
 import { StatusToggle } from "@/components/status-badge";
 import { apiErrorMessage } from "@/lib/auth-api";
+import { exportRowsToCsv } from "@/lib/utils";
 import {
   listPickupLocations, createPickupLocation, updatePickupLocation, deletePickupLocation, updateRecordStatus,
   type PickupLocationRow,
 } from "@/lib/admin-api";
 
 const DEFAULT_PAGE_SIZE = 10;
+const EXPORT_CAP = 5000;
 
 function getColumns(
   onToggleStatus: (row: PickupLocationRow, next: boolean) => Promise<void>
@@ -93,6 +95,7 @@ export function PickupLocationsSection() {
   const [dialogOpen, setDialogOpen] = React.useState(false);
   const [editing, setEditing] = React.useState<PickupLocationRow | null>(null);
   const [refreshKey, setRefreshKey] = React.useState(0);
+  const [exportBusy, setExportBusy] = React.useState(false);
 
   React.useEffect(() => {
     const t = setTimeout(() => setDebounced(search), 400);
@@ -101,10 +104,15 @@ export function PickupLocationsSection() {
 
   React.useEffect(() => { setPage(0); }, [debounced]);
 
+  const buildFilters = React.useCallback(
+    () => ({ name: debounced ? { contains: debounced } : undefined }),
+    [debounced]
+  );
+
   React.useEffect(() => {
     let cancelled = false;
     setLoading(true);
-    listPickupLocations({ page: page + 1, limit: pageSize, filters: { name: debounced ? { contains: debounced } : undefined } })
+    listPickupLocations({ page: page + 1, limit: pageSize, filters: buildFilters() })
       .then((res) => {
         if (cancelled) return;
         setRows(res.rows); setTotal(res.total); setPageCount(res.totalPages);
@@ -112,7 +120,32 @@ export function PickupLocationsSection() {
       .catch((err) => { if (!cancelled) toast.error(apiErrorMessage(err, "Couldn't load pickup locations.")); })
       .finally(() => !cancelled && setLoading(false));
     return () => { cancelled = true; };
-  }, [page, pageSize, debounced, refreshKey]);
+  }, [page, pageSize, buildFilters, refreshKey]);
+
+  const runExport = async () => {
+    setExportBusy(true);
+    try {
+      const exportRows = (await listPickupLocations({ page: 1, limit: EXPORT_CAP, filters: buildFilters() })).rows;
+      if (!exportRows.length) {
+        toast.error("Nothing to export.");
+        return;
+      }
+      exportRowsToCsv("pickup-locations", [
+        { key: "name", label: "Location", value: (r: PickupLocationRow) => r.name ?? "" },
+        { key: "address", label: "Address", value: (r: PickupLocationRow) => r.address ?? "" },
+        { key: "city", label: "City", value: (r: PickupLocationRow) => r.city ?? "" },
+        { key: "state", label: "State", value: (r: PickupLocationRow) => r.state ?? "" },
+        { key: "country", label: "Country", value: (r: PickupLocationRow) => r.country ?? "" },
+        { key: "phone", label: "Phone", value: (r: PickupLocationRow) => r.phone ?? "" },
+        { key: "is_active", label: "Active", value: (r: PickupLocationRow) => (r.is_active === false ? "No" : "Yes") },
+      ], exportRows);
+      toast.success(`Exported ${exportRows.length} location${exportRows.length === 1 ? "" : "s"}.`);
+    } catch (error) {
+      toast.error(apiErrorMessage(error, "Couldn't export pickup locations."));
+    } finally {
+      setExportBusy(false);
+    }
+  };
 
   const handleToggleStatus = async (row: PickupLocationRow, next: boolean) => {
     try {
@@ -133,6 +166,10 @@ export function PickupLocationsSection() {
           <Input value={search} onChange={(e) => setSearch(e.target.value)}
             placeholder="Search locations" className="bg-card pl-8" />
         </div>
+        <Button variant="outline" onClick={runExport} disabled={exportBusy}>
+          {exportBusy ? <Loader2 className="size-4 animate-spin" /> : <Download className="size-4" />}
+          Export
+        </Button>
         <Button className="ml-auto" onClick={() => { setEditing(null); setDialogOpen(true); }}>
           <Plus className="size-4" /> Add location
         </Button>

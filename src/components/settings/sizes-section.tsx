@@ -3,7 +3,7 @@
 import * as React from "react";
 import { type ColumnDef } from "@tanstack/react-table";
 import { format } from "date-fns";
-import { Loader2, Plus, Search, Trash2 } from "lucide-react";
+import { Download, Loader2, Plus, Search, Trash2 } from "lucide-react";
 import { useForm, Controller } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
@@ -32,9 +32,11 @@ import {
 import { DataTable } from "@/components/data-table";
 import { StatusToggle } from "@/components/status-badge";
 import { apiErrorMessage } from "@/lib/auth-api";
+import { exportRowsToCsv } from "@/lib/utils";
 import { createSize, deleteRecord, listSizes, updateRecordStatus, updateSize, type SizeRow } from "@/lib/admin-api";
 
 const DEFAULT_PAGE_SIZE = 10;
+const EXPORT_CAP = 5000;
 
 const STATUS_ITEMS = { all: "All statuses", active: "Active", inactive: "Inactive" };
 
@@ -95,6 +97,7 @@ export function SizesSection() {
   const [dialogOpen, setDialogOpen] = React.useState(false);
   const [editing, setEditing] = React.useState<SizeRow | null>(null);
   const [refreshKey, setRefreshKey] = React.useState(0);
+  const [exportBusy, setExportBusy] = React.useState(false);
 
   const [debouncedSearch, setDebouncedSearch] = React.useState("");
   React.useEffect(() => {
@@ -106,16 +109,21 @@ export function SizesSection() {
     setPage(0);
   }, [debouncedSearch, status]);
 
+  const buildFilters = React.useCallback(
+    () => ({
+      display_name: debouncedSearch ? { contains: debouncedSearch } : undefined,
+      is_active: status === "all" ? undefined : status === "active",
+    }),
+    [debouncedSearch, status]
+  );
+
   React.useEffect(() => {
     let cancelled = false;
     setLoading(true);
     listSizes({
       page: page + 1,
       limit: pageSize,
-      filters: {
-        display_name: debouncedSearch ? { contains: debouncedSearch } : undefined,
-        is_active: status === "all" ? undefined : status === "active",
-      },
+      filters: buildFilters(),
     })
       .then((res) => {
         if (cancelled) return;
@@ -132,7 +140,28 @@ export function SizesSection() {
     return () => {
       cancelled = true;
     };
-  }, [page, pageSize, debouncedSearch, status, refreshKey]);
+  }, [page, pageSize, buildFilters, refreshKey]);
+
+  const runExport = async () => {
+    setExportBusy(true);
+    try {
+      const exportRows = (await listSizes({ page: 1, limit: EXPORT_CAP, filters: buildFilters() })).rows;
+      if (!exportRows.length) {
+        toast.error("Nothing to export.");
+        return;
+      }
+      exportRowsToCsv("sizes", [
+        { key: "name", label: "Size", value: (r: SizeRow) => r.name ?? "" },
+        { key: "display_name", label: "Display name", value: (r: SizeRow) => r.display_name ?? "" },
+        { key: "is_active", label: "Active", value: (r: SizeRow) => (r.is_active === false ? "No" : "Yes") },
+      ], exportRows);
+      toast.success(`Exported ${exportRows.length} size${exportRows.length === 1 ? "" : "s"}.`);
+    } catch (error) {
+      toast.error(apiErrorMessage(error, "Couldn't export sizes."));
+    } finally {
+      setExportBusy(false);
+    }
+  };
 
   const handleToggleStatus = async (row: SizeRow, next: boolean) => {
     try {
@@ -167,6 +196,10 @@ export function SizesSection() {
             <SelectItem value="inactive">Inactive</SelectItem>
           </SelectContent>
         </Select>
+        <Button variant="outline" onClick={runExport} disabled={exportBusy}>
+          {exportBusy ? <Loader2 className="size-4 animate-spin" /> : <Download className="size-4" />}
+          Export
+        </Button>
         <Button className="ml-auto" onClick={() => { setEditing(null); setDialogOpen(true); }}>
           <Plus className="size-4" />
           Add size

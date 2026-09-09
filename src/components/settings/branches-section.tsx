@@ -3,7 +3,7 @@
 import * as React from "react";
 import { type ColumnDef } from "@tanstack/react-table";
 import { format } from "date-fns";
-import { Loader2, Plus, Search, Trash2 } from "lucide-react";
+import { Download, Loader2, Plus, Search, Trash2 } from "lucide-react";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
@@ -34,9 +34,11 @@ import { DataTable } from "@/components/data-table";
 import { DateRangePicker } from "@/components/date-range-picker";
 import { StatusToggle } from "@/components/status-badge";
 import { apiErrorMessage } from "@/lib/auth-api";
+import { exportRowsToCsv } from "@/lib/utils";
 import { createBranch, deleteRecord, listBranches, updateBranch, updateRecordStatus, type BranchRow } from "@/lib/admin-api";
 
 const DEFAULT_PAGE_SIZE = 10;
+const EXPORT_CAP = 5000;
 
 const STATUS_ITEMS = { all: "All statuses", active: "Active", inactive: "Inactive" };
 
@@ -140,6 +142,7 @@ export function BranchesSection() {
   const [dialogOpen, setDialogOpen] = React.useState(false);
   const [editing, setEditing] = React.useState<BranchRow | null>(null);
   const [refreshKey, setRefreshKey] = React.useState(0);
+  const [exportBusy, setExportBusy] = React.useState(false);
 
   const [debounced, setDebounced] = React.useState({ search: "", city: "" });
   React.useEffect(() => {
@@ -151,6 +154,15 @@ export function BranchesSection() {
     setPage(0);
   }, [debounced, status, dateRange]);
 
+  const buildFilters = React.useCallback(
+    () => ({
+      name: debounced.search ? { contains: debounced.search } : undefined,
+      city: debounced.city ? { contains: debounced.city } : undefined,
+      is_active: status === "all" ? undefined : status === "active",
+    }),
+    [debounced, status]
+  );
+
   React.useEffect(() => {
     let cancelled = false;
     setLoading(true);
@@ -158,11 +170,7 @@ export function BranchesSection() {
       page: page + 1,
       limit: pageSize,
       dateRange,
-      filters: {
-        name: debounced.search ? { contains: debounced.search } : undefined,
-        city: debounced.city ? { contains: debounced.city } : undefined,
-        is_active: status === "all" ? undefined : status === "active",
-      },
+      filters: buildFilters(),
     })
       .then((res) => {
         if (cancelled) return;
@@ -179,7 +187,34 @@ export function BranchesSection() {
     return () => {
       cancelled = true;
     };
-  }, [page, pageSize, debounced, status, dateRange, refreshKey]);
+  }, [page, pageSize, buildFilters, dateRange, refreshKey]);
+
+  const runExport = async () => {
+    setExportBusy(true);
+    try {
+      const exportRows = (await listBranches({ page: 1, limit: EXPORT_CAP, dateRange, filters: buildFilters() })).rows;
+      if (!exportRows.length) {
+        toast.error("Nothing to export.");
+        return;
+      }
+      exportRowsToCsv("branches", [
+        { key: "name", label: "Branch", value: (r: BranchRow) => r.name ?? "" },
+        { key: "code", label: "Code", value: (r: BranchRow) => r.code ?? "" },
+        { key: "city", label: "City", value: (r: BranchRow) => r.city ?? "" },
+        { key: "state", label: "State", value: (r: BranchRow) => r.state ?? "" },
+        { key: "country", label: "Country", value: (r: BranchRow) => r.country ?? "" },
+        { key: "manager_name", label: "Manager", value: (r: BranchRow) => r.manager_name ?? "" },
+        { key: "phone", label: "Phone", value: (r: BranchRow) => r.phone ?? "" },
+        { key: "email", label: "Email", value: (r: BranchRow) => r.email ?? "" },
+        { key: "is_active", label: "Active", value: (r: BranchRow) => (r.is_active === false ? "No" : "Yes") },
+      ], exportRows);
+      toast.success(`Exported ${exportRows.length} branch${exportRows.length === 1 ? "" : "es"}.`);
+    } catch (error) {
+      toast.error(apiErrorMessage(error, "Couldn't export branches."));
+    } finally {
+      setExportBusy(false);
+    }
+  };
 
   const handleToggleStatus = async (row: BranchRow, next: boolean) => {
     try {
@@ -221,6 +256,10 @@ export function BranchesSection() {
           </SelectContent>
         </Select>
         <DateRangePicker value={dateRange} onChange={setDateRange} />
+        <Button variant="outline" onClick={runExport} disabled={exportBusy}>
+          {exportBusy ? <Loader2 className="size-4 animate-spin" /> : <Download className="size-4" />}
+          Export
+        </Button>
         <Button className="ml-auto" onClick={() => { setEditing(null); setDialogOpen(true); }}>
           <Plus className="size-4" />
           Add branch

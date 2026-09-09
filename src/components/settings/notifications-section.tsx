@@ -3,7 +3,7 @@
 import * as React from "react";
 import { type ColumnDef } from "@tanstack/react-table";
 import { format } from "date-fns";
-import { Bell, Loader2, Search, Send } from "lucide-react";
+import { Bell, Download, Loader2, Search, Send } from "lucide-react";
 import { toast } from "sonner";
 
 import { Button } from "@/components/ui/button";
@@ -14,6 +14,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { apiErrorMessage } from "@/lib/auth-api";
+import { exportRowsToCsv } from "@/lib/utils";
 import {
   NOTIFIABLE_ROLES,
   listNotifications,
@@ -22,6 +23,7 @@ import {
 } from "@/lib/admin-api";
 
 const DEFAULT_PAGE_SIZE = 10;
+const EXPORT_CAP = 5000;
 
 const columns: ColumnDef<AdminNotificationRow>[] = [
   {
@@ -112,6 +114,7 @@ export function NotificationsSection() {
   const [search, setSearch] = React.useState("");
   const [searchInput, setSearchInput] = React.useState("");
   const [refreshKey, setRefreshKey] = React.useState(0);
+  const [exportBusy, setExportBusy] = React.useState(false);
 
   React.useEffect(() => { setPage(0); }, [search]);
 
@@ -135,6 +138,30 @@ export function NotificationsSection() {
       cancelled = true;
     };
   }, [page, pageSize, search, refreshKey]);
+
+  const runExport = async () => {
+    setExportBusy(true);
+    try {
+      const exportRows = (await listNotifications({ page: 1, limit: EXPORT_CAP, search: search || undefined })).rows;
+      if (!exportRows.length) {
+        toast.error("Nothing to export.");
+        return;
+      }
+      exportRowsToCsv("notifications", [
+        { key: "title", label: "Title", value: (r: AdminNotificationRow) => r.title ?? "" },
+        { key: "body", label: "Message", value: (r: AdminNotificationRow) => r.body ?? "" },
+        { key: "recipient", label: "Sent to", value: (r: AdminNotificationRow) => r.recipient?.full_name ?? "" },
+        { key: "role", label: "Role", value: (r: AdminNotificationRow) => (r.recipient?.role ? (NOTIFIABLE_ROLES[r.recipient.role] ?? r.recipient.role) : "") },
+        { key: "is_read", label: "Read", value: (r: AdminNotificationRow) => (r.is_read ? "Yes" : "No") },
+        { key: "created_at", label: "Sent", value: (r: AdminNotificationRow) => (r.created_at ? format(new Date(r.created_at), "yyyy-MM-dd HH:mm") : "") },
+      ], exportRows);
+      toast.success(`Exported ${exportRows.length} notification${exportRows.length === 1 ? "" : "s"}.`);
+    } catch (error) {
+      toast.error(apiErrorMessage(error, "Couldn't export notifications."));
+    } finally {
+      setExportBusy(false);
+    }
+  };
 
   return (
     <div className="flex flex-col gap-4">
@@ -203,6 +230,10 @@ export function NotificationsSection() {
             className="h-9 w-56 pl-8"
           />
         </div>
+        <Button variant="outline" size="sm" onClick={runExport} disabled={exportBusy}>
+          {exportBusy ? <Loader2 className="size-4 animate-spin" /> : <Download className="size-4" />}
+          Export
+        </Button>
       </div>
 
       <DataTable

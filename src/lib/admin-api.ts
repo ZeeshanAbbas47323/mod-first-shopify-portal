@@ -65,6 +65,7 @@ export interface BranchRow {
   manager_email?: string;
   is_active?: boolean;
   created_at?: string;
+  [k: string]: unknown;
 }
 
 export interface ListResult<T> {
@@ -578,6 +579,7 @@ export interface SizeRow {
   display_name: string;
   is_active?: boolean;
   created_at?: string;
+  [k: string]: unknown;
 }
 
 export interface ColorRow {
@@ -586,6 +588,7 @@ export interface ColorRow {
   hex_code: string;
   is_active?: boolean;
   created_at?: string;
+  [k: string]: unknown;
 }
 
 export async function listSizes(params: ListParams): Promise<ListResult<SizeRow>> {
@@ -678,6 +681,7 @@ export interface MenuRightRow {
   can_edit?: boolean;
   can_delete?: boolean;
   created_at?: string;
+  [k: string]: unknown;
 }
 
 export async function listMenus(params: ListParams): Promise<ListResult<MenuRow>> {
@@ -2015,6 +2019,7 @@ export interface CourierRow {
   notes?: string | null;
   is_active?: boolean;
   created_at?: string;
+  [k: string]: unknown;
 }
 
 export async function listCouriers(params: ListParams): Promise<ListResult<CourierRow>> {
@@ -3976,6 +3981,7 @@ export interface NotificationRow {
   title: string;
   body: string;
   data?: Json | null;
+  [k: string]: unknown;
 }
 
 export interface NotificationListResult {

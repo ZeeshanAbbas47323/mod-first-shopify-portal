@@ -3,7 +3,7 @@
 import * as React from "react";
 import { type ColumnDef } from "@tanstack/react-table";
 import { format } from "date-fns";
-import { CalendarClock, Eye, Loader2, Plus, Search, Trash2, X } from "lucide-react";
+import { CalendarClock, Download, Eye, Loader2, Plus, Search, Trash2, X } from "lucide-react";
 import { useForm, Controller } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
@@ -27,7 +27,9 @@ import {
 import { DataTable } from "@/components/data-table";
 import { ConfirmDeleteDialog } from "@/components/confirm-delete-dialog";
 import { StatusBadge } from "@/components/status-badge";
+import { MultiSelectFilter } from "@/components/multi-select-filter";
 import { apiErrorMessage } from "@/lib/auth-api";
+import { exportRowsToCsv } from "@/lib/utils";
 import {
   listShipments,
   getShipmentById,
@@ -37,11 +39,13 @@ import {
   createShipmentRate,
   schedulePickup,
   listCouriers,
+  SHIPMENT_STATUSES,
   type ShipmentRow,
   type CourierRow,
 } from "@/lib/admin-api";
 
 const DEFAULT_PAGE_SIZE = 10;
+const EXPORT_CAP = 5000;
 
 function statusTone(s?: string) {
   const v = (s ?? "").toUpperCase();
@@ -61,9 +65,11 @@ export function ShippingSection() {
   const [total, setTotal] = React.useState(0);
   const [search, setSearch] = React.useState("");
   const [debounced, setDebounced] = React.useState("");
+  const [statuses, setStatuses] = React.useState<string[]>([]);
   const [refreshKey, setRefreshKey] = React.useState(0);
   const [createOpen, setCreateOpen] = React.useState(false);
   const [pickupOpen, setPickupOpen] = React.useState(false);
+  const [exportBusy, setExportBusy] = React.useState(false);
 
   const [detailOpen, setDetailOpen] = React.useState(false);
   const [selected, setSelected] = React.useState<ShipmentRow | null>(null);
@@ -77,12 +83,20 @@ export function ShippingSection() {
     return () => clearTimeout(t);
   }, [search]);
 
-  React.useEffect(() => { setPage(0); }, [debounced]);
+  React.useEffect(() => { setPage(0); }, [debounced, statuses]);
+
+  const buildFilters = React.useCallback(
+    () => ({
+      tracking_number: debounced || undefined,
+      status: statuses.length ? { in: statuses } : undefined,
+    }),
+    [debounced, statuses]
+  );
 
   React.useEffect(() => {
     let cancelled = false;
     setLoading(true);
-    listShipments({ page: page + 1, limit: pageSize, filters: { tracking_number: debounced || undefined } })
+    listShipments({ page: page + 1, limit: pageSize, filters: buildFilters() })
       .then((res) => {
         if (cancelled) return;
         setRows(res.rows);
@@ -92,7 +106,31 @@ export function ShippingSection() {
       .catch((err) => { if (!cancelled) toast.error(apiErrorMessage(err, "Couldn't load shipments.")); })
       .finally(() => !cancelled && setLoading(false));
     return () => { cancelled = true; };
-  }, [page, pageSize, debounced, refreshKey]);
+  }, [page, pageSize, buildFilters, refreshKey]);
+
+  const runExport = async () => {
+    setExportBusy(true);
+    try {
+      const exportRows = (await listShipments({ page: 1, limit: EXPORT_CAP, filters: buildFilters() })).rows;
+      if (!exportRows.length) {
+        toast.error("Nothing to export.");
+        return;
+      }
+      exportRowsToCsv("shipments", [
+        { key: "shipment_number", label: "Shipment", value: (r: ShipmentRow) => r.shipment_number ?? `#${r.id}` },
+        { key: "order_id", label: "Order", value: (r: ShipmentRow) => (r.order_id ? `#${r.order_id}` : "") },
+        { key: "service_name", label: "Service", value: (r: ShipmentRow) => r.service_name ?? "" },
+        { key: "tracking_number", label: "Tracking #", value: (r: ShipmentRow) => r.tracking_number ?? "" },
+        { key: "status", label: "Status", value: (r: ShipmentRow) => r.status ?? "" },
+        { key: "created_at", label: "Created", value: (r: ShipmentRow) => (r.created_at ? format(new Date(r.created_at), "yyyy-MM-dd") : "") },
+      ], exportRows);
+      toast.success(`Exported ${exportRows.length} shipment${exportRows.length === 1 ? "" : "s"}.`);
+    } catch (error) {
+      toast.error(apiErrorMessage(error, "Couldn't export shipments."));
+    } finally {
+      setExportBusy(false);
+    }
+  };
 
   const openDetail = async (row: ShipmentRow) => {
     setSelected(row);
@@ -202,6 +240,11 @@ export function ShippingSection() {
             className="bg-card pl-8"
           />
         </div>
+        <MultiSelectFilter label="Status" options={SHIPMENT_STATUSES} value={statuses} onChange={setStatuses} />
+        <Button variant="outline" onClick={runExport} disabled={exportBusy}>
+          {exportBusy ? <Loader2 className="size-4 animate-spin" /> : <Download className="size-4" />}
+          Export
+        </Button>
         <Button className="ml-auto" onClick={() => setCreateOpen(true)}>
           <Plus className="size-4" /> Create shipment
         </Button>

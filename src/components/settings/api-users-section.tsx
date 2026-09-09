@@ -6,6 +6,7 @@ import { format } from "date-fns";
 import {
   Check,
   Copy,
+  Download,
   KeyRound,
   Loader2,
   MoreHorizontal,
@@ -38,6 +39,7 @@ import { ConfirmDeleteDialog } from "@/components/confirm-delete-dialog";
 import { DataTable } from "@/components/data-table";
 import { StatusBadge } from "@/components/status-badge";
 import { apiErrorMessage } from "@/lib/auth-api";
+import { exportRowsToCsv } from "@/lib/utils";
 import {
   createApiUser,
   fetchAllWebsiteSettings,
@@ -52,6 +54,7 @@ import {
 } from "@/lib/admin-api";
 
 const DEFAULT_PAGE_SIZE = 10;
+const EXPORT_CAP = 5000;
 
 const STATUS_ITEMS: Record<string, string> = {
   all: "All statuses",
@@ -108,16 +111,21 @@ export function ApiUsersSection() {
     setPage(0);
   }, [debounced, status]);
 
+  const buildFilters = React.useCallback(
+    () => ({
+      name: debounced ? { contains: debounced } : undefined,
+      is_active: status === "all" ? undefined : status === "active",
+    }),
+    [debounced, status]
+  );
+
   React.useEffect(() => {
     let cancelled = false;
     setLoading(true);
     listApiUsers({
       page: page + 1,
       limit: pageSize,
-      filters: {
-        name: debounced ? { contains: debounced } : undefined,
-        is_active: status === "all" ? undefined : status === "active",
-      },
+      filters: buildFilters(),
     })
       .then((res) => {
         if (cancelled) return;
@@ -134,7 +142,7 @@ export function ApiUsersSection() {
     return () => {
       cancelled = true;
     };
-  }, [page, pageSize, debounced, status, refreshKey]);
+  }, [page, pageSize, buildFilters, refreshKey]);
 
   const branchName = React.useCallback(
     (row: ApiUserRow) =>
@@ -151,6 +159,32 @@ export function ApiUsersSection() {
       "—",
     [stores]
   );
+
+  const [exportBusy, setExportBusy] = React.useState(false);
+  const runExport = async () => {
+    setExportBusy(true);
+    try {
+      const exportRows = (await listApiUsers({ page: 1, limit: EXPORT_CAP, filters: buildFilters() })).rows;
+      if (!exportRows.length) {
+        toast.error("Nothing to export.");
+        return;
+      }
+      exportRowsToCsv("api-users", [
+        { key: "name", label: "Credential", value: (r: ApiUserRow) => r.name ?? "" },
+        { key: "api_key", label: "API Key", value: (r: ApiUserRow) => r.api_key ?? "" },
+        { key: "store", label: "Store", value: (r: ApiUserRow) => storeName(r) },
+        { key: "branch", label: "Branch", value: (r: ApiUserRow) => branchName(r) },
+        { key: "is_active", label: "Status", value: (r: ApiUserRow) => (r.is_active === false ? "Disabled" : "Active") },
+        { key: "last_used_at", label: "Last used", value: (r: ApiUserRow) => fmtDate(r.last_used_at) },
+        { key: "created_at", label: "Created", value: (r: ApiUserRow) => fmtDate(r.created_at) },
+      ], exportRows);
+      toast.success(`Exported ${exportRows.length} credential${exportRows.length === 1 ? "" : "s"}.`);
+    } catch (error) {
+      toast.error(apiErrorMessage(error, "Couldn't export API users."));
+    } finally {
+      setExportBusy(false);
+    }
+  };
 
   const handleRegenerate = async () => {
     if (!regenTarget) return;
@@ -280,6 +314,10 @@ export function ApiUsersSection() {
             ))}
           </SelectContent>
         </Select>
+        <Button variant="outline" onClick={runExport} disabled={exportBusy}>
+          {exportBusy ? <Loader2 className="size-4 animate-spin" /> : <Download className="size-4" />}
+          Export
+        </Button>
         <Button
           className="ml-auto"
           onClick={() => {

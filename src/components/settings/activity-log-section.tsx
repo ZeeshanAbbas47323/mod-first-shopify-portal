@@ -3,18 +3,21 @@
 import * as React from "react";
 import { type ColumnDef } from "@tanstack/react-table";
 import { format } from "date-fns";
-import { Search } from "lucide-react";
+import { Download, Loader2, Search } from "lucide-react";
 import type { DateRange } from "react-day-picker";
 import { toast } from "sonner";
 
+import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { DataTable } from "@/components/data-table";
 import { DateRangePicker } from "@/components/date-range-picker";
 import { StatusBadge, type BadgeTone } from "@/components/status-badge";
 import { apiErrorMessage } from "@/lib/auth-api";
+import { exportRowsToCsv } from "@/lib/utils";
 import { listActivityLogs, type ActivityLogRow } from "@/lib/admin-api";
 
 const DEFAULT_PAGE_SIZE = 25;
+const EXPORT_CAP = 5000;
 
 /** Colour the verb so create/update/delete are scannable. */
 const ACTION_TONES: Record<string, BadgeTone> = {
@@ -52,6 +55,7 @@ export function ActivityLogSection() {
   const [action, setAction] = React.useState("");
   const [debounced, setDebounced] = React.useState({ entityType: "", action: "" });
   const [dateRange, setDateRange] = React.useState<DateRange | undefined>();
+  const [exportBusy, setExportBusy] = React.useState(false);
 
   React.useEffect(() => {
     const t = setTimeout(() => setDebounced({ entityType, action }), 400);
@@ -62,6 +66,16 @@ export function ActivityLogSection() {
     setPage(0);
   }, [debounced, dateRange]);
 
+  const buildFilters = React.useCallback(
+    () => ({
+      // Partial, case-insensitive-ish match — exact equality was unusable
+      // since real values are stored like "UPDATE"/"User", not "update"/"user".
+      entity_type: debounced.entityType ? { contains: debounced.entityType } : undefined,
+      action: debounced.action ? { contains: debounced.action } : undefined,
+    }),
+    [debounced]
+  );
+
   React.useEffect(() => {
     let cancelled = false;
     setLoading(true);
@@ -69,10 +83,7 @@ export function ActivityLogSection() {
       page: page + 1,
       limit: pageSize,
       dateRange,
-      filters: {
-        entity_type: debounced.entityType || undefined,
-        action: debounced.action || undefined,
-      },
+      filters: buildFilters(),
     })
       .then((res) => {
         if (cancelled) return;
@@ -89,7 +100,31 @@ export function ActivityLogSection() {
     return () => {
       cancelled = true;
     };
-  }, [page, pageSize, debounced, dateRange]);
+  }, [page, pageSize, buildFilters, dateRange]);
+
+  const runExport = async () => {
+    setExportBusy(true);
+    try {
+      const exportRows = (await listActivityLogs({ page: 1, limit: EXPORT_CAP, dateRange, filters: buildFilters() })).rows;
+      if (!exportRows.length) {
+        toast.error("Nothing to export.");
+        return;
+      }
+      exportRowsToCsv("activity-log", [
+        { key: "created_at", label: "When", value: (r: ActivityLogRow) => (r.created_at ? format(new Date(r.created_at), "yyyy-MM-dd HH:mm") : "") },
+        { key: "action", label: "Action", value: (r: ActivityLogRow) => r.action ?? "" },
+        { key: "entity_type", label: "Record", value: (r: ActivityLogRow) => r.entity_type ?? "" },
+        { key: "entity_id", label: "Record ID", value: (r: ActivityLogRow) => r.entity_id ?? "" },
+        { key: "actor", label: "By", value: (r: ActivityLogRow) => actorName(r) },
+        { key: "notes", label: "Notes", value: (r: ActivityLogRow) => r.notes ?? "" },
+      ], exportRows);
+      toast.success(`Exported ${exportRows.length} row${exportRows.length === 1 ? "" : "s"}.`);
+    } catch (error) {
+      toast.error(apiErrorMessage(error, "Couldn't export the activity log."));
+    } finally {
+      setExportBusy(false);
+    }
+  };
 
   const columns = React.useMemo<ColumnDef<ActivityLogRow>[]>(
     () => [
@@ -171,6 +206,10 @@ export function ActivityLogSection() {
           className="w-44 bg-card"
         />
         <DateRangePicker value={dateRange} onChange={setDateRange} />
+        <Button variant="outline" className="ml-auto" onClick={runExport} disabled={exportBusy}>
+          {exportBusy ? <Loader2 className="size-4 animate-spin" /> : <Download className="size-4" />}
+          Export
+        </Button>
       </div>
 
       <DataTable

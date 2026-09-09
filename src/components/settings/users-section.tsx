@@ -3,7 +3,7 @@
 import * as React from "react";
 import { type ColumnDef } from "@tanstack/react-table";
 import { format } from "date-fns";
-import { Building2, Loader2, LogOut, MoreHorizontal, Pencil, Plus, Search, Trash2, Unlock, UserMinus } from "lucide-react";
+import { Building2, Download, Loader2, LogOut, MoreHorizontal, Pencil, Plus, Search, Trash2, Unlock, UserMinus } from "lucide-react";
 import { useForm, Controller } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
@@ -41,12 +41,16 @@ import {
 import { DataTable } from "@/components/data-table";
 import { DateRangePicker } from "@/components/date-range-picker";
 import { StatusBadge, StatusToggle } from "@/components/status-badge";
+import { MultiSelectFilter } from "@/components/multi-select-filter";
+import { SummaryStatStrip } from "@/components/summary-stat-strip";
 import { apiErrorMessage } from "@/lib/auth-api";
+import { exportRowsToCsv } from "@/lib/utils";
 import {
   assignUserToBranch,
   createUser,
   fetchAllDiscountTiers,
   deleteRecord,
+  getUsersSummary,
   listBranches,
   listUsers,
   removeUserFromBranch,
@@ -61,9 +65,12 @@ import {
 } from "@/lib/admin-api";
 
 const DEFAULT_PAGE_SIZE = 10;
+const EXPORT_CAP = 5000;
+
+// Staff accounts only — the "customer" role belongs to the storefront Customers page.
+const STAFF_ROLES = USER_ROLES.filter((r) => r !== "customer");
 
 const STATUS_ITEMS = { all: "All statuses", active: "Active", inactive: "Inactive" };
-const ROLE_ITEMS = Object.fromEntries([["all", "All roles"], ...USER_ROLES.map((r) => [r, r.replace(/_/g, " ").replace(/\b\w/g, (c) => c.toUpperCase())])]);
 
 
 function initialsOf(name: string) {
@@ -208,12 +215,14 @@ export function UsersSection() {
   const [total, setTotal] = React.useState(0);
 
   const [search, setSearch] = React.useState("");
-  const [role, setRole] = React.useState("all");
+  const [roles, setRoles] = React.useState<string[]>([]);
   const [status, setStatus] = React.useState("all");
   const [dateRange, setDateRange] = React.useState<DateRange | undefined>();
   const [dialogOpen, setDialogOpen] = React.useState(false);
   const [editing, setEditing] = React.useState<UserRow | null>(null);
   const [refreshKey, setRefreshKey] = React.useState(0);
+  const [summary, setSummary] = React.useState<{ total: number; new: number; locked: number } | null>(null);
+  const [exportBusy, setExportBusy] = React.useState(false);
 
   // Debounce the text search
   const [debouncedSearch, setDebouncedSearch] = React.useState("");
@@ -224,7 +233,17 @@ export function UsersSection() {
 
   React.useEffect(() => {
     setPage(0);
-  }, [debouncedSearch, role, status, dateRange]);
+  }, [debouncedSearch, roles, status, dateRange]);
+
+  const buildFilters = React.useCallback(
+    () => ({
+      full_name: debouncedSearch ? { contains: debouncedSearch } : undefined,
+      // Staff only — customers have their own page.
+      role: roles.length ? { in: roles } : { nin: "customer" },
+      is_active: status === "all" ? undefined : status === "active",
+    }),
+    [debouncedSearch, roles, status]
+  );
 
   React.useEffect(() => {
     let cancelled = false;
@@ -233,12 +252,7 @@ export function UsersSection() {
       page: page + 1,
       limit: pageSize,
       dateRange,
-      filters: {
-        full_name: debouncedSearch ? { contains: debouncedSearch } : undefined,
-        // Staff only — customers have their own page.
-        role: role === "all" ? { nin: "customer" } : role,
-        is_active: status === "all" ? undefined : status === "active",
-      },
+      filters: buildFilters(),
     })
       .then((res) => {
         if (cancelled) return;
@@ -255,7 +269,45 @@ export function UsersSection() {
     return () => {
       cancelled = true;
     };
-  }, [page, pageSize, debouncedSearch, role, status, dateRange, refreshKey]);
+  }, [page, pageSize, buildFilters, dateRange, refreshKey]);
+
+  React.useEffect(() => {
+    let cancelled = false;
+    getUsersSummary({ dateRange, filters: buildFilters() })
+      .then((s) => {
+        if (cancelled) return;
+        setSummary({ total: s.total_customers, new: s.new_customers.current, locked: s.locked });
+      })
+      .catch(() => !cancelled && setSummary(null));
+    return () => {
+      cancelled = true;
+    };
+  }, [dateRange, buildFilters, refreshKey]);
+
+  const runExport = async () => {
+    setExportBusy(true);
+    try {
+      const exportRows = (await listUsers({ page: 1, limit: EXPORT_CAP, dateRange, filters: buildFilters() })).rows;
+      if (!exportRows.length) {
+        toast.error("Nothing to export.");
+        return;
+      }
+      exportRowsToCsv(`staff-users-${format(new Date(), "yyyy-MM-dd")}`, [
+        { key: "full_name", label: "Name", value: (r: UserRow) => r.full_name ?? "" },
+        { key: "email", label: "Email", value: (r: UserRow) => r.email ?? "" },
+        { key: "role", label: "Role", value: (r: UserRow) => humanizeRole(r.role) },
+        { key: "phone", label: "Phone", value: (r: UserRow) => r.phone ?? "" },
+        { key: "is_active", label: "Active", value: (r: UserRow) => (r.is_active === false ? "No" : "Yes") },
+        { key: "is_locked", label: "Locked", value: (r: UserRow) => (r.is_locked ? "Yes" : "No") },
+        { key: "created_at", label: "Created", value: (r: UserRow) => (r.created_at ? format(new Date(r.created_at), "yyyy-MM-dd") : "") },
+      ], exportRows);
+      toast.success(`Exported ${exportRows.length} user${exportRows.length === 1 ? "" : "s"}.`);
+    } catch (error) {
+      toast.error(apiErrorMessage(error, "Couldn't export users."));
+    } finally {
+      setExportBusy(false);
+    }
+  };
 
   const [branches, setBranches] = React.useState<BranchRow[]>([]);
   const [branchTarget, setBranchTarget] = React.useState<UserRow | null>(null);
@@ -353,6 +405,15 @@ export function UsersSection() {
 
   return (
     <div className="flex flex-col gap-3">
+      <SummaryStatStrip
+        loading={!summary}
+        tiles={[
+          { label: "Total staff", value: String(summary?.total ?? 0) },
+          { label: "New this period", value: String(summary?.new ?? 0) },
+          { label: "Locked", value: String(summary?.locked ?? 0) },
+        ]}
+      />
+
       <div className="flex flex-wrap items-center gap-2">
         <div className="relative min-w-44 flex-1 sm:max-w-56">
           <Search className="absolute top-1/2 left-2.5 size-4 -translate-y-1/2 text-muted-foreground" />
@@ -363,19 +424,7 @@ export function UsersSection() {
             className="bg-card pl-8"
           />
         </div>
-        <Select items={ROLE_ITEMS} value={role} onValueChange={(v) => setRole(v as string)}>
-          <SelectTrigger className="min-w-36 bg-card">
-            <SelectValue />
-          </SelectTrigger>
-          <SelectContent>
-            <SelectItem value="all">All roles</SelectItem>
-            {USER_ROLES.map((r) => (
-              <SelectItem key={r} value={r}>
-                {humanizeRole(r)}
-              </SelectItem>
-            ))}
-          </SelectContent>
-        </Select>
+        <MultiSelectFilter label="Role" options={STAFF_ROLES} value={roles} onChange={setRoles} />
         <Select items={STATUS_ITEMS} value={status} onValueChange={(v) => setStatus(v as string)}>
           <SelectTrigger className="min-w-32 bg-card">
             <SelectValue />
@@ -387,6 +436,10 @@ export function UsersSection() {
           </SelectContent>
         </Select>
         <DateRangePicker value={dateRange} onChange={setDateRange} />
+        <Button variant="outline" onClick={runExport} disabled={exportBusy}>
+          {exportBusy ? <Loader2 className="size-4 animate-spin" /> : <Download className="size-4" />}
+          Export
+        </Button>
         <Button className="ml-auto" onClick={() => { setEditing(null); setDialogOpen(true); }}>
           <Plus className="size-4" />
           Add user
@@ -448,7 +501,7 @@ export function UsersSection() {
 
 const STATUS_FORM_ITEMS = { active: "Active", inactive: "Inactive" };
 const ROLE_FORM_ITEMS = Object.fromEntries(
-  USER_ROLES.map((r) => [r, humanizeRole(r)])
+  STAFF_ROLES.map((r) => [r, humanizeRole(r)])
 );
 
 const baseUserSchema = z.object({
@@ -661,7 +714,7 @@ function UserDialog({
                       <SelectValue />
                     </SelectTrigger>
                     <SelectContent>
-                      {USER_ROLES.map((r) => (
+                      {STAFF_ROLES.map((r) => (
                         <SelectItem key={r} value={r}>
                           {humanizeRole(r)}
                         </SelectItem>

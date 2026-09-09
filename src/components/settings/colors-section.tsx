@@ -3,7 +3,7 @@
 import * as React from "react";
 import { type ColumnDef } from "@tanstack/react-table";
 import { format } from "date-fns";
-import { Loader2, Plus, Search, Trash2 } from "lucide-react";
+import { Download, Loader2, Plus, Search, Trash2 } from "lucide-react";
 import { useForm, Controller, useWatch } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
@@ -32,9 +32,11 @@ import {
 import { DataTable } from "@/components/data-table";
 import { StatusToggle } from "@/components/status-badge";
 import { apiErrorMessage } from "@/lib/auth-api";
+import { exportRowsToCsv } from "@/lib/utils";
 import { createColor, deleteRecord, listColors, updateColor, updateRecordStatus, type ColorRow } from "@/lib/admin-api";
 
 const DEFAULT_PAGE_SIZE = 10;
+const EXPORT_CAP = 5000;
 
 const STATUS_ITEMS = { all: "All statuses", active: "Active", inactive: "Inactive" };
 
@@ -101,6 +103,7 @@ export function ColorsSection() {
   const [dialogOpen, setDialogOpen] = React.useState(false);
   const [editing, setEditing] = React.useState<ColorRow | null>(null);
   const [refreshKey, setRefreshKey] = React.useState(0);
+  const [exportBusy, setExportBusy] = React.useState(false);
 
   const [debouncedSearch, setDebouncedSearch] = React.useState("");
   React.useEffect(() => {
@@ -112,16 +115,21 @@ export function ColorsSection() {
     setPage(0);
   }, [debouncedSearch, status]);
 
+  const buildFilters = React.useCallback(
+    () => ({
+      name: debouncedSearch ? { contains: debouncedSearch } : undefined,
+      is_active: status === "all" ? undefined : status === "active",
+    }),
+    [debouncedSearch, status]
+  );
+
   React.useEffect(() => {
     let cancelled = false;
     setLoading(true);
     listColors({
       page: page + 1,
       limit: pageSize,
-      filters: {
-        name: debouncedSearch ? { contains: debouncedSearch } : undefined,
-        is_active: status === "all" ? undefined : status === "active",
-      },
+      filters: buildFilters(),
     })
       .then((res) => {
         if (cancelled) return;
@@ -138,7 +146,28 @@ export function ColorsSection() {
     return () => {
       cancelled = true;
     };
-  }, [page, pageSize, debouncedSearch, status, refreshKey]);
+  }, [page, pageSize, buildFilters, refreshKey]);
+
+  const runExport = async () => {
+    setExportBusy(true);
+    try {
+      const exportRows = (await listColors({ page: 1, limit: EXPORT_CAP, filters: buildFilters() })).rows;
+      if (!exportRows.length) {
+        toast.error("Nothing to export.");
+        return;
+      }
+      exportRowsToCsv("colors", [
+        { key: "name", label: "Color", value: (r: ColorRow) => r.name ?? "" },
+        { key: "hex_code", label: "Hex code", value: (r: ColorRow) => r.hex_code ?? "" },
+        { key: "is_active", label: "Active", value: (r: ColorRow) => (r.is_active === false ? "No" : "Yes") },
+      ], exportRows);
+      toast.success(`Exported ${exportRows.length} color${exportRows.length === 1 ? "" : "s"}.`);
+    } catch (error) {
+      toast.error(apiErrorMessage(error, "Couldn't export colors."));
+    } finally {
+      setExportBusy(false);
+    }
+  };
 
   const handleToggleStatus = async (row: ColorRow, next: boolean) => {
     try {
@@ -173,6 +202,10 @@ export function ColorsSection() {
             <SelectItem value="inactive">Inactive</SelectItem>
           </SelectContent>
         </Select>
+        <Button variant="outline" onClick={runExport} disabled={exportBusy}>
+          {exportBusy ? <Loader2 className="size-4 animate-spin" /> : <Download className="size-4" />}
+          Export
+        </Button>
         <Button className="ml-auto" onClick={() => { setEditing(null); setDialogOpen(true); }}>
           <Plus className="size-4" />
           Add color

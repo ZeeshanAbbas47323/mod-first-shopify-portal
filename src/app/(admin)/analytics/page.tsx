@@ -34,7 +34,7 @@ import {
   type CustomerReportRow, type ProductPerfRow,
   type FinancialBreakdownRow, type FinancialTotals, type CouponUsageRow,
 } from "@/lib/admin-api";
-import { cn } from "@/lib/utils";
+import { cn, exportRowsToCsv } from "@/lib/utils";
 
 // ─── Helpers ─────────────────────────────────────────────────────────────────
 
@@ -120,6 +120,17 @@ function DateControls({
   );
 }
 
+// ─── Export Button ────────────────────────────────────────────────────────────
+
+function ExportButton({ onClick, disabled }: { onClick: () => void; disabled?: boolean }) {
+  return (
+    <Button variant="outline" size="sm" className="ml-auto" onClick={onClick} disabled={disabled}>
+      <Download className="size-4" />
+      Export
+    </Button>
+  );
+}
+
 // ─── Empty State ──────────────────────────────────────────────────────────────
 
 function Empty({ text = "No data for the selected period" }: { text?: string }) {
@@ -188,6 +199,26 @@ function SalesTab() {
   const groupRevenue = rows.reduce((s, r) => s + (r.revenue ?? 0), 0);
   const groupUnits = rows.reduce((s, r) => s + (r.units_sold ?? 0), 0);
 
+  const doExport = () => {
+    if (isTimeSeries) {
+      exportRowsToCsv(`sales-report-${groupBy}`, [
+        { key: "period", label: "Period", value: (r: SalesDataRow) => labelKey(r) },
+        { key: "orders", label: "Orders", value: (r: SalesDataRow) => r.orders ?? 0 },
+        { key: "subtotal", label: "Subtotal", value: (r: SalesDataRow) => r.subtotal ?? 0 },
+        { key: "discount", label: "Discount", value: (r: SalesDataRow) => r.discount ?? 0 },
+        { key: "tax", label: "Tax", value: (r: SalesDataRow) => r.tax ?? 0 },
+        { key: "shipping", label: "Shipping", value: (r: SalesDataRow) => r.shipping ?? 0 },
+        { key: "revenue", label: "Revenue", value: (r: SalesDataRow) => r.revenue ?? 0 },
+      ], rows);
+    } else {
+      exportRowsToCsv(`sales-report-by-${groupBy}`, [
+        { key: "label", label: groupBy === "product" ? "Product" : "Category", value: (r: SalesDataRow) => labelKey(r) },
+        { key: "units_sold", label: "Units Sold", value: (r: SalesDataRow) => r.units_sold ?? 0 },
+        { key: "revenue", label: "Revenue", value: (r: SalesDataRow) => r.revenue ?? 0 },
+      ], rows);
+    }
+  };
+
   return (
     <div className="flex flex-col gap-5">
       <DateControls range={range} onRange={setRange}>
@@ -199,6 +230,7 @@ function SalesTab() {
             ))}
           </SelectContent>
         </Select>
+        <ExportButton onClick={doExport} disabled={rows.length === 0} />
       </DateControls>
 
       {isTimeSeries ? (
@@ -356,6 +388,18 @@ function OrdersTab() {
   const custName = (c: OrderReportRow["customer"]) =>
     !c ? "Guest" : typeof c === "string" ? c : (c as { full_name?: string; name?: string }).full_name ?? (c as { name?: string }).name ?? "Guest";
 
+  const doExport = () => exportRowsToCsv("orders-report", [
+    { key: "order_number", label: "Order", value: (r: OrderReportRow) => r.order_number ?? `#${r.id}` },
+    { key: "customer", label: "Customer", value: (r: OrderReportRow) => custName(r.customer) },
+    { key: "created_at", label: "Date", value: (r: OrderReportRow) => r.created_at ? format(new Date(r.created_at as string), "yyyy-MM-dd") : "" },
+    { key: "status", label: "Status", value: (r: OrderReportRow) => r.status ?? "" },
+    { key: "payment_status", label: "Payment", value: (r: OrderReportRow) => r.payment_status ?? "" },
+    { key: "discount", label: "Discount", value: (r: OrderReportRow) => r.discount ?? 0 },
+    { key: "tax", label: "Tax", value: (r: OrderReportRow) => r.tax ?? 0 },
+    { key: "shipping", label: "Shipping", value: (r: OrderReportRow) => r.shipping ?? 0 },
+    { key: "total", label: "Total", value: (r: OrderReportRow) => r.total ?? 0 },
+  ], rows);
+
   return (
     <div className="flex flex-col gap-5">
       <DateControls range={range} onRange={setRange}>
@@ -377,6 +421,7 @@ function OrdersTab() {
             ))}
           </SelectContent>
         </Select>
+        <ExportButton onClick={doExport} disabled={rows.length === 0} />
       </DateControls>
 
       <div className="grid grid-cols-2 gap-3 lg:grid-cols-5">
@@ -462,6 +507,16 @@ function InventoryTab() {
   const statusTone = (s?: string): "success" | "warning" | "critical" =>
     s === "in_stock" ? "success" : s === "low_stock" ? "warning" : "critical";
 
+  const doExport = () => exportRowsToCsv("inventory-report", [
+    { key: "name", label: "Product", value: (r: InventoryReportRow) => r.name ?? r.title ?? "" },
+    { key: "sku", label: "SKU", value: (r: InventoryReportRow) => r.sku ?? "" },
+    { key: "category", label: "Category", value: (r: InventoryReportRow) => r.category ?? "" },
+    { key: "quantity", label: "Qty", value: (r: InventoryReportRow) => r.quantity ?? 0 },
+    { key: "cost_price", label: "Cost Price", value: (r: InventoryReportRow) => r.cost_price ?? 0 },
+    { key: "stock_value", label: "Stock Value", value: (r: InventoryReportRow) => r.stock_value ?? 0 },
+    { key: "status", label: "Status", value: (r: InventoryReportRow) => r.status ?? "" },
+  ], rows);
+
   return (
     <div className="flex flex-col gap-5">
       <div className="flex flex-wrap items-center gap-3">
@@ -478,6 +533,7 @@ function InventoryTab() {
               className="w-20 rounded-lg border border-input bg-card px-3 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-ring" />
           </div>
         )}
+        <ExportButton onClick={doExport} disabled={rows.length === 0} />
       </div>
 
       <div className="grid grid-cols-2 gap-3 lg:grid-cols-5">
@@ -553,9 +609,20 @@ function CustomersTab() {
     spent: r.total_spent ?? 0,
   }));
 
+  const doExport = () => exportRowsToCsv("customer-report", [
+    { key: "name", label: "Customer", value: (r: CustomerReportRow) => r.full_name ?? r.name ?? "" },
+    { key: "email", label: "Email", value: (r: CustomerReportRow) => r.email ?? "" },
+    { key: "total_orders", label: "Orders", value: (r: CustomerReportRow) => r.total_orders ?? 0 },
+    { key: "total_spent", label: "Total Spent", value: (r: CustomerReportRow) => r.total_spent ?? 0 },
+    { key: "avg_order_value", label: "Avg Order Value", value: (r: CustomerReportRow) => r.avg_order_value ?? 0 },
+    { key: "last_order_at", label: "Last Order", value: (r: CustomerReportRow) => r.last_order_at ? format(new Date(r.last_order_at as string), "yyyy-MM-dd") : "" },
+  ], rows);
+
   return (
     <div className="flex flex-col gap-5">
-      <DateControls range={range} onRange={setRange} />
+      <DateControls range={range} onRange={setRange}>
+        <ExportButton onClick={doExport} disabled={rows.length === 0} />
+      </DateControls>
 
       {!loading && chartData.length > 0 && (
         <Card className="shadow-none">
@@ -639,6 +706,16 @@ function ProductPerfTab() {
     profit: r.profit ?? 0,
   }));
 
+  const doExport = () => exportRowsToCsv("product-performance-report", [
+    { key: "name", label: "Product", value: (r: ProductPerfRow) => r.name ?? r.title ?? "" },
+    { key: "category", label: "Category", value: (r: ProductPerfRow) => r.category ?? "" },
+    { key: "units_sold", label: "Units Sold", value: (r: ProductPerfRow) => r.units_sold ?? 0 },
+    { key: "revenue", label: "Revenue", value: (r: ProductPerfRow) => r.revenue ?? 0 },
+    { key: "cost", label: "Cost", value: (r: ProductPerfRow) => r.cost ?? 0 },
+    { key: "profit", label: "Profit", value: (r: ProductPerfRow) => r.profit ?? 0 },
+    { key: "margin", label: "Margin", value: (r: ProductPerfRow) => r.margin ?? 0 },
+  ], rows);
+
   return (
     <div className="flex flex-col gap-5">
       <DateControls range={range} onRange={setRange}>
@@ -649,6 +726,7 @@ function ProductPerfTab() {
             <SelectItem value="units_sold">Sort by Units Sold</SelectItem>
           </SelectContent>
         </Select>
+        <ExportButton onClick={doExport} disabled={rows.length === 0} />
       </DateControls>
 
       {!loading && chartData.length > 0 && (
@@ -727,9 +805,19 @@ function FinancialTab() {
 
   const t = totals ?? {};
 
+  const doExport = () => exportRowsToCsv("financial-report-by-payment-method", [
+    { key: "method", label: "Method", value: (r: FinancialBreakdownRow) => r.method ?? "" },
+    { key: "transactions", label: "Transactions", value: (r: FinancialBreakdownRow) => r.transactions ?? 0 },
+    { key: "amount", label: "Amount", value: (r: FinancialBreakdownRow) => r.amount ?? 0 },
+    { key: "gateway_fee", label: "Gateway Fee", value: (r: FinancialBreakdownRow) => r.gateway_fee ?? 0 },
+    { key: "net", label: "Net", value: (r: FinancialBreakdownRow) => r.net ?? 0 },
+  ], breakdown);
+
   return (
     <div className="flex flex-col gap-5">
-      <DateControls range={range} onRange={setRange} />
+      <DateControls range={range} onRange={setRange}>
+        <ExportButton onClick={doExport} disabled={breakdown.length === 0} />
+      </DateControls>
 
       <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
         <SummaryCard label="Gross Revenue" value={fmt$(t.revenue)} icon={<TrendingUp className="size-4" />} tone="green" />
@@ -805,9 +893,17 @@ function CouponTab() {
     discount: r.total_discount ?? 0,
   }));
 
+  const doExport = () => exportRowsToCsv("coupon-usage-report", [
+    { key: "code", label: "Coupon Code", value: (r: CouponUsageRow) => r.code ?? r.name ?? `#${r.coupon_id ?? r.id}` },
+    { key: "times_used", label: "Times Used", value: (r: CouponUsageRow) => r.times_used ?? 0 },
+    { key: "total_discount", label: "Total Discount", value: (r: CouponUsageRow) => r.total_discount ?? 0 },
+  ], rows);
+
   return (
     <div className="flex flex-col gap-5">
-      <DateControls range={range} onRange={setRange} />
+      <DateControls range={range} onRange={setRange}>
+        <ExportButton onClick={doExport} disabled={rows.length === 0} />
+      </DateControls>
 
       {!loading && chartData.length > 0 && (
         <Card className="shadow-none">
