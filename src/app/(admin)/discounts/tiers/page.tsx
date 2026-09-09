@@ -281,7 +281,6 @@ export default function DiscountTiersPage() {
           <ExportMenu
             filename="discount-tiers"
             columns={exportColumns}
-            selected={selected}
             fetchAll={fetchAllForExport}
             total={total}
             noun="tier"

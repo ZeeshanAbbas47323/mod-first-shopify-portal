@@ -214,7 +214,9 @@ export async function listOrders(params: ListOrdersParams): Promise<ListResult<O
   // A free-text box has to cover order number, name, email and phone, so it
   // goes to the endpoint's `search` rather than an exact-match column filter.
   if (params.search) body.search = params.search;
-  if (params.order_number) filters.order_number = params.order_number;
+  // Partial match — a bare string reaches Prisma as an exact comparison, so
+  // typing half an order number would find nothing.
+  if (params.order_number) filters.order_number = { contains: params.order_number };
   if (params.email) filters.email = params.email;
   Object.assign(filters, params.filters ?? {});
   if (Object.keys(filters).length) body.filters = filters;

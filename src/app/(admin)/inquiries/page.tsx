@@ -271,7 +271,6 @@ export default function ContactSubmissionsPage() {
         <ExportMenu
           filename="inquiries"
           columns={exportColumns}
-          selected={selected}
           fetchAll={fetchAllForExport}
           total={total}
           noun="inquirie"

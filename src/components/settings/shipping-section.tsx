@@ -94,7 +94,9 @@ export function ShippingSection() {
 
   const buildFilters = React.useCallback(
     () => ({
-      tracking_number: debounced || undefined,
+      // Partial match — a bare string is an exact comparison in Prisma, so
+      // typing part of a tracking number would find nothing.
+      tracking_number: debounced ? { contains: debounced } : undefined,
       status: statuses.length ? { in: statuses } : undefined,
     }),
     [debounced, statuses]

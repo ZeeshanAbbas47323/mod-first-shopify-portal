@@ -299,7 +299,6 @@ export default function Net30ApplicationsPage() {
         <ExportMenu
           filename="net30-applications"
           columns={exportColumns}
-          selected={selected}
           fetchAll={fetchAllForExport}
           total={total}
           noun="application"

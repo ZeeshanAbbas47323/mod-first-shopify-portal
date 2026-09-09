@@ -351,7 +351,6 @@ export default function ProductsPage() {
           <ExportMenu
             filename="products"
             columns={exportColumns}
-            selected={selected}
             fetchAll={fetchAllForExport}
             total={total}
             noun="product"
@@ -384,15 +383,6 @@ export default function ProductsPage() {
           <span className="text-sm font-medium">
             {selected.length} product{selected.length === 1 ? "" : "s"} selected
           </span>
-          <ExportMenu
-            filename="products"
-            columns={exportColumns}
-            selected={selected}
-            fetchAll={fetchAllForExport}
-            total={total}
-            noun="product"
-            size="sm"
-          />
           <button
             type="button"
             onClick={() => setClearKey((k) => k + 1)}

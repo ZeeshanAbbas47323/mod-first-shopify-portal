@@ -11,16 +11,20 @@ import {
   DropdownMenuContent,
   DropdownMenuItem,
   DropdownMenuLabel,
-  DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { apiErrorMessage } from "@/lib/auth-api";
 import { exportRows, type ExportColumn, type ExportFormat } from "@/lib/export";
 
+const FORMATS: { format: ExportFormat; label: string; Icon: typeof FileText }[] = [
+  { format: "xlsx", label: "Excel (.xlsx)", Icon: FileSpreadsheet },
+  { format: "csv", label: "CSV (.csv)", Icon: FileText },
+];
+
 /**
  * Format picker for tables that build their own rows — an export that depends
- * on the visible tab, say — where `ExportMenu`'s selected/all split doesn't
- * apply. The caller keeps its own export function and just learns the format.
+ * on the visible tab, say. The caller keeps its own export function and just
+ * learns which format was picked.
  */
 export function ExportFormatMenu({
   onSelect,
@@ -70,11 +74,9 @@ interface ExportMenuProps<T> {
   /** Base file name; the current date is appended automatically. */
   filename: string;
   columns: ExportColumn<T>[];
-  /** Rows the user has ticked, if the table supports selection. */
-  selected?: T[];
   /** Fetches every row matching the active filters, ignoring pagination. */
   fetchAll: () => Promise<T[]>;
-  /** Total matching rows, shown in the "export everything" labels. */
+  /** Total matching rows, shown alongside the format choices. */
   total?: number;
   /** Singular noun for messages, e.g. "customer" → "3 customers exported". */
   noun?: string;
@@ -85,15 +87,13 @@ interface ExportMenuProps<T> {
   className?: string;
 }
 
-const FORMATS: { format: ExportFormat; label: string; Icon: typeof FileText }[] = [
-  { format: "xlsx", label: "Excel (.xlsx)", Icon: FileSpreadsheet },
-  { format: "csv", label: "CSV (.csv)", Icon: FileText },
-];
-
+/**
+ * Exports every row matching the current filters, not just the loaded page —
+ * so what the table is filtered to is what lands in the file.
+ */
 export function ExportMenu<T>({
   filename,
   columns,
-  selected = [],
   fetchAll,
   total,
   noun = "row",
@@ -105,10 +105,10 @@ export function ExportMenu<T>({
   const [busy, setBusy] = React.useState(false);
   const plural = nounPlural ?? `${noun}s`;
 
-  const run = async (scope: "selected" | "all", format: ExportFormat) => {
+  const run = async (format: ExportFormat) => {
     setBusy(true);
     try {
-      const rows = scope === "selected" ? selected : await fetchAll();
+      const rows = await fetchAll();
       if (!rows.length) {
         toast.error("Nothing to export.");
         return;
@@ -142,29 +142,13 @@ export function ExportMenu<T>({
           </Button>
         }
       />
-      <DropdownMenuContent align="end" className="w-64">
-        {selected.length > 0 && (
-          <>
-            <DropdownMenuLabel className="text-xs font-normal text-muted-foreground">
-              {selected.length} selected
-            </DropdownMenuLabel>
-            {FORMATS.map(({ format, label, Icon }) => (
-              <DropdownMenuItem
-                key={`selected-${format}`}
-                onClick={() => run("selected", format)}
-              >
-                <Icon className="size-4" />
-                {label}
-              </DropdownMenuItem>
-            ))}
-            <DropdownMenuSeparator />
-          </>
-        )}
+      <DropdownMenuContent align="end" className="w-56">
         <DropdownMenuLabel className="text-xs font-normal text-muted-foreground">
-          All matching filters{total != null ? ` (${total})` : ""}
+          All {plural}
+          {total != null ? ` (${total})` : ""}
         </DropdownMenuLabel>
         {FORMATS.map(({ format, label, Icon }) => (
-          <DropdownMenuItem key={`all-${format}`} onClick={() => run("all", format)}>
+          <DropdownMenuItem key={format} onClick={() => run(format)}>
             <Icon className="size-4" />
             {label}
           </DropdownMenuItem>

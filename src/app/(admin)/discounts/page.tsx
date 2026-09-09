@@ -314,7 +314,6 @@ export default function DiscountsPage() {
           <ExportMenu
             filename="coupons"
             columns={exportColumns}
-            selected={selected}
             fetchAll={fetchAllForExport}
             total={total}
             noun="coupon"

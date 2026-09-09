@@ -385,7 +385,6 @@ export default function OrdersPage() {
           <ExportMenu
             filename="orders"
             columns={exportColumns}
-            selected={selected}
             fetchAll={fetchAllForExport}
             total={total}
             noun="order"
@@ -494,15 +493,6 @@ export default function OrdersPage() {
               ))}
             </DropdownMenuContent>
           </DropdownMenu>
-          <ExportMenu
-            filename="orders"
-            columns={exportColumns}
-            selected={selected}
-            fetchAll={fetchAllForExport}
-            total={total}
-            noun="order"
-            size="sm"
-          />
           <button
             type="button"
             onClick={() => setClearKey((k) => k + 1)}

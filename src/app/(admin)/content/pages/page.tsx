@@ -275,7 +275,6 @@ export default function ContentPagesPage() {
           <ExportMenu
             filename="pages"
             columns={exportColumns}
-            selected={selected}
             fetchAll={fetchAllForExport}
             total={total}
             noun="page"

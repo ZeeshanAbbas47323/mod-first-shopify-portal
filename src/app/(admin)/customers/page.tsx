@@ -195,7 +195,9 @@ export default function CustomersPage() {
 
   const [dateRange, setDateRange] = React.useState<DateRange | undefined>();
   // Customers only. Staff accounts live under Settings → Users.
-  const [statuses, setStatuses] = React.useState<string[]>([]);
+  // Dormant accounts are deactivated in bulk by the no-orders script, so the
+  // list opens on active customers only. Clearing the filter still shows all.
+  const [statuses, setStatuses] = React.useState<string[]>(["active"]);
   const [subscriptions, setSubscriptions] = React.useState<string[]>([]);
   const [searchInput, setSearchInput] = React.useState("");
   const [search, setSearch] = React.useState("");
@@ -289,7 +291,6 @@ export default function CustomersPage() {
         <ExportMenu
           filename="customers"
           columns={exportColumns}
-          selected={selected}
           fetchAll={fetchAllForExport}
           total={total}
           noun="customer"
@@ -340,15 +341,6 @@ export default function CustomersPage() {
           <span className="text-sm font-medium">
             {selected.length} customer{selected.length === 1 ? "" : "s"} selected
           </span>
-          <ExportMenu
-            filename="customers"
-            columns={exportColumns}
-            selected={selected}
-            fetchAll={fetchAllForExport}
-            total={total}
-            noun="customer"
-            size="sm"
-          />
           <button
             type="button"
             onClick={() => setClearKey((k) => k + 1)}

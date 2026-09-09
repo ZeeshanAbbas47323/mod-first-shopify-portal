@@ -308,7 +308,6 @@ export default function ContentPage() {
           <ExportMenu
             filename="blog-posts"
             columns={exportColumns}
-            selected={selected}
             fetchAll={fetchAllForExport}
             total={total}
             noun="post"

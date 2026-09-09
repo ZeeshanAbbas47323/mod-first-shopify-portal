@@ -225,7 +225,6 @@ export default function ShippingLabelsPage() {
           <ExportMenu
             filename="shipments"
             columns={exportColumns}
-            selected={selected}
             fetchAll={fetchAllForExport}
             total={total}
             noun="shipment"
@@ -271,15 +270,6 @@ export default function ShippingLabelsPage() {
           <span className="text-sm font-medium">
             {selected.length} shipment{selected.length === 1 ? "" : "s"} selected
           </span>
-          <ExportMenu
-            filename="shipments"
-            columns={exportColumns}
-            selected={selected}
-            fetchAll={fetchAllForExport}
-            total={total}
-            noun="shipment"
-            size="sm"
-          />
           <button
             type="button"
             onClick={() => setClearKey((k) => k + 1)}

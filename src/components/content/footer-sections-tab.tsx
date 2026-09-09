@@ -3,7 +3,7 @@
 import * as React from "react";
 import { toast } from "sonner";
 import {
-  ChevronDown, ChevronUp, GripVertical, Loader2,
+  ChevronDown, ChevronUp, Loader2,
   Plus, Save, Trash2, X,
 } from "lucide-react";
 
@@ -44,14 +44,39 @@ function LinkEditor({
   link,
   onChange,
   onRemove,
+  onMove,
+  isFirst,
+  isLast,
 }: {
   link: FooterLinkRow & { _localId: string; _isNew?: boolean };
   onChange: (updated: Partial<FooterLinkRow>) => void;
   onRemove: () => void;
+  onMove: (direction: "up" | "down") => void;
+  isFirst: boolean;
+  isLast: boolean;
 }) {
   return (
     <div className="flex items-start gap-2 rounded-lg border border-border bg-muted/20 p-3">
-      <GripVertical className="mt-2 size-4 shrink-0 text-muted-foreground" />
+      <div className="mt-1 flex shrink-0 flex-col">
+        <button
+          type="button"
+          aria-label="Move link up"
+          disabled={isFirst}
+          onClick={() => onMove("up")}
+          className="rounded p-0.5 text-muted-foreground hover:bg-muted hover:text-foreground disabled:pointer-events-none disabled:opacity-25"
+        >
+          <ChevronUp className="size-3.5" />
+        </button>
+        <button
+          type="button"
+          aria-label="Move link down"
+          disabled={isLast}
+          onClick={() => onMove("down")}
+          className="rounded p-0.5 text-muted-foreground hover:bg-muted hover:text-foreground disabled:pointer-events-none disabled:opacity-25"
+        >
+          <ChevronDown className="size-3.5" />
+        </button>
+      </div>
       <div className="grid flex-1 gap-2 sm:grid-cols-2">
         <div className="space-y-1">
           <Label className="text-xs">Name</Label>
@@ -156,6 +181,19 @@ function SectionCard({ section, onSaved }: { section: FooterSectionRow; onSaved:
     setLinks((prev) => prev.map((l) => l._localId === localId ? { ...l, ...patch } : l));
   };
 
+  const moveLink = (localId: string, direction: "up" | "down") => {
+    setLinks((prev) => {
+      const visible = prev.filter((l) => !l._deleted);
+      const index = visible.findIndex((l) => l._localId === localId);
+      const target = index + (direction === "up" ? -1 : 1);
+      if (index < 0 || target < 0 || target >= visible.length) return prev;
+      const next = [...visible];
+      [next[index], next[target]] = [next[target], next[index]];
+      // Deleted rows are held until save, so they ride along untouched.
+      return [...next, ...prev.filter((l) => l._deleted)];
+    });
+  };
+
   const removeLink = (localId: string) => {
     setLinks((prev) => prev.map((l) =>
       l._localId === localId
@@ -179,13 +217,18 @@ function SectionCard({ section, onSaved }: { section: FooterSectionRow; onSaved:
       // 2. Manage links
       const actions: ({ _action: "add" | "update" | "delete"; [k: string]: unknown })[] = [];
 
+      let position = 0;
       links.forEach((l) => {
         if (l._deleted && l.id) {
           actions.push({ _action: "delete", id: l.id });
-        } else if (l._isNew && !l._deleted) {
-          actions.push({ _action: "add", name: l.name, url: l.url, type: l.type ?? "url", target: l.target ?? "_self", sort_order: l.sort_order ?? 0 });
-        } else if (!l._isNew && !l._deleted && l.id) {
-          actions.push({ _action: "update", id: l.id, name: l.name, url: l.url, type: l.type, target: l.target });
+          return;
+        }
+        if (l._deleted) return;
+        const sort_order = position++;
+        if (l._isNew) {
+          actions.push({ _action: "add", name: l.name, url: l.url, type: l.type ?? "url", target: l.target ?? "_self", sort_order });
+        } else if (l.id) {
+          actions.push({ _action: "update", id: l.id, name: l.name, url: l.url, type: l.type, target: l.target, sort_order });
         }
       });
 
@@ -273,12 +316,15 @@ function SectionCard({ section, onSaved }: { section: FooterSectionRow; onSaved:
                 <p className="text-sm text-muted-foreground">No links yet. Add the first one.</p>
               ) : (
                 <div className="space-y-2">
-                  {visibleLinks.map((link) => (
+                  {visibleLinks.map((link, i) => (
                     <LinkEditor
                       key={link._localId}
                       link={link}
                       onChange={(patch) => updateLink(link._localId, patch)}
                       onRemove={() => removeLink(link._localId)}
+                      onMove={(direction) => moveLink(link._localId, direction)}
+                      isFirst={i === 0}
+                      isLast={i === visibleLinks.length - 1}
                     />
                   ))}
                 </div>

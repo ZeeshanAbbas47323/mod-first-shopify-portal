@@ -330,7 +330,6 @@ export default function ReviewsPage() {
         <ExportMenu
           filename="reviews"
           columns={exportColumns}
-          selected={selected}
           fetchAll={fetchAllForExport}
           total={total}
           noun="review"

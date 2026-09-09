@@ -181,7 +181,6 @@ export default function ProductCategoriesPage() {
           <ExportMenu
             filename="categories"
             columns={exportColumns}
-            selected={selectedRows}
             fetchAll={fetchAllForExport}
             total={flat.length}
             noun="category"

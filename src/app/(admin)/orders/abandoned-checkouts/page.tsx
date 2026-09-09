@@ -7,6 +7,7 @@ import { Mail, Phone } from "lucide-react";
 import type { DateRange } from "react-day-picker";
 import { toast } from "sonner";
 
+import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
 import { DataTable } from "@/components/data-table";
 import { ExportMenu } from "@/components/export-menu";
@@ -195,7 +196,6 @@ export default function AbandonedCheckoutsPage() {
         <ExportMenu
           filename="abandoned-checkouts"
           columns={exportColumns}
-          selected={selected}
           fetchAll={fetchAllForExport}
           total={total}
           noun="checkout"
@@ -213,15 +213,6 @@ export default function AbandonedCheckoutsPage() {
           <span className="text-sm font-medium">
             {selected.length} checkout{selected.length === 1 ? "" : "s"} selected
           </span>
-          <ExportMenu
-            filename="abandoned-checkouts"
-            columns={exportColumns}
-            selected={selected}
-            fetchAll={fetchAllForExport}
-            total={total}
-            noun="checkout"
-            size="sm"
-          />
           <button
             type="button"
             onClick={() => setClearKey((k) => k + 1)}

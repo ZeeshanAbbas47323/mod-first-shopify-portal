@@ -272,7 +272,6 @@ function CampaignsTab() {
         <ExportMenu
           filename="campaigns"
           columns={campaignExportColumns}
-          selected={selected}
           fetchAll={fetchAllForExport}
           total={total}
           noun="campaign"
@@ -755,7 +754,6 @@ function SubscribersTab() {
         <ExportMenu
           filename="subscribers"
           columns={subscriberExportColumns}
-          selected={selected}
           fetchAll={fetchAllForExport}
           total={total}
           noun="subscriber"

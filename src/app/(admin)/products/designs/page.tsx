@@ -25,7 +25,7 @@ import { ExportMenu } from "@/components/export-menu";
 import { DateRangePicker } from "@/components/date-range-picker";
 import { StatusBadge, type BadgeTone } from "@/components/status-badge";
 import { apiErrorMessage } from "@/lib/auth-api";
-import { fileUrl, imgUrl } from "@/lib/utils";
+import { exportRowsToCsv, fileUrl, imgUrl } from "@/lib/utils";
 import {
   listDesignUploads,
   updateDesignUpload,
@@ -291,7 +291,6 @@ export default function DesignUploadsPage() {
         <ExportMenu
           filename="design-uploads"
           columns={exportColumns}
-          selected={selected}
           fetchAll={fetchAllForExport}
           total={total}
           noun="upload"
@@ -319,15 +318,6 @@ export default function DesignUploadsPage() {
           <span className="text-sm font-medium">
             {selected.length} design{selected.length === 1 ? "" : "s"} selected
           </span>
-          <ExportMenu
-            filename="design-uploads"
-            columns={exportColumns}
-            selected={selected}
-            fetchAll={fetchAllForExport}
-            total={total}
-            noun="upload"
-            size="sm"
-          />
           <button
             type="button"
             onClick={() => setClearKey((k) => k + 1)}

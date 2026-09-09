@@ -314,6 +314,7 @@ function MenuPicker({
   onChange,
   disabled,
   assigned,
+  assignedLoading,
 }: {
   menus: MenuRow[];
   loading: boolean;
@@ -323,6 +324,8 @@ function MenuPicker({
   /** Menus this role already has a right for — nothing stops a duplicate row
    *  being created at the database level, so they're blocked here instead. */
   assigned?: Set<number>;
+  /** True while that set is being fetched, so a stale answer isn't implied. */
+  assignedLoading?: boolean;
 }) {
   const [query, setQuery] = React.useState("");
 
@@ -421,8 +424,14 @@ function MenuPicker({
         )}
       </div>
 
-      <div className="border-t border-input px-3 py-1.5 text-xs text-muted-foreground">
-        {value.length} selected
+      <div className="flex items-center gap-2 border-t border-input px-3 py-1.5 text-xs text-muted-foreground">
+        <span>{value.length} selected</span>
+        {assignedLoading && (
+          <span className="ml-auto flex items-center gap-1">
+            <Loader2 className="size-3 animate-spin" />
+            Checking this role…
+          </span>
+        )}
       </div>
     </div>
   );
@@ -462,6 +471,7 @@ function MenuRightDialog({
   const [menus, setMenus] = React.useState<MenuRow[]>([]);
   const [menusLoading, setMenusLoading] = React.useState(false);
   const [assigned, setAssigned] = React.useState<Set<number>>(new Set());
+  const [assignedLoading, setAssignedLoading] = React.useState(false);
 
   const role = watch("role");
   const selectedMenuIds = watch("menu_ids");
@@ -477,6 +487,14 @@ function MenuRightDialog({
   React.useEffect(() => {
     if (!open || editing || !role) return;
     let cancelled = false;
+
+    // Drop the previous role's set before fetching. Without this the dialog
+    // keeps showing whoever was selected a moment ago — it opens on Manager,
+    // who usually holds every menu, so switching role left every row wrongly
+    // greyed out as "Already added".
+    setAssigned(new Set());
+    setAssignedLoading(true);
+
     listMenuRights({ page: 1, limit: 500, filters: { role } })
       .then((res) => {
         if (cancelled) return;
@@ -488,7 +506,15 @@ function MenuRightDialog({
           (selectedMenuIdsRef.current ?? []).filter((id) => !taken.has(id))
         );
       })
-      .catch(() => !cancelled && setAssigned(new Set()));
+      .catch((error) => {
+        if (cancelled) return;
+        // Failing open would let duplicates through silently, so say so.
+        toast.error(
+          apiErrorMessage(error, "Couldn't check which menus this role already has.")
+        );
+      })
+      .finally(() => !cancelled && setAssignedLoading(false));
+
     return () => {
       cancelled = true;
     };
@@ -632,6 +658,7 @@ function MenuRightDialog({
                   onChange={field.onChange}
                   disabled={!!editing}
                   assigned={editing ? undefined : assigned}
+                  assignedLoading={assignedLoading}
                 />
               )}
             />

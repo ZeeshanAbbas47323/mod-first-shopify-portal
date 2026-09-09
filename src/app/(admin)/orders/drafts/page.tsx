@@ -336,7 +336,6 @@ export default function DraftOrdersPage() {
           <ExportMenu
             filename="drafts"
             columns={exportColumns}
-            selected={selected}
             fetchAll={fetchAllForExport}
             total={total}
             noun="draft"
@@ -372,15 +371,6 @@ export default function DraftOrdersPage() {
           <span className="text-sm font-medium">
             {selected.length} draft{selected.length === 1 ? "" : "s"} selected
           </span>
-          <ExportMenu
-            filename="drafts"
-            columns={exportColumns}
-            selected={selected}
-            fetchAll={fetchAllForExport}
-            total={total}
-            noun="draft"
-            size="sm"
-          />
           <button
             type="button"
             onClick={() => setClearKey((k) => k + 1)}
