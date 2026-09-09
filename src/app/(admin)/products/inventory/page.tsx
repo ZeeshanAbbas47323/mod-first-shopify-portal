@@ -100,7 +100,7 @@ function SummaryCard({
       ) : (
         <span
           className={cn(
-            "text-xl font-bold tracking-tight",
+            "text-lg font-semibold tracking-tight",
             tone === "warning" && "text-[#b98900]",
             tone === "critical" && "text-[#e51c00]"
           )}
@@ -470,7 +470,7 @@ export default function InventoryPage() {
       {/* Header */}
       <div className="flex flex-wrap items-center justify-between gap-3">
         <div>
-          <h1 className="text-xl font-bold">Inventory</h1>
+          <h1 className="text-lg font-semibold">Inventory</h1>
           <p className="text-sm text-muted-foreground">
             Stock on hand, low-stock alerts and every movement.
           </p>

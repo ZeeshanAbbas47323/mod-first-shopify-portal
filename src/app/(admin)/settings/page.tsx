@@ -349,7 +349,7 @@ export default function SettingsPage() {
 
             <div className="mb-4 flex items-center gap-2">
               <SectionIcon className="size-5" />
-              <h1 className="text-xl font-bold">{sectionMeta[section].title}</h1>
+              <h1 className="text-lg font-semibold">{sectionMeta[section].title}</h1>
             </div>
 
             {section === "account" && <ChangePasswordSection />}

@@ -43,7 +43,7 @@ export function SummaryStatStrip({
             ) : (
               <>
                 <div className="flex items-end justify-between gap-2">
-                  <span className="text-xl font-bold tracking-tight">{tile.value}</span>
+                  <span className="text-lg font-semibold tracking-tight">{tile.value}</span>
                   {tile.sparkline && tile.sparkline.length > 1 && (
                     <div className="h-8 w-16">
                       <ResponsiveContainer width="100%" height="100%">

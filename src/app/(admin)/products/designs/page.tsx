@@ -283,7 +283,7 @@ export default function DesignUploadsPage() {
     <div className="flex flex-col gap-4">
       <div className="flex flex-wrap items-center justify-between gap-3">
         <div>
-          <h1 className="text-xl font-bold">Design uploads</h1>
+          <h1 className="text-lg font-semibold">Design uploads</h1>
           <p className="text-sm text-muted-foreground">
             Artwork customers sent in — review it before it goes to production.
           </p>
@@ -291,6 +291,7 @@ export default function DesignUploadsPage() {
         <ExportMenu
           filename="design-uploads"
           columns={exportColumns}
+          selected={selected}
           fetchAll={fetchAllForExport}
           total={total}
           noun="upload"

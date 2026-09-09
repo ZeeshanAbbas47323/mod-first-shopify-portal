@@ -380,11 +380,12 @@ export default function OrdersPage() {
     <div className="flex flex-col gap-4">
       {/* Header */}
       <div className="flex flex-wrap items-center justify-between gap-3">
-        <h1 className="text-xl font-bold">Orders</h1>
+        <h1 className="text-lg font-semibold">Orders</h1>
         <div className="flex gap-2">
           <ExportMenu
             filename="orders"
             columns={exportColumns}
+          selected={selected}
             fetchAll={fetchAllForExport}
             total={total}
             noun="order"

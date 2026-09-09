@@ -166,7 +166,7 @@ export function ContentPageForm({ page }: { page?: ContentPageRow }) {
               >
                 ← Pages
               </button>
-              <h1 className="truncate text-xl font-bold">
+              <h1 className="truncate text-lg font-semibold">
                 {isEdit ? page.title : "New page"}
               </h1>
               {isEdit && (

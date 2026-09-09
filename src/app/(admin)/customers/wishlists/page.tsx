@@ -263,7 +263,7 @@ export default function WishlistsPage() {
     <div className="flex flex-col gap-4">
       <div className="flex flex-wrap items-center justify-between gap-3">
         <div>
-          <h1 className="text-xl font-bold">Wishlists</h1>
+          <h1 className="text-lg font-semibold">Wishlists</h1>
           <p className="text-sm text-muted-foreground">
             Products customers have saved — what they want but haven&apos;t bought yet.
           </p>
@@ -271,6 +271,7 @@ export default function WishlistsPage() {
         <ExportMenu
           filename="wishlists"
           columns={exportColumns}
+          selected={selected}
           fetchAll={fetchAllForExport}
           total={total}
           noun="wishlist"

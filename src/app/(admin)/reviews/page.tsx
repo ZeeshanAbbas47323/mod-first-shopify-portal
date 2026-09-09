@@ -326,10 +326,11 @@ export default function ReviewsPage() {
   return (
     <div className="flex flex-col gap-4">
       <div className="flex flex-wrap items-center justify-between gap-3">
-        <h1 className="text-xl font-bold">Reviews</h1>
+        <h1 className="text-lg font-semibold">Reviews</h1>
         <ExportMenu
           filename="reviews"
           columns={exportColumns}
+          selected={selected}
           fetchAll={fetchAllForExport}
           total={total}
           noun="review"

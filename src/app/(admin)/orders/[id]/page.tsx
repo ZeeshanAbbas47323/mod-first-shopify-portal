@@ -278,7 +278,7 @@ export default function OrderDetailPage() {
           <ArrowLeft className="size-5" />
         </Button>
         <div className="flex flex-wrap items-center gap-2">
-          <h1 className="text-xl font-bold">
+          <h1 className="text-lg font-semibold">
             {order.order_number ?? `#${order.id}`}
           </h1>
           <StatusBadge status={order.humanize_status ?? order.status ?? "unknown"} />

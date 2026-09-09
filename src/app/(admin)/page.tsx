@@ -91,7 +91,7 @@ function KpiCard({
         </>
       ) : (
         <>
-          <span className="text-xl font-bold tracking-tight">{value}</span>
+          <span className="text-lg font-semibold tracking-tight">{value}</span>
           {delta != null && (
             <span className={cn("flex items-center text-xs font-medium", positive ? "text-[#29845a]" : "text-[#e51c00]")}>
               {positive ? <ArrowUpRight className="size-3.5" /> : <ArrowDownRight className="size-3.5" />}
@@ -287,7 +287,7 @@ export default function HomePage() {
       {/* Header */}
       <div className="flex flex-wrap items-start justify-between gap-3">
         <div>
-          <h1 className="text-xl font-bold capitalize">
+          <h1 className="text-lg font-semibold capitalize">
             {greeting()}, {user?.name ?? "there"}
           </h1>
           <p className="text-sm text-muted-foreground">

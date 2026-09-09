@@ -263,7 +263,7 @@ export default function ContactSubmissionsPage() {
     <div className="flex flex-col gap-4">
       <div className="flex flex-wrap items-center justify-between gap-3">
         <div>
-          <h1 className="text-xl font-bold">Contact submissions</h1>
+          <h1 className="text-lg font-semibold">Contact submissions</h1>
           <p className="text-sm text-muted-foreground">
             Messages sent through the website contact form.
           </p>
@@ -271,6 +271,7 @@ export default function ContactSubmissionsPage() {
         <ExportMenu
           filename="inquiries"
           columns={exportColumns}
+          selected={selected}
           fetchAll={fetchAllForExport}
           total={total}
           noun="inquirie"

@@ -187,7 +187,7 @@ export default function AbandonedCheckoutsPage() {
     <div className="flex flex-col gap-4">
       <div className="flex flex-wrap items-center justify-between gap-3">
         <div>
-          <h1 className="text-xl font-bold">Abandoned checkouts</h1>
+          <h1 className="text-lg font-semibold">Abandoned checkouts</h1>
           <p className="text-sm text-muted-foreground">
             Customers who filled a cart and haven&apos;t ordered since.
           </p>
@@ -195,6 +195,7 @@ export default function AbandonedCheckoutsPage() {
         <ExportMenu
           filename="abandoned-checkouts"
           columns={exportColumns}
+          selected={selected}
           fetchAll={fetchAllForExport}
           total={total}
           noun="checkout"

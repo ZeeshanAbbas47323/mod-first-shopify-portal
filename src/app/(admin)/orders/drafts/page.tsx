@@ -326,7 +326,7 @@ export default function DraftOrdersPage() {
     <div className="flex flex-col gap-4">
       <div className="flex flex-wrap items-center justify-between gap-3">
         <div>
-          <h1 className="text-xl font-bold">Drafts</h1>
+          <h1 className="text-lg font-semibold">Drafts</h1>
           <p className="text-sm text-muted-foreground">
             Orders you build for a customer — no stock or payment is taken until
             you complete them.
@@ -336,6 +336,7 @@ export default function DraftOrdersPage() {
           <ExportMenu
             filename="drafts"
             columns={exportColumns}
+          selected={selected}
             fetchAll={fetchAllForExport}
             total={total}
             noun="draft"

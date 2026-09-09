@@ -346,11 +346,12 @@ export default function ProductsPage() {
   return (
     <div className="flex flex-col gap-4">
       <div className="flex flex-wrap items-center justify-between gap-3">
-        <h1 className="text-xl font-bold">Products</h1>
+        <h1 className="text-lg font-semibold">Products</h1>
         <div className="flex gap-2">
           <ExportMenu
             filename="products"
             columns={exportColumns}
+          selected={selected}
             fetchAll={fetchAllForExport}
             total={total}
             noun="product"

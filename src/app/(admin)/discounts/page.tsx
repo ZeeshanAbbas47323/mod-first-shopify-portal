@@ -306,7 +306,7 @@ export default function DiscountsPage() {
   return (
     <div className="flex flex-col gap-4">
       <div className="flex flex-wrap items-center justify-between gap-3">
-        <h1 className="text-xl font-bold">Discounts</h1>
+        <h1 className="text-lg font-semibold">Discounts</h1>
         <div className="flex gap-2">
           <Button variant="outline" onClick={() => setValidateOpen(true)}>
             <CheckCircle2 className="size-4" /> Validate code
@@ -314,6 +314,7 @@ export default function DiscountsPage() {
           <ExportMenu
             filename="coupons"
             columns={exportColumns}
+          selected={selected}
             fetchAll={fetchAllForExport}
             total={total}
             noun="coupon"

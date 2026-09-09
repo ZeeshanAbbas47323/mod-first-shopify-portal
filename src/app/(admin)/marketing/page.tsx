@@ -64,7 +64,7 @@ export default function MarketingPage() {
 
   return (
     <div className="flex flex-col gap-4">
-      <h1 className="text-xl font-bold">Marketing</h1>
+      <h1 className="text-lg font-semibold">Marketing</h1>
       <Tabs value={tab} onValueChange={(v) => setTab(v as string)}>
         <TabsList className="bg-transparent p-0">
           <TabsTrigger
@@ -272,6 +272,7 @@ function CampaignsTab() {
         <ExportMenu
           filename="campaigns"
           columns={campaignExportColumns}
+          selected={selected}
           fetchAll={fetchAllForExport}
           total={total}
           noun="campaign"
@@ -754,6 +755,7 @@ function SubscribersTab() {
         <ExportMenu
           filename="subscribers"
           columns={subscriberExportColumns}
+          selected={selected}
           fetchAll={fetchAllForExport}
           total={total}
           noun="subscriber"

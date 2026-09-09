@@ -339,7 +339,7 @@ export function DraftOrderForm({ draft }: { draft?: DraftOrderRow }) {
           <ArrowLeft className="size-4" />
         </Button>
         <div className="min-w-0">
-          <h1 className="truncate text-xl font-bold">
+          <h1 className="truncate text-lg font-semibold">
             {isEdit ? (draft.draft_number ?? `Draft #${draft.id}`) : "Create draft order"}
           </h1>
           {isEdit && (

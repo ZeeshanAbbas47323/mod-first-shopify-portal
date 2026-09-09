@@ -421,7 +421,7 @@ export function DataTable<TData, TValue>({
                     return (
                       <TableHead
                         key={header.id}
-                        className="h-10 bg-[#f7f7f7] text-xs font-medium text-muted-foreground first:rounded-tl-lg last:rounded-tr-lg lg:sticky lg:z-10"
+                        className="h-9 bg-[#f7f7f7] text-xs font-semibold text-muted-foreground first:rounded-tl-lg last:rounded-tr-lg lg:sticky lg:z-10"
                         aria-sort={
                           dir === "asc"
                             ? "ascending"
@@ -511,7 +511,7 @@ export function DataTable<TData, TValue>({
                     className={onRowClick ? "cursor-pointer" : undefined}
                   >
                     {row.getVisibleCells().map((cell) => (
-                      <TableCell key={cell.id} className="py-2.5">
+                      <TableCell key={cell.id} className="py-2">
                         {flexRender(cell.column.columnDef.cell, cell.getContext())}
                       </TableCell>
                     ))}

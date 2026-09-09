@@ -781,7 +781,7 @@ export function ProductForm({ product }: { product?: ProductDetailRow }) {
         >
           <ArrowLeft className="size-4" />
         </Button>
-        <h1 className="text-xl font-bold">
+        <h1 className="text-lg font-semibold">
           {isEdit ? product.title : "Add product"}
         </h1>
         <div className="ml-auto flex gap-2">

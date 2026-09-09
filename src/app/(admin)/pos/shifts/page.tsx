@@ -271,7 +271,7 @@ export default function PosShiftsPage() {
   return (
     <div className="flex flex-col gap-4">
       <div>
-        <h1 className="text-xl font-bold">Shifts</h1>
+        <h1 className="text-lg font-semibold">Shifts</h1>
         <p className="text-sm text-muted-foreground">
           Cash drawer sessions, totals and closing reports.
         </p>

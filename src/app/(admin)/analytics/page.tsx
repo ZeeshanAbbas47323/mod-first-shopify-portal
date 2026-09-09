@@ -244,14 +244,14 @@ function SalesTab() {
       </DateControls>
 
       {isTimeSeries ? (
-        <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
+        <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-4">
           <SummaryCard label="Total revenue" value={fmt$(summary.revenue)} icon={<TrendingUp className="size-4" />} tone="green" />
           <SummaryCard label="Orders" value={fmtN(summary.orders)} icon={<ShoppingCart className="size-4" />} />
           <SummaryCard label="Discounts given" value={fmt$(summary.discount)} icon={<Tag className="size-4" />} tone="red" />
           <SummaryCard label="Tax collected" value={fmt$(summary.tax)} icon={<Wallet className="size-4" />} />
         </div>
       ) : (
-        <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
+        <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-4">
           <SummaryCard label="Total revenue" value={fmt$(groupRevenue)} icon={<TrendingUp className="size-4" />} tone="green" />
           <SummaryCard label="Units sold" value={fmtN(groupUnits)} icon={<Package className="size-4" />} />
           <SummaryCard label={groupBy === "product" ? "Products" : "Categories"} value={fmtN(rows.length)} icon={<Tag className="size-4" />} />
@@ -434,7 +434,7 @@ function OrdersTab() {
         <ExportButton onClick={doExport} disabled={rows.length === 0} />
       </DateControls>
 
-      <div className="grid grid-cols-2 gap-3 lg:grid-cols-5">
+      <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-5">
         <SummaryCard label="Total orders" value={fmtN(summary.total_orders)} icon={<ShoppingCart className="size-4" />} />
         <SummaryCard label="Total revenue" value={fmt$(summary.total_revenue)} icon={<TrendingUp className="size-4" />} tone="green" />
         <SummaryCard label="Discounts" value={fmt$(summary.total_discount)} icon={<Tag className="size-4" />} tone="red" />
@@ -546,7 +546,7 @@ function InventoryTab() {
         <ExportButton onClick={doExport} disabled={rows.length === 0} />
       </div>
 
-      <div className="grid grid-cols-2 gap-3 lg:grid-cols-5">
+      <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-5">
         <SummaryCard label="Total SKUs" value={fmtN(summary.total_skus)} icon={<Package className="size-4" />} />
         <SummaryCard label="Total units" value={fmtN(summary.total_units)} icon={<Package className="size-4" />} />
         <SummaryCard label="Stock value" value={fmt$(summary.total_stock_value)} icon={<Wallet className="size-4" />} tone="green" />
@@ -829,13 +829,13 @@ function FinancialTab() {
         <ExportButton onClick={doExport} disabled={breakdown.length === 0} />
       </DateControls>
 
-      <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
+      <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-4">
         <SummaryCard label="Gross Revenue" value={fmt$(t.revenue)} icon={<TrendingUp className="size-4" />} tone="green" />
         <SummaryCard label="Discounts" value={fmt$(t.discounts)} icon={<Tag className="size-4" />} tone="red" />
         <SummaryCard label="Refunds" value={fmt$(t.refunds)} icon={<ArrowDownRight className="size-4" />} tone="red" />
         <SummaryCard label="Net Revenue" value={fmt$(t.net_revenue)} icon={<Wallet className="size-4" />} tone="green" />
       </div>
-      <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
+      <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-4">
         <SummaryCard label="Orders" value={fmtN(t.orders_count)} icon={<ShoppingCart className="size-4" />} />
         <SummaryCard label="Amount Paid" value={fmt$(t.amount_paid)} icon={<Wallet className="size-4" />} />
         <SummaryCard label="Gateway Fees" value={fmt$(t.gateway_fees)} icon={<Wallet className="size-4" />} tone="red" />
@@ -1161,7 +1161,7 @@ export default function AnalyticsPage() {
 
   return (
     <div className="flex flex-col gap-5">
-      <h1 className="text-xl font-bold">Reports</h1>
+      <h1 className="text-lg font-semibold">Reports</h1>
 
       <TabBar tabs={REPORT_TABS} active={tab} onChange={setTab} />
 

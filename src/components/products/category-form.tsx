@@ -233,7 +233,7 @@ export function CategoryForm({ category }: { category?: ProductCategoryRow }) {
             >
               ← Product categories
             </button>
-            <h1 className="text-xl font-bold">
+            <h1 className="text-lg font-semibold">
               {isEdit ? category.name : "New category"}
             </h1>
           </div>

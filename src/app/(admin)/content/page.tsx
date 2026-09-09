@@ -284,7 +284,7 @@ export default function ContentPage() {
     <div className="flex flex-col gap-4">
       {/* Page header + tab switcher */}
       <div className="flex flex-wrap items-center justify-between gap-3">
-        <h1 className="text-xl font-bold">Content</h1>
+        <h1 className="text-lg font-semibold">Content</h1>
         <Tabs value={activeTab} onValueChange={(v) => setActiveTab(v as "blogs" | "footer" | "popups")}>
           <TabsList>
             <TabsTrigger value="blogs">Blog posts</TabsTrigger>
@@ -308,6 +308,7 @@ export default function ContentPage() {
           <ExportMenu
             filename="blog-posts"
             columns={exportColumns}
+          selected={selected}
             fetchAll={fetchAllForExport}
             total={total}
             noun="post"

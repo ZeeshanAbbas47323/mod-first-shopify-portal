@@ -266,7 +266,7 @@ export default function ContentPagesPage() {
     <div className="flex flex-col gap-4">
       <div className="flex flex-wrap items-center justify-between gap-3">
         <div>
-          <h1 className="text-xl font-bold">Pages</h1>
+          <h1 className="text-lg font-semibold">Pages</h1>
           <p className="text-sm text-muted-foreground">
             Every storefront page — content, SEO and visibility.
           </p>
@@ -275,6 +275,7 @@ export default function ContentPagesPage() {
           <ExportMenu
             filename="pages"
             columns={exportColumns}
+          selected={selected}
             fetchAll={fetchAllForExport}
             total={total}
             noun="page"

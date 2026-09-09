@@ -11,6 +11,7 @@ import {
   DropdownMenuContent,
   DropdownMenuItem,
   DropdownMenuLabel,
+  DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { apiErrorMessage } from "@/lib/auth-api";
@@ -74,6 +75,8 @@ interface ExportMenuProps<T> {
   /** Base file name; the current date is appended automatically. */
   filename: string;
   columns: ExportColumn<T>[];
+  /** Rows the user has ticked. Omit on tables without selection. */
+  selected?: T[];
   /** Fetches every row matching the active filters, ignoring pagination. */
   fetchAll: () => Promise<T[]>;
   /** Total matching rows, shown alongside the format choices. */
@@ -94,6 +97,7 @@ interface ExportMenuProps<T> {
 export function ExportMenu<T>({
   filename,
   columns,
+  selected = [],
   fetchAll,
   total,
   noun = "row",
@@ -105,10 +109,10 @@ export function ExportMenu<T>({
   const [busy, setBusy] = React.useState(false);
   const plural = nounPlural ?? `${noun}s`;
 
-  const run = async (format: ExportFormat) => {
+  const run = async (format: ExportFormat, scope: "all" | "selected" = "all") => {
     setBusy(true);
     try {
-      const rows = await fetchAll();
+      const rows = scope === "selected" ? selected : await fetchAll();
       if (!rows.length) {
         toast.error("Nothing to export.");
         return;
@@ -142,13 +146,30 @@ export function ExportMenu<T>({
           </Button>
         }
       />
-      <DropdownMenuContent align="end" className="w-56">
+      <DropdownMenuContent align="end" className="w-60">
+        {selected.length > 0 && (
+          <>
+            <DropdownMenuLabel className="text-xs font-normal text-muted-foreground">
+              {selected.length} selected
+            </DropdownMenuLabel>
+            {FORMATS.map(({ format, label, Icon }) => (
+              <DropdownMenuItem
+                key={`selected-${format}`}
+                onClick={() => run(format, "selected")}
+              >
+                <Icon className="size-4" />
+                {label}
+              </DropdownMenuItem>
+            ))}
+            <DropdownMenuSeparator />
+          </>
+        )}
         <DropdownMenuLabel className="text-xs font-normal text-muted-foreground">
           All {plural}
           {total != null ? ` (${total})` : ""}
         </DropdownMenuLabel>
         {FORMATS.map(({ format, label, Icon }) => (
-          <DropdownMenuItem key={format} onClick={() => run(format)}>
+          <DropdownMenuItem key={`all-${format}`} onClick={() => run(format)}>
             <Icon className="size-4" />
             {label}
           </DropdownMenuItem>

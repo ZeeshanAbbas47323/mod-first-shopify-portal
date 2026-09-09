@@ -131,7 +131,7 @@ export default function CustomerDetailPage() {
           {initials}
         </span>
         <div className="min-w-0">
-          <h1 className="truncate text-xl font-bold">{customer.full_name}</h1>
+          <h1 className="truncate text-lg font-semibold">{customer.full_name}</h1>
           <p className="truncate text-sm text-muted-foreground">
             {customer.role?.replace(/_/g, " ")} · joined {fmtDate(customer.created_at)}
           </p>

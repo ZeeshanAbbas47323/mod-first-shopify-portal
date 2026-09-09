@@ -291,7 +291,7 @@ export default function Net30ApplicationsPage() {
     <div className="flex flex-col gap-4">
       <div className="flex flex-wrap items-center justify-between gap-3">
         <div>
-          <h1 className="text-xl font-bold">Net 30 applications</h1>
+          <h1 className="text-lg font-semibold">Net 30 applications</h1>
           <p className="text-sm text-muted-foreground">
             Business credit applications from the Net 30 club form.
           </p>
@@ -299,6 +299,7 @@ export default function Net30ApplicationsPage() {
         <ExportMenu
           filename="net30-applications"
           columns={exportColumns}
+          selected={selected}
           fetchAll={fetchAllForExport}
           total={total}
           noun="application"

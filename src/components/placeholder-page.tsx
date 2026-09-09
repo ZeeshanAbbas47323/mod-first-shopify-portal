@@ -15,7 +15,7 @@ export function PlaceholderPage({
 }) {
   return (
     <div className="flex flex-col gap-4">
-      <h1 className="text-xl font-bold">{title}</h1>
+      <h1 className="text-lg font-semibold">{title}</h1>
       <Card>
         <CardContent className="flex flex-col items-center justify-center gap-3 py-16 text-center">
           <span className="flex size-12 items-center justify-center rounded-full bg-muted">

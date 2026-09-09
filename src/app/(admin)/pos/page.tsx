@@ -237,7 +237,7 @@ export default function PosRegisterPage() {
     <div className="flex flex-col gap-4">
       <div className="flex flex-wrap items-center justify-between gap-3">
         <div>
-          <h1 className="text-xl font-bold">Register</h1>
+          <h1 className="text-lg font-semibold">Register</h1>
           <p className="text-sm text-muted-foreground">
             Ring up counter sales, take payment and print the receipt.
           </p>

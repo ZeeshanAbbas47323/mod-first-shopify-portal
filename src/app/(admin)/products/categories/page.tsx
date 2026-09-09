@@ -168,7 +168,7 @@ export default function ProductCategoriesPage() {
     <div className="flex flex-col gap-4">
       <div className="flex flex-wrap items-center justify-between gap-3">
         <div>
-          <h1 className="text-xl font-bold">Product Categories</h1>
+          <h1 className="text-lg font-semibold">Product Categories</h1>
           <p className="text-sm text-muted-foreground">
             The full tree, parent to child — {flat.length} categor{flat.length === 1 ? "y" : "ies"}.
           </p>

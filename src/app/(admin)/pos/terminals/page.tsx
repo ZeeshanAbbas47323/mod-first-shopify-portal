@@ -54,7 +54,7 @@ export default function TerminalsPage() {
     <div className="flex flex-col gap-4">
       <div className="flex flex-wrap items-center justify-between gap-3">
         <div>
-          <h1 className="text-xl font-bold">Card terminals</h1>
+          <h1 className="text-lg font-semibold">Card terminals</h1>
           <p className="text-sm text-muted-foreground">
             Stripe Terminal readers and the locations they belong to.
           </p>
