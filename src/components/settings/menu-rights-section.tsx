@@ -184,7 +184,7 @@ export function MenuRightsSection() {
   const runExport = async (fileFormat: ExportFormat) => {
     setExportBusy(true);
     try {
-      const exportRows = fetchAllPages((page, limit) => listMenuRights({ page, limit, filters: buildFilters() }), EXPORT_CAP);
+      const exportRows = await fetchAllPages((page, limit) => listMenuRights({ page, limit, filters: buildFilters() }), EXPORT_CAP);
       if (!exportRows.length) {
         toast.error("Nothing to export.");
         return;

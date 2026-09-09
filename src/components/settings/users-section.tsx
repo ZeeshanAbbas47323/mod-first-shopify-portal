@@ -306,7 +306,7 @@ export function UsersSection() {
   const runExport = async (fileFormat: ExportFormat) => {
     setExportBusy(true);
     try {
-      const exportRows = fetchAllPages((page, limit) => listUsers({ page, limit, dateRange, filters: buildFilters() }), EXPORT_CAP);
+      const exportRows = await fetchAllPages((page, limit) => listUsers({ page, limit, dateRange, filters: buildFilters() }), EXPORT_CAP);
       if (!exportRows.length) {
         toast.error("Nothing to export.");
         return;
