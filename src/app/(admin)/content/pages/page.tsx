@@ -5,38 +5,37 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { type ColumnDef } from "@tanstack/react-table";
 import { format } from "date-fns";
-import { Plus, Search } from "lucide-react";
+import { Download, Loader2, Plus, Search } from "lucide-react";
 import type { DateRange } from "react-day-picker";
 import { toast } from "sonner";
 
 import { Button } from "@/components/ui/button";
+import { Checkbox } from "@/components/ui/checkbox";
 import { Input } from "@/components/ui/input";
+import { MultiSelectFilter } from "@/components/multi-select-filter";
+import { SummaryStatStrip, type SummaryTile } from "@/components/summary-stat-strip";
 import {
-  Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
-} from "@/components/ui/select";
+  DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
 import { DataTable } from "@/components/data-table";
 import { DateRangePicker } from "@/components/date-range-picker";
 import { StatusBadge } from "@/components/status-badge";
 import { apiErrorMessage } from "@/lib/auth-api";
 import { usePermissions } from "@/stores/menu-store";
+import { exportRowsToCsv } from "@/lib/utils";
 import {
+  CONTENT_TYPES,
   CONTENT_TYPE_LABELS,
   listContentPages,
+  getContentPagesSummary,
   type ContentPageRow,
+  type ContentPagesSummary,
 } from "@/lib/admin-api";
 
 const DEFAULT_PAGE_SIZE = 15;
-
-const TYPE_FILTER_ITEMS: Record<string, string> = {
-  all: "All types",
-  ...CONTENT_TYPE_LABELS,
-};
-
-const STATUS_FILTER_ITEMS: Record<string, string> = {
-  all: "All statuses",
-  active: "Published",
-  inactive: "Draft",
-};
+const EXPORT_CAP = 5000;
+const STATUS_OPTIONS = ["active", "inactive"] as const;
+const EMPTY_SUMMARY: ContentPagesSummary = { total_pages: 0, published: 0, draft: 0, missing_seo: 0 };
 
 /** Plain-text excerpt of the stored HTML, for the table preview. */
 const excerpt = (html?: string) =>
@@ -46,7 +45,37 @@ const excerpt = (html?: string) =>
     .replace(/\s+/g, " ")
     .trim();
 
+const exportColumns = [
+  { key: "title", label: "Page", value: (r: ContentPageRow) => r.title },
+  { key: "slug", label: "Slug", value: (r: ContentPageRow) => r.slug },
+  { key: "content_type", label: "Type", value: (r: ContentPageRow) => CONTENT_TYPE_LABELS[r.content_type] ?? r.content_type },
+  { key: "seo", label: "SEO", value: (r: ContentPageRow) => (r.meta_title || r.meta_desc ? "Set" : "Missing") },
+  { key: "status", label: "Status", value: (r: ContentPageRow) => (r.is_active ? "Published" : "Draft") },
+  { key: "updated_at", label: "Last updated", value: (r: ContentPageRow) => r.updated_at ?? r.created_at ?? "" },
+];
+
 const columns: ColumnDef<ContentPageRow>[] = [
+  {
+    id: "select",
+    header: ({ table }) => (
+      <Checkbox
+        checked={table.getIsAllPageRowsSelected()}
+        indeterminate={table.getIsSomePageRowsSelected() && !table.getIsAllPageRowsSelected()}
+        onCheckedChange={(v) => table.toggleAllPageRowsSelected(!!v)}
+        aria-label="Select all"
+      />
+    ),
+    cell: ({ row }) => (
+      <Checkbox
+        checked={row.getIsSelected()}
+        onCheckedChange={(v) => row.toggleSelected(!!v)}
+        onClick={(e) => e.stopPropagation()}
+        aria-label="Select row"
+      />
+    ),
+    enableSorting: false,
+    enableHiding: false,
+  },
   {
     accessorKey: "title",
     header: "Page",
@@ -119,10 +148,16 @@ export default function ContentPagesPage() {
   const [pageCount, setPageCount] = React.useState(1);
   const [total, setTotal] = React.useState(0);
 
+  const [selected, setSelected] = React.useState<ContentPageRow[]>([]);
+  const [clearKey, setClearKey] = React.useState(0);
+  const [exportBusy, setExportBusy] = React.useState(false);
+  const [summary, setSummary] = React.useState<ContentPagesSummary>(EMPTY_SUMMARY);
+  const [summaryLoading, setSummaryLoading] = React.useState(true);
+
   const [search, setSearch] = React.useState("");
   const [slug, setSlug] = React.useState("");
-  const [contentType, setContentType] = React.useState("all");
-  const [status, setStatus] = React.useState("all");
+  const [contentTypes, setContentTypes] = React.useState<string[]>([]);
+  const [statuses, setStatuses] = React.useState<string[]>([]);
   const [dateRange, setDateRange] = React.useState<DateRange | undefined>();
 
   const [debounced, setDebounced] = React.useState({ search: "", slug: "" });
@@ -133,7 +168,18 @@ export default function ContentPagesPage() {
 
   React.useEffect(() => {
     setPage(0);
-  }, [debounced, contentType, status, dateRange]);
+  }, [debounced, contentTypes, statuses, dateRange]);
+
+  const activeFilters = React.useMemo(
+    () => ({
+      dateRange,
+      title: debounced.search ? { contains: debounced.search } : undefined,
+      slug: debounced.slug ? { contains: debounced.slug } : undefined,
+      content_type: contentTypes.length ? contentTypes : undefined,
+      is_active: statuses.length === 1 ? statuses[0] === "active" : undefined,
+    }),
+    [dateRange, debounced, contentTypes, statuses]
+  );
 
   React.useEffect(() => {
     let cancelled = false;
@@ -141,12 +187,10 @@ export default function ContentPagesPage() {
     listContentPages({
       page: page + 1,
       limit: pageSize,
-      dateRange,
+      dateRange: activeFilters.dateRange,
       filters: {
-        title: debounced.search ? { contains: debounced.search } : undefined,
-        slug: debounced.slug ? { contains: debounced.slug } : undefined,
-        content_type: contentType === "all" ? undefined : contentType,
-        is_active: status === "all" ? undefined : status === "active",
+        title: activeFilters.title, slug: activeFilters.slug,
+        content_type: activeFilters.content_type, is_active: activeFilters.is_active,
       },
     })
       .then((res) => {
@@ -164,7 +208,52 @@ export default function ContentPagesPage() {
     return () => {
       cancelled = true;
     };
-  }, [page, pageSize, debounced, contentType, status, dateRange]);
+  }, [page, pageSize, activeFilters]);
+
+  React.useEffect(() => {
+    let cancelled = false;
+    setSummaryLoading(true);
+    getContentPagesSummary(activeFilters)
+      .then((s) => !cancelled && setSummary(s))
+      .catch(() => !cancelled && setSummary(EMPTY_SUMMARY))
+      .finally(() => !cancelled && setSummaryLoading(false));
+    return () => { cancelled = true; };
+  }, [activeFilters]);
+
+  const runExport = async (scope: "selected" | "all") => {
+    setExportBusy(true);
+    try {
+      const exportRows =
+        scope === "selected"
+          ? selected
+          : (
+              await listContentPages({
+                page: 1, limit: EXPORT_CAP, dateRange: activeFilters.dateRange,
+                filters: {
+                  title: activeFilters.title, slug: activeFilters.slug,
+                  content_type: activeFilters.content_type, is_active: activeFilters.is_active,
+                },
+              })
+            ).rows;
+      if (!exportRows.length) {
+        toast.error("Nothing to export.");
+        return;
+      }
+      exportRowsToCsv(`pages-${format(new Date(), "yyyy-MM-dd")}`, exportColumns, exportRows);
+      toast.success(`Exported ${exportRows.length} page${exportRows.length === 1 ? "" : "s"}.`);
+    } catch (error) {
+      toast.error(apiErrorMessage(error, "Couldn't export pages."));
+    } finally {
+      setExportBusy(false);
+    }
+  };
+
+  const tiles: SummaryTile[] = [
+    { label: "Total pages", value: summary.total_pages.toLocaleString("en-US") },
+    { label: "Published", value: summary.published.toLocaleString("en-US") },
+    { label: "Draft", value: summary.draft.toLocaleString("en-US") },
+    { label: "Missing SEO", value: summary.missing_seo.toLocaleString("en-US") },
+  ];
 
   return (
     <div className="flex flex-col gap-4">
@@ -175,13 +264,36 @@ export default function ContentPagesPage() {
             Every storefront page — content, SEO and visibility.
           </p>
         </div>
-        {permissions.can_create && (
-          <Button render={<Link href="/content/pages/new" />}>
-            <Plus className="size-4" />
-            Add page
-          </Button>
-        )}
+        <div className="flex gap-2">
+          <DropdownMenu>
+            <DropdownMenuTrigger
+              disabled={exportBusy}
+              render={
+                <Button variant="outline">
+                  {exportBusy ? <Loader2 className="size-4 animate-spin" /> : <Download className="size-4" />}
+                  Export
+                </Button>
+              }
+            />
+            <DropdownMenuContent align="end" className="w-64">
+              <DropdownMenuItem disabled={!selected.length} onClick={() => runExport("selected")}>
+                Export {selected.length || ""} selected
+              </DropdownMenuItem>
+              <DropdownMenuItem onClick={() => runExport("all")}>
+                Export all matching filters ({total})
+              </DropdownMenuItem>
+            </DropdownMenuContent>
+          </DropdownMenu>
+          {permissions.can_create && (
+            <Button render={<Link href="/content/pages/new" />}>
+              <Plus className="size-4" />
+              Add page
+            </Button>
+          )}
+        </div>
       </div>
+
+      <SummaryStatStrip tiles={tiles} loading={summaryLoading} />
 
       <div className="flex flex-wrap items-center gap-2">
         <div className="relative min-w-44 flex-1 sm:max-w-56">
@@ -199,45 +311,32 @@ export default function ContentPagesPage() {
           placeholder="Slug"
           className="w-44 bg-card font-mono"
         />
-        <Select
-          items={TYPE_FILTER_ITEMS}
-          value={contentType}
-          onValueChange={(v) => setContentType(v as string)}
-        >
-          <SelectTrigger className="min-w-32 bg-card">
-            <SelectValue />
-          </SelectTrigger>
-          <SelectContent>
-            {Object.entries(TYPE_FILTER_ITEMS).map(([v, label]) => (
-              <SelectItem key={v} value={v}>
-                {label}
-              </SelectItem>
-            ))}
-          </SelectContent>
-        </Select>
-        <Select
-          items={STATUS_FILTER_ITEMS}
-          value={status}
-          onValueChange={(v) => setStatus(v as string)}
-        >
-          <SelectTrigger className="min-w-32 bg-card">
-            <SelectValue />
-          </SelectTrigger>
-          <SelectContent>
-            {Object.entries(STATUS_FILTER_ITEMS).map(([v, label]) => (
-              <SelectItem key={v} value={v}>
-                {label}
-              </SelectItem>
-            ))}
-          </SelectContent>
-        </Select>
+        <MultiSelectFilter label="Type" options={CONTENT_TYPES} value={contentTypes} onChange={setContentTypes} />
+        <MultiSelectFilter label="Status" options={STATUS_OPTIONS} value={statuses} onChange={setStatuses} />
         <DateRangePicker value={dateRange} onChange={setDateRange} />
       </div>
+
+      {selected.length > 0 && (
+        <div className="flex flex-wrap items-center gap-3 rounded-xl border border-border bg-card px-3 py-2">
+          <span className="text-sm font-medium">
+            {selected.length} page{selected.length === 1 ? "" : "s"} selected
+          </span>
+          <button
+            type="button"
+            onClick={() => setClearKey((k) => k + 1)}
+            className="text-xs text-muted-foreground hover:text-foreground"
+          >
+            Clear selection
+          </button>
+        </div>
+      )}
 
       <DataTable
         columns={columns}
         data={rows}
         loading={loading}
+        onSelectionChange={setSelected}
+        clearSelectionKey={clearKey}
         onRowClick={(row) => router.push(`/content/pages/${row.id}`)}
         serverPagination={{
           pageIndex: page,

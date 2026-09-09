@@ -3,11 +3,12 @@
 import * as React from "react";
 import { type ColumnDef } from "@tanstack/react-table";
 import { format } from "date-fns";
-import { FileText, Loader2, Mail, Phone, Search } from "lucide-react";
+import { Download, FileText, Loader2, Mail, Phone, Search } from "lucide-react";
 import type { DateRange } from "react-day-picker";
 import { toast } from "sonner";
 
 import { Button } from "@/components/ui/button";
+import { Checkbox } from "@/components/ui/checkbox";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
@@ -18,27 +19,31 @@ import {
 import {
   Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
 } from "@/components/ui/select";
+import { MultiSelectFilter } from "@/components/multi-select-filter";
+import { SummaryStatStrip, type SummaryTile } from "@/components/summary-stat-strip";
+import {
+  DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
 import { DataTable } from "@/components/data-table";
 import { DateRangePicker } from "@/components/date-range-picker";
 import { StatusBadge } from "@/components/status-badge";
 import { apiErrorMessage } from "@/lib/auth-api";
-import { fileUrl } from "@/lib/utils";
+import { exportRowsToCsv, fileUrl } from "@/lib/utils";
 import {
   INQUIRY_STATUSES,
   INQUIRY_STATUS_LABELS,
   listNet30Applications,
+  getNet30ApplicationsSummary,
   updateNet30Application,
   type InquiryStatus,
   type Net30ApplicationRow,
+  type Net30ApplicationsSummary,
 } from "@/lib/admin-api";
 import { STATUS_TONES } from "@/app/(admin)/inquiries/page";
 
 const DEFAULT_PAGE_SIZE = 15;
-
-const STATUS_FILTER_ITEMS: Record<string, string> = {
-  all: "All statuses",
-  ...INQUIRY_STATUS_LABELS,
-};
+const EXPORT_CAP = 5000;
+const EMPTY_SUMMARY: Net30ApplicationsSummary = { total: 0, new: 0, in_progress: 0, resolved: 0, total_requested_credit: 0 };
 
 const money = (v?: number | string | null) =>
   v != null
@@ -55,6 +60,17 @@ const fmtWhen = (v?: string) => {
   return isNaN(d.getTime()) ? "—" : format(d, "MMM d, yyyy · h:mm a");
 };
 
+const exportColumns = [
+  { key: "company_name", label: "Company", value: (r: Net30ApplicationRow) => r.company_name },
+  { key: "company_tax_id", label: "Tax ID", value: (r: Net30ApplicationRow) => r.company_tax_id ?? "" },
+  { key: "contact", label: "Contact", value: (r: Net30ApplicationRow) => `${r.first_name} ${r.last_name}` },
+  { key: "email", label: "Email", value: (r: Net30ApplicationRow) => r.email },
+  { key: "years_in_business", label: "Years", value: (r: Net30ApplicationRow) => r.years_in_business ?? "" },
+  { key: "requested_credit_amount", label: "Requested", value: (r: Net30ApplicationRow) => r.requested_credit_amount ?? "" },
+  { key: "status", label: "Status", value: (r: Net30ApplicationRow) => INQUIRY_STATUS_LABELS[r.status ?? "new"] ?? r.status ?? "" },
+  { key: "created_at", label: "Applied", value: (r: Net30ApplicationRow) => r.created_at ?? "" },
+];
+
 export default function Net30ApplicationsPage() {
   const [rows, setRows] = React.useState<Net30ApplicationRow[]>([]);
   const [loading, setLoading] = React.useState(true);
@@ -63,9 +79,15 @@ export default function Net30ApplicationsPage() {
   const [pageCount, setPageCount] = React.useState(1);
   const [total, setTotal] = React.useState(0);
 
+  const [selected, setSelected] = React.useState<Net30ApplicationRow[]>([]);
+  const [clearKey, setClearKey] = React.useState(0);
+  const [exportBusy, setExportBusy] = React.useState(false);
+  const [summary, setSummary] = React.useState<Net30ApplicationsSummary>(EMPTY_SUMMARY);
+  const [summaryLoading, setSummaryLoading] = React.useState(true);
+
   const [company, setCompany] = React.useState("");
   const [debounced, setDebounced] = React.useState("");
-  const [status, setStatus] = React.useState("all");
+  const [statuses, setStatuses] = React.useState<string[]>([]);
   const [dateRange, setDateRange] = React.useState<DateRange | undefined>();
   const [refreshKey, setRefreshKey] = React.useState(0);
 
@@ -78,7 +100,16 @@ export default function Net30ApplicationsPage() {
 
   React.useEffect(() => {
     setPage(0);
-  }, [debounced, status, dateRange]);
+  }, [debounced, statuses, dateRange]);
+
+  const activeFilters = React.useMemo(
+    () => ({
+      dateRange,
+      company_name: debounced ? { contains: debounced } : undefined,
+      status: statuses.length ? statuses : undefined,
+    }),
+    [dateRange, debounced, statuses]
+  );
 
   React.useEffect(() => {
     let cancelled = false;
@@ -86,11 +117,8 @@ export default function Net30ApplicationsPage() {
     listNet30Applications({
       page: page + 1,
       limit: pageSize,
-      dateRange,
-      filters: {
-        company_name: debounced ? { contains: debounced } : undefined,
-        status: status === "all" ? undefined : status,
-      },
+      dateRange: activeFilters.dateRange,
+      filters: { company_name: activeFilters.company_name, status: activeFilters.status },
     })
       .then((res) => {
         if (cancelled) return;
@@ -107,10 +135,66 @@ export default function Net30ApplicationsPage() {
     return () => {
       cancelled = true;
     };
-  }, [page, pageSize, debounced, status, dateRange, refreshKey]);
+  }, [page, pageSize, activeFilters, refreshKey]);
+
+  React.useEffect(() => {
+    let cancelled = false;
+    setSummaryLoading(true);
+    getNet30ApplicationsSummary(activeFilters)
+      .then((s) => !cancelled && setSummary(s))
+      .catch(() => !cancelled && setSummary(EMPTY_SUMMARY))
+      .finally(() => !cancelled && setSummaryLoading(false));
+    return () => { cancelled = true; };
+  }, [activeFilters]);
+
+  const runExport = async (scope: "selected" | "all") => {
+    setExportBusy(true);
+    try {
+      const exportRows =
+        scope === "selected"
+          ? selected
+          : (
+              await listNet30Applications({
+                page: 1, limit: EXPORT_CAP, dateRange: activeFilters.dateRange,
+                filters: { company_name: activeFilters.company_name, status: activeFilters.status },
+              })
+            ).rows;
+      if (!exportRows.length) {
+        toast.error("Nothing to export.");
+        return;
+      }
+      exportRowsToCsv(`net30-applications-${format(new Date(), "yyyy-MM-dd")}`, exportColumns, exportRows);
+      toast.success(`Exported ${exportRows.length} application${exportRows.length === 1 ? "" : "s"}.`);
+    } catch (error) {
+      toast.error(apiErrorMessage(error, "Couldn't export applications."));
+    } finally {
+      setExportBusy(false);
+    }
+  };
 
   const columns = React.useMemo<ColumnDef<Net30ApplicationRow>[]>(
     () => [
+      {
+        id: "select",
+        header: ({ table }) => (
+          <Checkbox
+            checked={table.getIsAllPageRowsSelected()}
+            indeterminate={table.getIsSomePageRowsSelected() && !table.getIsAllPageRowsSelected()}
+            onCheckedChange={(v) => table.toggleAllPageRowsSelected(!!v)}
+            aria-label="Select all"
+          />
+        ),
+        cell: ({ row }) => (
+          <Checkbox
+            checked={row.getIsSelected()}
+            onCheckedChange={(v) => row.toggleSelected(!!v)}
+            onClick={(e) => e.stopPropagation()}
+            aria-label="Select row"
+          />
+        ),
+        enableSorting: false,
+        enableHiding: false,
+      },
       {
         accessorKey: "company_name",
         header: "Company",
@@ -191,14 +275,44 @@ export default function Net30ApplicationsPage() {
     []
   );
 
+  const tiles: SummaryTile[] = [
+    { label: "Total", value: summary.total.toLocaleString("en-US") },
+    { label: "New", value: summary.new.toLocaleString("en-US") },
+    { label: "In progress", value: summary.in_progress.toLocaleString("en-US") },
+    { label: "Requested credit", value: money(summary.total_requested_credit) },
+  ];
+
   return (
     <div className="flex flex-col gap-4">
-      <div>
-        <h1 className="text-xl font-bold">Net 30 applications</h1>
-        <p className="text-sm text-muted-foreground">
-          Business credit applications from the Net 30 club form.
-        </p>
+      <div className="flex flex-wrap items-center justify-between gap-3">
+        <div>
+          <h1 className="text-xl font-bold">Net 30 applications</h1>
+          <p className="text-sm text-muted-foreground">
+            Business credit applications from the Net 30 club form.
+          </p>
+        </div>
+        <DropdownMenu>
+          <DropdownMenuTrigger
+            disabled={exportBusy}
+            render={
+              <Button variant="outline">
+                {exportBusy ? <Loader2 className="size-4 animate-spin" /> : <Download className="size-4" />}
+                Export
+              </Button>
+            }
+          />
+          <DropdownMenuContent align="end" className="w-64">
+            <DropdownMenuItem disabled={!selected.length} onClick={() => runExport("selected")}>
+              Export {selected.length || ""} selected
+            </DropdownMenuItem>
+            <DropdownMenuItem onClick={() => runExport("all")}>
+              Export all matching filters ({total})
+            </DropdownMenuItem>
+          </DropdownMenuContent>
+        </DropdownMenu>
       </div>
+
+      <SummaryStatStrip tiles={tiles} loading={summaryLoading} />
 
       <div className="flex flex-wrap items-center gap-2">
         <div className="relative min-w-44 flex-1 sm:max-w-56">
@@ -210,25 +324,31 @@ export default function Net30ApplicationsPage() {
             className="bg-card pl-8"
           />
         </div>
-        <Select items={STATUS_FILTER_ITEMS} value={status} onValueChange={(v) => setStatus(v as string)}>
-          <SelectTrigger className="min-w-32 bg-card">
-            <SelectValue />
-          </SelectTrigger>
-          <SelectContent>
-            {Object.entries(STATUS_FILTER_ITEMS).map(([v, label]) => (
-              <SelectItem key={v} value={v}>
-                {label}
-              </SelectItem>
-            ))}
-          </SelectContent>
-        </Select>
+        <MultiSelectFilter label="Status" options={INQUIRY_STATUSES} value={statuses} onChange={setStatuses} />
         <DateRangePicker value={dateRange} onChange={setDateRange} />
       </div>
+
+      {selected.length > 0 && (
+        <div className="flex flex-wrap items-center gap-3 rounded-xl border border-border bg-card px-3 py-2">
+          <span className="text-sm font-medium">
+            {selected.length} application{selected.length === 1 ? "" : "s"} selected
+          </span>
+          <button
+            type="button"
+            onClick={() => setClearKey((k) => k + 1)}
+            className="text-xs text-muted-foreground hover:text-foreground"
+          >
+            Clear selection
+          </button>
+        </div>
+      )}
 
       <DataTable
         columns={columns}
         data={rows}
         loading={loading}
+        onSelectionChange={setSelected}
+        clearSelectionKey={clearKey}
         onRowClick={setDetail}
         serverPagination={{
           pageIndex: page,

@@ -3,11 +3,12 @@
 import * as React from "react";
 import { type ColumnDef } from "@tanstack/react-table";
 import { format } from "date-fns";
-import { Loader2, Mail, Phone, Search } from "lucide-react";
+import { Download, Loader2, Mail, Phone, Search } from "lucide-react";
 import type { DateRange } from "react-day-picker";
 import { toast } from "sonner";
 
 import { Button } from "@/components/ui/button";
+import { Checkbox } from "@/components/ui/checkbox";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
@@ -18,37 +19,48 @@ import {
 import {
   Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
 } from "@/components/ui/select";
+import { MultiSelectFilter } from "@/components/multi-select-filter";
+import { SummaryStatStrip, type SummaryTile } from "@/components/summary-stat-strip";
+import {
+  DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
 import { DataTable } from "@/components/data-table";
 import { DateRangePicker } from "@/components/date-range-picker";
 import { StatusBadge, type BadgeTone } from "@/components/status-badge";
 import { apiErrorMessage } from "@/lib/auth-api";
+import { exportRowsToCsv } from "@/lib/utils";
 import {
   HELP_TOPIC_LABELS,
   INQUIRY_STATUSES,
   INQUIRY_STATUS_LABELS,
   listContactSubmissions,
+  getContactSubmissionsSummary,
   updateContactSubmission,
   type ContactSubmissionRow,
+  type ContactSubmissionsSummary,
   type InquiryStatus,
 } from "@/lib/admin-api";
 
 const DEFAULT_PAGE_SIZE = 15;
+const EXPORT_CAP = 5000;
+const HELP_TOPICS = Object.keys(HELP_TOPIC_LABELS);
+const EMPTY_SUMMARY: ContactSubmissionsSummary = { total: 0, new: 0, in_progress: 0, resolved: 0 };
+
+const exportColumns = [
+  { key: "name", label: "From", value: (r: ContactSubmissionRow) => `${r.first_name} ${r.last_name}` },
+  { key: "email", label: "Email", value: (r: ContactSubmissionRow) => r.email },
+  { key: "phone", label: "Phone", value: (r: ContactSubmissionRow) => r.phone ?? "" },
+  { key: "help_topic", label: "Topic", value: (r: ContactSubmissionRow) => HELP_TOPIC_LABELS[r.help_topic ?? "other"] ?? r.help_topic ?? "" },
+  { key: "message", label: "Message", value: (r: ContactSubmissionRow) => r.message },
+  { key: "status", label: "Status", value: (r: ContactSubmissionRow) => INQUIRY_STATUS_LABELS[r.status ?? "new"] ?? r.status ?? "" },
+  { key: "created_at", label: "Received", value: (r: ContactSubmissionRow) => r.created_at ?? "" },
+];
 
 export const STATUS_TONES: Record<string, BadgeTone> = {
   new: "attention",
   in_progress: "info",
   resolved: "success",
   archived: "neutral",
-};
-
-const STATUS_FILTER_ITEMS: Record<string, string> = {
-  all: "All statuses",
-  ...INQUIRY_STATUS_LABELS,
-};
-
-const TOPIC_FILTER_ITEMS: Record<string, string> = {
-  all: "All topics",
-  ...HELP_TOPIC_LABELS,
 };
 
 const fmtWhen = (v?: string) => {
@@ -65,10 +77,16 @@ export default function ContactSubmissionsPage() {
   const [pageCount, setPageCount] = React.useState(1);
   const [total, setTotal] = React.useState(0);
 
+  const [selected, setSelected] = React.useState<ContactSubmissionRow[]>([]);
+  const [clearKey, setClearKey] = React.useState(0);
+  const [exportBusy, setExportBusy] = React.useState(false);
+  const [summary, setSummary] = React.useState<ContactSubmissionsSummary>(EMPTY_SUMMARY);
+  const [summaryLoading, setSummaryLoading] = React.useState(true);
+
   const [email, setEmail] = React.useState("");
   const [debounced, setDebounced] = React.useState("");
-  const [status, setStatus] = React.useState("all");
-  const [topic, setTopic] = React.useState("all");
+  const [statuses, setStatuses] = React.useState<string[]>([]);
+  const [topics, setTopics] = React.useState<string[]>([]);
   const [dateRange, setDateRange] = React.useState<DateRange | undefined>();
   const [refreshKey, setRefreshKey] = React.useState(0);
 
@@ -81,7 +99,17 @@ export default function ContactSubmissionsPage() {
 
   React.useEffect(() => {
     setPage(0);
-  }, [debounced, status, topic, dateRange]);
+  }, [debounced, statuses, topics, dateRange]);
+
+  const activeFilters = React.useMemo(
+    () => ({
+      dateRange,
+      email: debounced ? { contains: debounced } : undefined,
+      status: statuses.length ? statuses : undefined,
+      help_topic: topics.length ? topics : undefined,
+    }),
+    [dateRange, debounced, statuses, topics]
+  );
 
   React.useEffect(() => {
     let cancelled = false;
@@ -89,12 +117,8 @@ export default function ContactSubmissionsPage() {
     listContactSubmissions({
       page: page + 1,
       limit: pageSize,
-      dateRange,
-      filters: {
-        email: debounced ? { contains: debounced } : undefined,
-        status: status === "all" ? undefined : status,
-        help_topic: topic === "all" ? undefined : topic,
-      },
+      dateRange: activeFilters.dateRange,
+      filters: { email: activeFilters.email, status: activeFilters.status, help_topic: activeFilters.help_topic },
     })
       .then((res) => {
         if (cancelled) return;
@@ -111,10 +135,66 @@ export default function ContactSubmissionsPage() {
     return () => {
       cancelled = true;
     };
-  }, [page, pageSize, debounced, status, topic, dateRange, refreshKey]);
+  }, [page, pageSize, activeFilters, refreshKey]);
+
+  React.useEffect(() => {
+    let cancelled = false;
+    setSummaryLoading(true);
+    getContactSubmissionsSummary(activeFilters)
+      .then((s) => !cancelled && setSummary(s))
+      .catch(() => !cancelled && setSummary(EMPTY_SUMMARY))
+      .finally(() => !cancelled && setSummaryLoading(false));
+    return () => { cancelled = true; };
+  }, [activeFilters]);
+
+  const runExport = async (scope: "selected" | "all") => {
+    setExportBusy(true);
+    try {
+      const exportRows =
+        scope === "selected"
+          ? selected
+          : (
+              await listContactSubmissions({
+                page: 1, limit: EXPORT_CAP, dateRange: activeFilters.dateRange,
+                filters: { email: activeFilters.email, status: activeFilters.status, help_topic: activeFilters.help_topic },
+              })
+            ).rows;
+      if (!exportRows.length) {
+        toast.error("Nothing to export.");
+        return;
+      }
+      exportRowsToCsv(`inquiries-${format(new Date(), "yyyy-MM-dd")}`, exportColumns, exportRows);
+      toast.success(`Exported ${exportRows.length} submission${exportRows.length === 1 ? "" : "s"}.`);
+    } catch (error) {
+      toast.error(apiErrorMessage(error, "Couldn't export submissions."));
+    } finally {
+      setExportBusy(false);
+    }
+  };
 
   const columns = React.useMemo<ColumnDef<ContactSubmissionRow>[]>(
     () => [
+      {
+        id: "select",
+        header: ({ table }) => (
+          <Checkbox
+            checked={table.getIsAllPageRowsSelected()}
+            indeterminate={table.getIsSomePageRowsSelected() && !table.getIsAllPageRowsSelected()}
+            onCheckedChange={(v) => table.toggleAllPageRowsSelected(!!v)}
+            aria-label="Select all"
+          />
+        ),
+        cell: ({ row }) => (
+          <Checkbox
+            checked={row.getIsSelected()}
+            onCheckedChange={(v) => row.toggleSelected(!!v)}
+            onClick={(e) => e.stopPropagation()}
+            aria-label="Select row"
+          />
+        ),
+        enableSorting: false,
+        enableHiding: false,
+      },
       {
         accessorKey: "first_name",
         header: "From",
@@ -168,14 +248,44 @@ export default function ContactSubmissionsPage() {
     []
   );
 
+  const tiles: SummaryTile[] = [
+    { label: "Total", value: summary.total.toLocaleString("en-US") },
+    { label: "New", value: summary.new.toLocaleString("en-US") },
+    { label: "In progress", value: summary.in_progress.toLocaleString("en-US") },
+    { label: "Resolved", value: summary.resolved.toLocaleString("en-US") },
+  ];
+
   return (
     <div className="flex flex-col gap-4">
-      <div>
-        <h1 className="text-xl font-bold">Contact submissions</h1>
-        <p className="text-sm text-muted-foreground">
-          Messages sent through the website contact form.
-        </p>
+      <div className="flex flex-wrap items-center justify-between gap-3">
+        <div>
+          <h1 className="text-xl font-bold">Contact submissions</h1>
+          <p className="text-sm text-muted-foreground">
+            Messages sent through the website contact form.
+          </p>
+        </div>
+        <DropdownMenu>
+          <DropdownMenuTrigger
+            disabled={exportBusy}
+            render={
+              <Button variant="outline">
+                {exportBusy ? <Loader2 className="size-4 animate-spin" /> : <Download className="size-4" />}
+                Export
+              </Button>
+            }
+          />
+          <DropdownMenuContent align="end" className="w-64">
+            <DropdownMenuItem disabled={!selected.length} onClick={() => runExport("selected")}>
+              Export {selected.length || ""} selected
+            </DropdownMenuItem>
+            <DropdownMenuItem onClick={() => runExport("all")}>
+              Export all matching filters ({total})
+            </DropdownMenuItem>
+          </DropdownMenuContent>
+        </DropdownMenu>
       </div>
+
+      <SummaryStatStrip tiles={tiles} loading={summaryLoading} />
 
       <div className="flex flex-wrap items-center gap-2">
         <div className="relative min-w-44 flex-1 sm:max-w-56">
@@ -187,37 +297,32 @@ export default function ContactSubmissionsPage() {
             className="bg-card pl-8"
           />
         </div>
-        <Select items={TOPIC_FILTER_ITEMS} value={topic} onValueChange={(v) => setTopic(v as string)}>
-          <SelectTrigger className="min-w-36 bg-card">
-            <SelectValue />
-          </SelectTrigger>
-          <SelectContent>
-            {Object.entries(TOPIC_FILTER_ITEMS).map(([v, label]) => (
-              <SelectItem key={v} value={v}>
-                {label}
-              </SelectItem>
-            ))}
-          </SelectContent>
-        </Select>
-        <Select items={STATUS_FILTER_ITEMS} value={status} onValueChange={(v) => setStatus(v as string)}>
-          <SelectTrigger className="min-w-32 bg-card">
-            <SelectValue />
-          </SelectTrigger>
-          <SelectContent>
-            {Object.entries(STATUS_FILTER_ITEMS).map(([v, label]) => (
-              <SelectItem key={v} value={v}>
-                {label}
-              </SelectItem>
-            ))}
-          </SelectContent>
-        </Select>
+        <MultiSelectFilter label="Topic" options={HELP_TOPICS} value={topics} onChange={setTopics} />
+        <MultiSelectFilter label="Status" options={INQUIRY_STATUSES} value={statuses} onChange={setStatuses} />
         <DateRangePicker value={dateRange} onChange={setDateRange} />
       </div>
+
+      {selected.length > 0 && (
+        <div className="flex flex-wrap items-center gap-3 rounded-xl border border-border bg-card px-3 py-2">
+          <span className="text-sm font-medium">
+            {selected.length} submission{selected.length === 1 ? "" : "s"} selected
+          </span>
+          <button
+            type="button"
+            onClick={() => setClearKey((k) => k + 1)}
+            className="text-xs text-muted-foreground hover:text-foreground"
+          >
+            Clear selection
+          </button>
+        </div>
+      )}
 
       <DataTable
         columns={columns}
         data={rows}
         loading={loading}
+        onSelectionChange={setSelected}
+        clearSelectionKey={clearKey}
         onRowClick={setDetail}
         serverPagination={{
           pageIndex: page,

@@ -2056,6 +2056,27 @@ export async function listCoupons(params: ListParams): Promise<ListResult<Coupon
   return parseList<CouponRow>(data, params.limit);
 }
 
+export interface CouponsSummary {
+  total_coupons: number;
+  active: number;
+  expired: number;
+  total_redemptions: number;
+}
+
+const EMPTY_COUPONS_SUMMARY: CouponsSummary = { total_coupons: 0, active: 0, expired: 0, total_redemptions: 0 };
+
+export async function getCouponsSummary(params: {
+  dateRange?: DateRange;
+  filters?: Json;
+}): Promise<CouponsSummary> {
+  const body: Json = {};
+  if (params.dateRange?.from) body.startDate = format(params.dateRange.from, "yyyy-MM-dd");
+  if (params.dateRange?.to) body.endDate = format(params.dateRange.to, "yyyy-MM-dd");
+  if (params.filters && Object.keys(params.filters).length) body.filters = params.filters;
+  const { data } = await api.post("coupons/summary", body);
+  return (dashParse<Json>(data) as CouponsSummary) ?? EMPTY_COUPONS_SUMMARY;
+}
+
 export async function getCouponById(id: number | string): Promise<CouponRow> {
   const { data } = await api.get(`coupons/get/${id}`);
   return (data?.payload ?? data?.data ?? data) as CouponRow;
@@ -2284,6 +2305,7 @@ export interface ContentPageRow {
   created_at?: string;
   updated_at?: string;
   humanize_content_type?: string;
+  [k: string]: unknown;
 }
 
 export interface ContentPageInput {
@@ -2303,6 +2325,29 @@ export async function listContentPages(
 ): Promise<ListResult<ContentPageRow>> {
   const { data } = await api.post("content-pages/list", buildBody(params));
   return parseList<ContentPageRow>(data, params.limit);
+}
+
+export interface ContentPagesSummary {
+  total_pages: number;
+  published: number;
+  draft: number;
+  missing_seo: number;
+}
+
+const EMPTY_CONTENT_PAGES_SUMMARY: ContentPagesSummary = {
+  total_pages: 0, published: 0, draft: 0, missing_seo: 0,
+};
+
+export async function getContentPagesSummary(params: {
+  dateRange?: DateRange;
+  filters?: Json;
+}): Promise<ContentPagesSummary> {
+  const body: Json = {};
+  if (params.dateRange?.from) body.startDate = format(params.dateRange.from, "yyyy-MM-dd");
+  if (params.dateRange?.to) body.endDate = format(params.dateRange.to, "yyyy-MM-dd");
+  if (params.filters && Object.keys(params.filters).length) body.filters = params.filters;
+  const { data } = await api.post("content-pages/summary", body);
+  return (dashParse<Json>(data) as ContentPagesSummary) ?? EMPTY_CONTENT_PAGES_SUMMARY;
 }
 
 export async function getContentPage(
@@ -2777,6 +2822,26 @@ export async function listDiscountTiers(
   return parseList<DiscountTierRow>(data, params.limit);
 }
 
+export interface DiscountTiersSummary {
+  total_tiers: number;
+  active: number;
+  inactive: number;
+}
+
+const EMPTY_DISCOUNT_TIERS_SUMMARY: DiscountTiersSummary = { total_tiers: 0, active: 0, inactive: 0 };
+
+export async function getDiscountTiersSummary(params: {
+  dateRange?: DateRange;
+  filters?: Json;
+}): Promise<DiscountTiersSummary> {
+  const body: Json = {};
+  if (params.dateRange?.from) body.startDate = format(params.dateRange.from, "yyyy-MM-dd");
+  if (params.dateRange?.to) body.endDate = format(params.dateRange.to, "yyyy-MM-dd");
+  if (params.filters && Object.keys(params.filters).length) body.filters = params.filters;
+  const { data } = await api.post("discount-tiers/summary", body);
+  return (dashParse<Json>(data) as DiscountTiersSummary) ?? EMPTY_DISCOUNT_TIERS_SUMMARY;
+}
+
 /** Every tier, for the pickers that attach a tier to a customer. */
 export async function fetchAllDiscountTiers(): Promise<DiscountTierRow[]> {
   const res = await listDiscountTiers({ page: 1, limit: 100 });
@@ -2927,6 +2992,27 @@ export async function listContactSubmissions(
   return parseList<ContactSubmissionRow>(data, params.limit);
 }
 
+export interface ContactSubmissionsSummary {
+  total: number;
+  new: number;
+  in_progress: number;
+  resolved: number;
+}
+
+const EMPTY_CONTACT_SUMMARY: ContactSubmissionsSummary = { total: 0, new: 0, in_progress: 0, resolved: 0 };
+
+export async function getContactSubmissionsSummary(params: {
+  dateRange?: DateRange;
+  filters?: Json;
+}): Promise<ContactSubmissionsSummary> {
+  const body: Json = {};
+  if (params.dateRange?.from) body.startDate = format(params.dateRange.from, "yyyy-MM-dd");
+  if (params.dateRange?.to) body.endDate = format(params.dateRange.to, "yyyy-MM-dd");
+  if (params.filters && Object.keys(params.filters).length) body.filters = params.filters;
+  const { data } = await api.post("contact-submissions/summary", body);
+  return (dashParse<Json>(data) as ContactSubmissionsSummary) ?? EMPTY_CONTACT_SUMMARY;
+}
+
 export async function getContactSubmission(
   id: number | string
 ): Promise<ContactSubmissionRow> {
@@ -2969,6 +3055,30 @@ export async function listNet30Applications(
 ): Promise<ListResult<Net30ApplicationRow>> {
   const { data } = await api.post("net30-applications/list", buildBody(params));
   return parseList<Net30ApplicationRow>(data, params.limit);
+}
+
+export interface Net30ApplicationsSummary {
+  total: number;
+  new: number;
+  in_progress: number;
+  resolved: number;
+  total_requested_credit: number;
+}
+
+const EMPTY_NET30_SUMMARY: Net30ApplicationsSummary = {
+  total: 0, new: 0, in_progress: 0, resolved: 0, total_requested_credit: 0,
+};
+
+export async function getNet30ApplicationsSummary(params: {
+  dateRange?: DateRange;
+  filters?: Json;
+}): Promise<Net30ApplicationsSummary> {
+  const body: Json = {};
+  if (params.dateRange?.from) body.startDate = format(params.dateRange.from, "yyyy-MM-dd");
+  if (params.dateRange?.to) body.endDate = format(params.dateRange.to, "yyyy-MM-dd");
+  if (params.filters && Object.keys(params.filters).length) body.filters = params.filters;
+  const { data } = await api.post("net30-applications/summary", body);
+  return (dashParse<Json>(data) as Net30ApplicationsSummary) ?? EMPTY_NET30_SUMMARY;
 }
 
 export async function getNet30Application(

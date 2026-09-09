@@ -3,7 +3,7 @@
 import * as React from "react";
 import { type ColumnDef } from "@tanstack/react-table";
 import { format } from "date-fns";
-import { Loader2, Search, Star, ThumbsUp } from "lucide-react";
+import { Download, Loader2, Search, Star, ThumbsUp } from "lucide-react";
 import { useForm, Controller } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
@@ -11,6 +11,7 @@ import type { DateRange } from "react-day-picker";
 import { toast } from "sonner";
 
 import { Button } from "@/components/ui/button";
+import { Checkbox } from "@/components/ui/checkbox";
 import {
   Dialog,
   DialogContent,
@@ -28,27 +29,46 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
+import { MultiSelectFilter } from "@/components/multi-select-filter";
+import { SummaryStatStrip, type SummaryTile } from "@/components/summary-stat-strip";
+import {
+  DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
 import { Textarea } from "@/components/ui/textarea";
 import { DataTable } from "@/components/data-table";
 import { DateRangePicker } from "@/components/date-range-picker";
 import { StatusBadge } from "@/components/status-badge";
 import { apiErrorMessage } from "@/lib/auth-api";
+import { exportRowsToCsv } from "@/lib/utils";
 import {
   REVIEW_STATUSES,
   listReviews,
+  getReviewsSummary,
   getReviewById,
   updateReview,
   type ReviewRow,
+  type ReviewsSummary,
 } from "@/lib/admin-api";
 
 const DEFAULT_PAGE_SIZE = 10;
-
-const STATUS_FILTER_ITEMS: Record<string, string> = {
-  all: "All statuses",
-  pending: "Pending",
-  approved: "Approved",
-  rejected: "Rejected",
+const EXPORT_CAP = 5000;
+const EMPTY_SUMMARY: ReviewsSummary = {
+  total_reviews: 0, average_rating: 0,
+  rating_distribution: { 1: 0, 2: 0, 3: 0, 4: 0, 5: 0 },
+  verified_reviews_count: 0, recommendation_percentage: 0,
 };
+
+const exportColumns = [
+  { key: "reviewer", label: "Reviewer", value: (r: ReviewRow) => r.user?.full_name ?? (r.user_id ? `User #${r.user_id}` : "Anonymous") },
+  { key: "product", label: "Product", value: (r: ReviewRow) => r.product?.name ?? (r.product_id ? `#${r.product_id}` : "") },
+  { key: "rating", label: "Rating", value: (r: ReviewRow) => r.rating },
+  { key: "title", label: "Title", value: (r: ReviewRow) => r.title ?? "" },
+  { key: "comment", label: "Comment", value: (r: ReviewRow) => r.comment ?? "" },
+  { key: "status", label: "Status", value: (r: ReviewRow) => r.status ?? "" },
+  { key: "is_verified", label: "Verified", value: (r: ReviewRow) => (r.is_verified ? "Yes" : "No") },
+  { key: "helpful_count", label: "Helpful", value: (r: ReviewRow) => r.helpful_count ?? 0 },
+  { key: "created_at", label: "Date", value: (r: ReviewRow) => r.created_at ?? "" },
+];
 
 const STATUS_FORM_ITEMS: Record<string, string> = {
   pending: "Pending",
@@ -74,6 +94,27 @@ function StarRating({ rating }: { rating: number }) {
 }
 
 const columns: ColumnDef<ReviewRow>[] = [
+  {
+    id: "select",
+    header: ({ table }) => (
+      <Checkbox
+        checked={table.getIsAllPageRowsSelected()}
+        indeterminate={table.getIsSomePageRowsSelected() && !table.getIsAllPageRowsSelected()}
+        onCheckedChange={(v) => table.toggleAllPageRowsSelected(!!v)}
+        aria-label="Select all"
+      />
+    ),
+    cell: ({ row }) => (
+      <Checkbox
+        checked={row.getIsSelected()}
+        onCheckedChange={(v) => row.toggleSelected(!!v)}
+        onClick={(e) => e.stopPropagation()}
+        aria-label="Select row"
+      />
+    ),
+    enableSorting: false,
+    enableHiding: false,
+  },
   {
     id: "reviewer",
     header: "Reviewer",
@@ -167,8 +208,14 @@ export default function ReviewsPage() {
   const [pageCount, setPageCount] = React.useState(1);
   const [total, setTotal] = React.useState(0);
 
+  const [selected, setSelected] = React.useState<ReviewRow[]>([]);
+  const [clearKey, setClearKey] = React.useState(0);
+  const [exportBusy, setExportBusy] = React.useState(false);
+  const [summary, setSummary] = React.useState<ReviewsSummary>(EMPTY_SUMMARY);
+  const [summaryLoading, setSummaryLoading] = React.useState(true);
+
   const [search, setSearch] = React.useState("");
-  const [status, setStatus] = React.useState("all");
+  const [statuses, setStatuses] = React.useState<string[]>([]);
   const [dateRange, setDateRange] = React.useState<DateRange | undefined>();
   const [dialogOpen, setDialogOpen] = React.useState(false);
   const [editing, setEditing] = React.useState<ReviewRow | null>(null);
@@ -182,7 +229,16 @@ export default function ReviewsPage() {
 
   React.useEffect(() => {
     setPage(0);
-  }, [debounced, status, dateRange]);
+  }, [debounced, statuses, dateRange]);
+
+  const activeFilters = React.useMemo(
+    () => ({
+      dateRange,
+      title: debounced ? { contains: debounced } : undefined,
+      status: statuses.length ? statuses : undefined,
+    }),
+    [dateRange, debounced, statuses]
+  );
 
   React.useEffect(() => {
     let cancelled = false;
@@ -190,11 +246,8 @@ export default function ReviewsPage() {
     listReviews({
       page: page + 1,
       limit: pageSize,
-      dateRange,
-      filters: {
-        title: debounced ? { contains: debounced } : undefined,
-        status: status === "all" ? undefined : status,
-      },
+      dateRange: activeFilters.dateRange,
+      filters: { title: activeFilters.title, status: activeFilters.status },
     })
       .then((res) => {
         if (cancelled) return;
@@ -211,7 +264,42 @@ export default function ReviewsPage() {
     return () => {
       cancelled = true;
     };
-  }, [page, pageSize, debounced, status, dateRange, refreshKey]);
+  }, [page, pageSize, activeFilters, refreshKey]);
+
+  React.useEffect(() => {
+    let cancelled = false;
+    setSummaryLoading(true);
+    getReviewsSummary(activeFilters)
+      .then((s) => !cancelled && setSummary(s))
+      .catch(() => !cancelled && setSummary(EMPTY_SUMMARY))
+      .finally(() => !cancelled && setSummaryLoading(false));
+    return () => { cancelled = true; };
+  }, [activeFilters]);
+
+  const runExport = async (scope: "selected" | "all") => {
+    setExportBusy(true);
+    try {
+      const exportRows =
+        scope === "selected"
+          ? selected
+          : (
+              await listReviews({
+                page: 1, limit: EXPORT_CAP, dateRange: activeFilters.dateRange,
+                filters: { title: activeFilters.title, status: activeFilters.status },
+              })
+            ).rows;
+      if (!exportRows.length) {
+        toast.error("Nothing to export.");
+        return;
+      }
+      exportRowsToCsv(`reviews-${format(new Date(), "yyyy-MM-dd")}`, exportColumns, exportRows);
+      toast.success(`Exported ${exportRows.length} review${exportRows.length === 1 ? "" : "s"}.`);
+    } catch (error) {
+      toast.error(apiErrorMessage(error, "Couldn't export reviews."));
+    } finally {
+      setExportBusy(false);
+    }
+  };
 
   const openReview = async (row: ReviewRow) => {
     setEditing(row);
@@ -224,11 +312,39 @@ export default function ReviewsPage() {
     }
   };
 
+  const tiles: SummaryTile[] = [
+    { label: "Total reviews", value: summary.total_reviews.toLocaleString("en-US") },
+    { label: "Average rating", value: `${summary.average_rating.toFixed(1)} / 5` },
+    { label: "Verified", value: summary.verified_reviews_count.toLocaleString("en-US") },
+    { label: "Recommend", value: `${summary.recommendation_percentage.toFixed(0)}%` },
+  ];
+
   return (
     <div className="flex flex-col gap-4">
       <div className="flex flex-wrap items-center justify-between gap-3">
         <h1 className="text-xl font-bold">Reviews</h1>
+        <DropdownMenu>
+          <DropdownMenuTrigger
+            disabled={exportBusy}
+            render={
+              <Button variant="outline">
+                {exportBusy ? <Loader2 className="size-4 animate-spin" /> : <Download className="size-4" />}
+                Export
+              </Button>
+            }
+          />
+          <DropdownMenuContent align="end" className="w-64">
+            <DropdownMenuItem disabled={!selected.length} onClick={() => runExport("selected")}>
+              Export {selected.length || ""} selected
+            </DropdownMenuItem>
+            <DropdownMenuItem onClick={() => runExport("all")}>
+              Export all matching filters ({total})
+            </DropdownMenuItem>
+          </DropdownMenuContent>
+        </DropdownMenu>
       </div>
+
+      <SummaryStatStrip tiles={tiles} loading={summaryLoading} />
 
       <div className="flex flex-wrap items-center gap-2">
         <div className="relative min-w-44 flex-1 sm:max-w-56">
@@ -240,24 +356,24 @@ export default function ReviewsPage() {
             className="bg-card pl-8"
           />
         </div>
-        <Select
-          items={STATUS_FILTER_ITEMS}
-          value={status}
-          onValueChange={(v) => setStatus(v as string)}
-        >
-          <SelectTrigger className="min-w-36 bg-card">
-            <SelectValue />
-          </SelectTrigger>
-          <SelectContent>
-            {Object.entries(STATUS_FILTER_ITEMS).map(([v, label]) => (
-              <SelectItem key={v} value={v}>
-                {label}
-              </SelectItem>
-            ))}
-          </SelectContent>
-        </Select>
+        <MultiSelectFilter label="Status" options={REVIEW_STATUSES} value={statuses} onChange={setStatuses} />
         <DateRangePicker value={dateRange} onChange={setDateRange} />
       </div>
+
+      {selected.length > 0 && (
+        <div className="flex flex-wrap items-center gap-3 rounded-xl border border-border bg-card px-3 py-2">
+          <span className="text-sm font-medium">
+            {selected.length} review{selected.length === 1 ? "" : "s"} selected
+          </span>
+          <button
+            type="button"
+            onClick={() => setClearKey((k) => k + 1)}
+            className="text-xs text-muted-foreground hover:text-foreground"
+          >
+            Clear selection
+          </button>
+        </div>
+      )}
 
       <ReviewDialog
         editing={editing}
@@ -270,6 +386,8 @@ export default function ReviewsPage() {
         columns={columns}
         data={rows}
         loading={loading}
+        onSelectionChange={setSelected}
+        clearSelectionKey={clearKey}
         onRowClick={openReview}
         serverPagination={{
           pageIndex: page,

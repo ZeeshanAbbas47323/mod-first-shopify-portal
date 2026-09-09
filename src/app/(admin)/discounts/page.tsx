@@ -3,7 +3,7 @@
 import * as React from "react";
 import { type ColumnDef } from "@tanstack/react-table";
 import { format } from "date-fns";
-import { CheckCircle2, Loader2, Plus, Search, Tag, Trash2, XCircle } from "lucide-react";
+import { CheckCircle2, Download, Loader2, Plus, Search, Tag, Trash2, XCircle } from "lucide-react";
 import { useForm, Controller } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
@@ -11,6 +11,7 @@ import type { DateRange } from "react-day-picker";
 import { toast } from "sonner";
 
 import { Button } from "@/components/ui/button";
+import { Checkbox } from "@/components/ui/checkbox";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import {
@@ -20,17 +21,23 @@ import {
 import {
   Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
 } from "@/components/ui/select";
+import { MultiSelectFilter } from "@/components/multi-select-filter";
+import { SummaryStatStrip, type SummaryTile } from "@/components/summary-stat-strip";
+import {
+  DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
 import { DataTable } from "@/components/data-table";
 import { DateRangePicker } from "@/components/date-range-picker";
 import { StatusBadge, StatusToggle } from "@/components/status-badge";
 import { ConfirmDeleteDialog } from "@/components/confirm-delete-dialog";
 import { apiErrorMessage } from "@/lib/auth-api";
 import { usePermissions } from "@/stores/menu-store";
-import { parseServerDate, toLocalDateInput } from "@/lib/utils";
+import { exportRowsToCsv, parseServerDate, toLocalDateInput } from "@/lib/utils";
 import {
   COUPON_TYPES,
   COUPON_STATUSES,
   listCoupons,
+  getCouponsSummary,
   createCoupon,
   updateCoupon,
   deleteRecord,
@@ -38,23 +45,13 @@ import {
   validateCoupon,
   type CouponRow,
   type CouponType,
+  type CouponsSummary,
 } from "@/lib/admin-api";
 
 const DEFAULT_PAGE_SIZE = 15;
+const EXPORT_CAP = 5000;
 
-const STATUS_FILTER_ITEMS: Record<string, string> = {
-  all: "All statuses",
-  active: "Active",
-  expired: "Expired",
-  used_up: "Used up",
-};
-
-const TYPE_FILTER_ITEMS: Record<string, string> = {
-  all: "All types",
-  percentage: "Percentage",
-  fixed_amount: "Fixed amount",
-  free_shipping: "Free shipping",
-};
+const EMPTY_SUMMARY: CouponsSummary = { total_coupons: 0, active: 0, expired: 0, total_redemptions: 0 };
 
 const typeLabel: Record<CouponType, string> = {
   percentage: "Percentage",
@@ -64,10 +61,44 @@ const typeLabel: Record<CouponType, string> = {
 
 // Status tones now live in the shared toneMap (src/components/status-badge.tsx).
 
+const exportColumns = [
+  { key: "code", label: "Code", value: (r: CouponRow) => r.code },
+  { key: "type", label: "Type", value: (r: CouponRow) => typeLabel[r.type] ?? r.type },
+  { key: "value", label: "Value", value: (r: CouponRow) => (r.type === "free_shipping" ? "" : r.value) },
+  { key: "min_order_amount", label: "Min order", value: (r: CouponRow) => r.min_order_amount ?? "" },
+  { key: "used_count", label: "Used", value: (r: CouponRow) => r.used_count ?? 0 },
+  { key: "usage_limit", label: "Usage limit", value: (r: CouponRow) => r.usage_limit ?? "" },
+  { key: "start_date", label: "Start date", value: (r: CouponRow) => r.start_date ?? "" },
+  { key: "end_date", label: "End date", value: (r: CouponRow) => r.end_date ?? "" },
+  { key: "status", label: "Status", value: (r: CouponRow) => r.status ?? "" },
+  { key: "is_active", label: "Enabled", value: (r: CouponRow) => (r.is_active !== false ? "Yes" : "No") },
+];
+
 function getColumns(
   onToggleStatus: (row: CouponRow, next: boolean) => Promise<void>
 ): ColumnDef<CouponRow>[] {
   return [
+  {
+    id: "select",
+    header: ({ table }) => (
+      <Checkbox
+        checked={table.getIsAllPageRowsSelected()}
+        indeterminate={table.getIsSomePageRowsSelected() && !table.getIsAllPageRowsSelected()}
+        onCheckedChange={(v) => table.toggleAllPageRowsSelected(!!v)}
+        aria-label="Select all"
+      />
+    ),
+    cell: ({ row }) => (
+      <Checkbox
+        checked={row.getIsSelected()}
+        onCheckedChange={(v) => row.toggleSelected(!!v)}
+        onClick={(e) => e.stopPropagation()}
+        aria-label="Select row"
+      />
+    ),
+    enableSorting: false,
+    enableHiding: false,
+  },
   {
     accessorKey: "code",
     header: "Code",
@@ -155,11 +186,16 @@ export default function DiscountsPage() {
   const [pageSize, setPageSize] = React.useState<number>(DEFAULT_PAGE_SIZE);
   const [pageCount, setPageCount] = React.useState(1);
   const [total, setTotal] = React.useState(0);
+  const [selected, setSelected] = React.useState<CouponRow[]>([]);
+  const [clearKey, setClearKey] = React.useState(0);
+  const [exportBusy, setExportBusy] = React.useState(false);
+  const [summary, setSummary] = React.useState<CouponsSummary>(EMPTY_SUMMARY);
+  const [summaryLoading, setSummaryLoading] = React.useState(true);
 
   const [search, setSearch] = React.useState("");
   const [debounced, setDebounced] = React.useState("");
-  const [status, setStatus] = React.useState("all");
-  const [type, setType] = React.useState("all");
+  const [statuses, setStatuses] = React.useState<string[]>([]);
+  const [types, setTypes] = React.useState<string[]>([]);
   const [dateRange, setDateRange] = React.useState<DateRange | undefined>();
 
   const [dialogOpen, setDialogOpen] = React.useState(false);
@@ -172,7 +208,17 @@ export default function DiscountsPage() {
     return () => clearTimeout(t);
   }, [search]);
 
-  React.useEffect(() => { setPage(0); }, [debounced, status, type, dateRange]);
+  React.useEffect(() => { setPage(0); }, [debounced, statuses, types, dateRange]);
+
+  const activeFilters = React.useMemo(
+    () => ({
+      dateRange,
+      code: debounced ? { contains: debounced } : undefined,
+      status: statuses.length ? statuses : undefined,
+      type: types.length ? types : undefined,
+    }),
+    [dateRange, debounced, statuses, types]
+  );
 
   React.useEffect(() => {
     let cancelled = false;
@@ -180,12 +226,8 @@ export default function DiscountsPage() {
     listCoupons({
       page: page + 1,
       limit: pageSize,
-      dateRange,
-      filters: {
-        code: debounced ? { contains: debounced } : undefined,
-        status: status === "all" ? undefined : status,
-        type: type === "all" ? undefined : type,
-      },
+      dateRange: activeFilters.dateRange,
+      filters: { code: activeFilters.code, status: activeFilters.status, type: activeFilters.type },
     })
       .then((res) => {
         if (cancelled) return;
@@ -198,7 +240,42 @@ export default function DiscountsPage() {
       })
       .finally(() => !cancelled && setLoading(false));
     return () => { cancelled = true; };
-  }, [page, pageSize, debounced, status, type, dateRange, refreshKey]);
+  }, [page, pageSize, activeFilters, refreshKey]);
+
+  React.useEffect(() => {
+    let cancelled = false;
+    setSummaryLoading(true);
+    getCouponsSummary(activeFilters)
+      .then((s) => !cancelled && setSummary(s))
+      .catch(() => !cancelled && setSummary(EMPTY_SUMMARY))
+      .finally(() => !cancelled && setSummaryLoading(false));
+    return () => { cancelled = true; };
+  }, [activeFilters]);
+
+  const runExport = async (scope: "selected" | "all") => {
+    setExportBusy(true);
+    try {
+      const exportRows =
+        scope === "selected"
+          ? selected
+          : (
+              await listCoupons({
+                page: 1, limit: EXPORT_CAP, dateRange: activeFilters.dateRange,
+                filters: { code: activeFilters.code, status: activeFilters.status, type: activeFilters.type },
+              })
+            ).rows;
+      if (!exportRows.length) {
+        toast.error("Nothing to export.");
+        return;
+      }
+      exportRowsToCsv(`coupons-${format(new Date(), "yyyy-MM-dd")}`, exportColumns, exportRows);
+      toast.success(`Exported ${exportRows.length} coupon${exportRows.length === 1 ? "" : "s"}.`);
+    } catch (error) {
+      toast.error(apiErrorMessage(error, "Couldn't export coupons."));
+    } finally {
+      setExportBusy(false);
+    }
+  };
 
   const handleToggleStatus = async (row: CouponRow, next: boolean) => {
     try {
@@ -211,6 +288,13 @@ export default function DiscountsPage() {
   };
   const columns = React.useMemo(() => getColumns(handleToggleStatus), []);
 
+  const tiles: SummaryTile[] = [
+    { label: "Total coupons", value: summary.total_coupons.toLocaleString("en-US") },
+    { label: "Active", value: summary.active.toLocaleString("en-US") },
+    { label: "Expired", value: summary.expired.toLocaleString("en-US") },
+    { label: "Total redemptions", value: summary.total_redemptions.toLocaleString("en-US") },
+  ];
+
   return (
     <div className="flex flex-col gap-4">
       <div className="flex flex-wrap items-center justify-between gap-3">
@@ -219,6 +303,25 @@ export default function DiscountsPage() {
           <Button variant="outline" onClick={() => setValidateOpen(true)}>
             <CheckCircle2 className="size-4" /> Validate code
           </Button>
+          <DropdownMenu>
+            <DropdownMenuTrigger
+              disabled={exportBusy}
+              render={
+                <Button variant="outline">
+                  {exportBusy ? <Loader2 className="size-4 animate-spin" /> : <Download className="size-4" />}
+                  Export
+                </Button>
+              }
+            />
+            <DropdownMenuContent align="end" className="w-64">
+              <DropdownMenuItem disabled={!selected.length} onClick={() => runExport("selected")}>
+                Export {selected.length || ""} selected
+              </DropdownMenuItem>
+              <DropdownMenuItem onClick={() => runExport("all")}>
+                Export all matching filters ({total})
+              </DropdownMenuItem>
+            </DropdownMenuContent>
+          </DropdownMenu>
           {permissions.can_create && (
             <Button onClick={() => { setEditing(null); setDialogOpen(true); }}>
               <Plus className="size-4" /> Create coupon
@@ -227,30 +330,33 @@ export default function DiscountsPage() {
         </div>
       </div>
 
+      <SummaryStatStrip tiles={tiles} loading={summaryLoading} />
+
       <div className="flex flex-wrap items-center gap-2">
         <div className="relative min-w-44 flex-1 sm:max-w-56">
           <Search className="absolute top-1/2 left-2.5 size-4 -translate-y-1/2 text-muted-foreground" />
           <Input value={search} onChange={(e) => setSearch(e.target.value)}
             placeholder="Search by code" className="bg-card pl-8" />
         </div>
-        <Select items={TYPE_FILTER_ITEMS} value={type} onValueChange={(v) => setType(v as string)}>
-          <SelectTrigger className="min-w-36 bg-card"><SelectValue /></SelectTrigger>
-          <SelectContent>
-            {Object.entries(TYPE_FILTER_ITEMS).map(([v, label]) => (
-              <SelectItem key={v} value={v}>{label}</SelectItem>
-            ))}
-          </SelectContent>
-        </Select>
-        <Select items={STATUS_FILTER_ITEMS} value={status} onValueChange={(v) => setStatus(v as string)}>
-          <SelectTrigger className="min-w-36 bg-card"><SelectValue /></SelectTrigger>
-          <SelectContent>
-            {Object.entries(STATUS_FILTER_ITEMS).map(([v, label]) => (
-              <SelectItem key={v} value={v}>{label}</SelectItem>
-            ))}
-          </SelectContent>
-        </Select>
+        <MultiSelectFilter label="Type" options={COUPON_TYPES} value={types} onChange={setTypes} />
+        <MultiSelectFilter label="Status" options={COUPON_STATUSES} value={statuses} onChange={setStatuses} />
         <DateRangePicker value={dateRange} onChange={setDateRange} />
       </div>
+
+      {selected.length > 0 && (
+        <div className="flex flex-wrap items-center gap-3 rounded-xl border border-border bg-card px-3 py-2">
+          <span className="text-sm font-medium">
+            {selected.length} coupon{selected.length === 1 ? "" : "s"} selected
+          </span>
+          <button
+            type="button"
+            onClick={() => setClearKey((k) => k + 1)}
+            className="text-xs text-muted-foreground hover:text-foreground"
+          >
+            Clear selection
+          </button>
+        </div>
+      )}
 
       <CouponDialog
         editing={editing} open={dialogOpen}
@@ -262,6 +368,8 @@ export default function DiscountsPage() {
 
       <DataTable
         columns={columns} data={rows} loading={loading}
+        onSelectionChange={setSelected}
+        clearSelectionKey={clearKey}
         onRowClick={(row) => { setEditing(row); setDialogOpen(true); }}
         serverPagination={{
           pageIndex: page,
