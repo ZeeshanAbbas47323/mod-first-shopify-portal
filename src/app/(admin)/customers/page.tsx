@@ -4,7 +4,7 @@ import * as React from "react";
 import { useRouter } from "next/navigation";
 import { format } from "date-fns";
 import { type ColumnDef } from "@tanstack/react-table";
-import { Download, Loader2, Search, Unlock, X } from "lucide-react";
+import { Download, Loader2, Lock, LockOpen, Search, X } from "lucide-react";
 import { toast } from "sonner";
 
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
@@ -36,9 +36,6 @@ const fmt$ = (n?: number | null) =>
 const initials = (name: string) =>
   name.split(/\s+/).map((p) => p[0] ?? "").join("").slice(0, 2).toUpperCase() || "??";
 
-const location = (row: UserRow) =>
-  [row.location?.city, row.location?.state, row.location?.country].filter(Boolean).join(", ") || "";
-
 const EMPTY_SUMMARY: UsersSummary = {
   total_customers: 0,
   new_customers: { current: 0, previous: 0, change_percent: null },
@@ -51,7 +48,7 @@ const exportColumns = [
   { key: "email", label: "Email", value: (r: UserRow) => r.email },
   { key: "phone", label: "Phone", value: (r: UserRow) => r.phone ?? "" },
   { key: "email_subscribed", label: "Email subscription", value: (r: UserRow) => (r.email_subscribed ? "Subscribed" : "Not subscribed") },
-  { key: "location", label: "Location", value: (r: UserRow) => location(r) || "" },
+  { key: "is_locked", label: "Locked", value: (r: UserRow) => (r.is_locked ? "Yes" : "No") },
   { key: "total_orders", label: "Orders", value: (r: UserRow) => r.total_orders ?? 0 },
   { key: "total_spent", label: "Amount spent", value: (r: UserRow) => r.total_spent ?? 0 },
   { key: "created_at", label: "Joined", value: (r: UserRow) => r.created_at ?? "" },
@@ -115,41 +112,36 @@ function buildColumns(
     ),
   },
   {
-    id: "location",
-    header: "Location",
-    cell: ({ row }) => {
-      const loc = location(row.original);
-      return loc ? <span className="text-sm">{loc}</span> : <span className="text-muted-foreground">—</span>;
-    },
-  },
-  {
     accessorKey: "is_locked",
-    header: "Locked",
+    header: () => <div className="text-center">Locked</div>,
     cell: ({ row }) => {
-      if (!row.getValue("is_locked")) return null;
+      const isLocked = !!row.getValue("is_locked");
       const busy = unlockingId === row.original.id;
+
+      // Unlocked accounts have nothing to do here — just a quiet open-lock
+      // indicator. A locked one is a real action: click to unlock.
+      if (!isLocked) {
+        return (
+          <div className="flex justify-center text-muted-foreground/50" title="Not locked">
+            <LockOpen className="size-4" />
+          </div>
+        );
+      }
+
       return (
-        <div className="flex items-center gap-2">
-          <StatusBadge status="Locked" tone="critical" />
-          {canEdit && (
-            <Button
-              size="sm"
-              variant="ghost"
-              className="h-7 px-2 text-xs"
-              disabled={busy}
-              onClick={(e) => {
-                e.stopPropagation();
-                onUnlock(row.original);
-              }}
-            >
-              {busy ? (
-                <Loader2 className="size-3.5 animate-spin" />
-              ) : (
-                <Unlock className="size-3.5" />
-              )}
-              Unlock
-            </Button>
-          )}
+        <div className="flex justify-center">
+          <button
+            type="button"
+            disabled={!canEdit || busy}
+            onClick={(e) => {
+              e.stopPropagation();
+              onUnlock(row.original);
+            }}
+            title={canEdit ? "Locked — click to unlock" : "Locked"}
+            className="text-destructive hover:text-destructive/70 disabled:cursor-not-allowed disabled:opacity-60"
+          >
+            {busy ? <Loader2 className="size-4 animate-spin" /> : <Lock className="size-4" />}
+          </button>
         </div>
       );
     },

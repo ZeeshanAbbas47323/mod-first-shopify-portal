@@ -32,7 +32,7 @@ import {
   type OrderReportRow, type OrderReportSummary,
   type InventoryReportRow, type InventoryReportSummary,
   type CustomerReportRow, type ProductPerfRow,
-  type FinancialBreakdownRow, type CouponUsageRow,
+  type FinancialBreakdownRow, type FinancialTotals, type CouponUsageRow,
 } from "@/lib/admin-api";
 import { cn } from "@/lib/utils";
 
@@ -183,6 +183,11 @@ function SalesTab() {
   const labelKey = (r: SalesDataRow) => r.label ?? r.date ?? r.period ?? "";
   const chartData = rows.map((r) => ({ label: labelKey(r), revenue: r.revenue ?? 0, orders: r.orders ?? 0 }));
 
+  // groupBy=product/category doesn't return orders/discount/tax totals — derive
+  // what's actually available locally instead of showing empty summary cards.
+  const groupRevenue = rows.reduce((s, r) => s + (r.revenue ?? 0), 0);
+  const groupUnits = rows.reduce((s, r) => s + (r.units_sold ?? 0), 0);
+
   return (
     <div className="flex flex-col gap-5">
       <DateControls range={range} onRange={setRange}>
@@ -196,12 +201,21 @@ function SalesTab() {
         </Select>
       </DateControls>
 
-      <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
-        <SummaryCard label="Total revenue" value={fmt$(summary.revenue)} icon={<TrendingUp className="size-4" />} tone="green" />
-        <SummaryCard label="Orders" value={fmtN(summary.orders)} icon={<ShoppingCart className="size-4" />} />
-        <SummaryCard label="Discounts given" value={fmt$(summary.discount)} icon={<Tag className="size-4" />} tone="red" />
-        <SummaryCard label="Tax collected" value={fmt$(summary.tax)} icon={<Wallet className="size-4" />} />
-      </div>
+      {isTimeSeries ? (
+        <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
+          <SummaryCard label="Total revenue" value={fmt$(summary.revenue)} icon={<TrendingUp className="size-4" />} tone="green" />
+          <SummaryCard label="Orders" value={fmtN(summary.orders)} icon={<ShoppingCart className="size-4" />} />
+          <SummaryCard label="Discounts given" value={fmt$(summary.discount)} icon={<Tag className="size-4" />} tone="red" />
+          <SummaryCard label="Tax collected" value={fmt$(summary.tax)} icon={<Wallet className="size-4" />} />
+        </div>
+      ) : (
+        <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
+          <SummaryCard label="Total revenue" value={fmt$(groupRevenue)} icon={<TrendingUp className="size-4" />} tone="green" />
+          <SummaryCard label="Units sold" value={fmtN(groupUnits)} icon={<Package className="size-4" />} />
+          <SummaryCard label={groupBy === "product" ? "Products" : "Categories"} value={fmtN(rows.length)} icon={<Tag className="size-4" />} />
+          <SummaryCard label={`Top ${groupBy}`} value={rows[0] ? String(labelKey(rows[0])) : "—"} icon={<TrendingUp className="size-4" />} />
+        </div>
+      )}
 
       <Card className="shadow-none">
         <CardHeader className="pb-2">
@@ -242,19 +256,26 @@ function SalesTab() {
 
       {!loading && rows.length > 0 && (
         <Card className="shadow-none">
-          <CardHeader className="pb-2"><CardTitle className="text-sm">Breakdown</CardTitle></CardHeader>
+          <CardHeader className="pb-2">
+            <CardTitle className="text-sm">
+              {isTimeSeries ? "Breakdown" : `Breakdown by ${groupBy}`}
+            </CardTitle>
+          </CardHeader>
           <CardContent className="p-0">
             <div className="overflow-x-auto">
               <table className="w-full text-sm">
                 <thead>
                   <tr className="border-b border-border bg-muted/40">
-                    {["Period","Orders","Subtotal","Discount","Tax","Shipping","Revenue"].map((h) => (
-                      <th key={h} className={cn("px-4 py-2.5 font-medium text-muted-foreground", h !== "Period" ? "text-right" : "text-left")}>{h}</th>
+                    {(isTimeSeries
+                      ? ["Period","Orders","Subtotal","Discount","Tax","Shipping","Revenue"]
+                      : [groupBy === "product" ? "Product" : "Category","Units Sold","Revenue"]
+                    ).map((h, i) => (
+                      <th key={h} className={cn("px-4 py-2.5 font-medium text-muted-foreground", i !== 0 ? "text-right" : "text-left")}>{h}</th>
                     ))}
                   </tr>
                 </thead>
                 <tbody>
-                  {rows.map((r, i) => (
+                  {isTimeSeries ? rows.map((r, i) => (
                     <tr key={i} className="border-b border-border last:border-0 hover:bg-muted/30 transition-colors">
                       <td className="px-4 py-2.5 font-medium">{labelKey(r)}</td>
                       <td className="px-4 py-2.5 text-right">{fmtN(r.orders)}</td>
@@ -264,9 +285,15 @@ function SalesTab() {
                       <td className="px-4 py-2.5 text-right">{fmt$(r.shipping)}</td>
                       <td className="px-4 py-2.5 text-right font-semibold">{fmt$(r.revenue)}</td>
                     </tr>
+                  )) : rows.map((r, i) => (
+                    <tr key={i} className="border-b border-border last:border-0 hover:bg-muted/30 transition-colors">
+                      <td className="px-4 py-2.5 font-medium">{labelKey(r)}</td>
+                      <td className="px-4 py-2.5 text-right">{fmtN(r.units_sold)}</td>
+                      <td className="px-4 py-2.5 text-right font-semibold">{fmt$(r.revenue)}</td>
+                    </tr>
                   ))}
                 </tbody>
-                {summary.revenue != null && (
+                {isTimeSeries && summary.revenue != null && (
                   <tfoot>
                     <tr className="border-t-2 border-border bg-muted/20 font-semibold">
                       <td className="px-4 py-2.5">Total</td>
@@ -684,7 +711,7 @@ function ProductPerfTab() {
 function FinancialTab() {
   const [range, setRange] = React.useState<DateRange>(defaultRange);
   const [breakdown, setBreakdown] = React.useState<FinancialBreakdownRow[]>([]);
-  const [totals, setTotals] = React.useState<FinancialBreakdownRow | undefined>();
+  const [totals, setTotals] = React.useState<FinancialTotals | undefined>();
   const [loading, setLoading] = React.useState(false);
 
   const load = React.useCallback(() => {
@@ -699,63 +726,48 @@ function FinancialTab() {
   React.useEffect(() => { load(); }, [load]);
 
   const t = totals ?? {};
-  const netRev = (t.net_revenue as number | undefined) ?? ((t.revenue ?? 0) - (t.refunds ?? 0) - (t.fees ?? 0));
 
   return (
     <div className="flex flex-col gap-5">
       <DateControls range={range} onRange={setRange} />
 
       <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
-        <SummaryCard label="Gross Revenue" value={fmt$(t.revenue as number | undefined)} icon={<TrendingUp className="size-4" />} tone="green" />
-        <SummaryCard label="Discounts" value={fmt$(t.discounts as number | undefined)} icon={<Tag className="size-4" />} tone="red" />
-        <SummaryCard label="Refunds" value={fmt$(t.refunds as number | undefined)} icon={<ArrowDownRight className="size-4" />} tone="red" />
-        <SummaryCard label="Net Revenue" value={fmt$(netRev)} icon={<Wallet className="size-4" />} tone="green" />
+        <SummaryCard label="Gross Revenue" value={fmt$(t.revenue)} icon={<TrendingUp className="size-4" />} tone="green" />
+        <SummaryCard label="Discounts" value={fmt$(t.discounts)} icon={<Tag className="size-4" />} tone="red" />
+        <SummaryCard label="Refunds" value={fmt$(t.refunds)} icon={<ArrowDownRight className="size-4" />} tone="red" />
+        <SummaryCard label="Net Revenue" value={fmt$(t.net_revenue)} icon={<Wallet className="size-4" />} tone="green" />
+      </div>
+      <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
+        <SummaryCard label="Orders" value={fmtN(t.orders_count)} icon={<ShoppingCart className="size-4" />} />
+        <SummaryCard label="Amount Paid" value={fmt$(t.amount_paid)} icon={<Wallet className="size-4" />} />
+        <SummaryCard label="Gateway Fees" value={fmt$(t.gateway_fees)} icon={<Wallet className="size-4" />} tone="red" />
+        <SummaryCard label="Refund Count" value={fmtN(t.refund_count)} icon={<ArrowDownRight className="size-4" />} />
       </div>
 
       <Card className="shadow-none">
-        <CardHeader className="pb-2"><CardTitle className="text-sm">P&amp;L by Payment Method</CardTitle></CardHeader>
+        <CardHeader className="pb-2"><CardTitle className="text-sm">Revenue by Payment Method</CardTitle></CardHeader>
         <CardContent className="p-0">
           {loading ? <div className="p-4"><Skeleton className="h-48 w-full" /></div> : breakdown.length === 0 ? <Empty /> : (
             <div className="overflow-x-auto">
               <table className="w-full text-sm">
                 <thead>
                   <tr className="border-b border-border bg-muted/40">
-                    {["Method","Revenue","Discounts","Tax","Shipping","Gateway Fees","Refunds","Net Revenue"].map((h) => (
+                    {["Method","Transactions","Amount","Gateway Fee","Net"].map((h) => (
                       <th key={h} className={cn("px-4 py-2.5 font-medium text-muted-foreground", h !== "Method" ? "text-right" : "text-left")}>{h}</th>
                     ))}
                   </tr>
                 </thead>
                 <tbody>
-                  {breakdown.map((r, i) => {
-                    const nr = (r.net_revenue as number | undefined) ?? ((r.revenue ?? 0) - (r.refunds ?? 0) - (r.fees ?? 0));
-                    return (
-                      <tr key={i} className="border-b border-border last:border-0 hover:bg-muted/30 transition-colors">
-                        <td className="px-4 py-2.5 font-medium capitalize">{r.method ?? r.payment_method ?? "—"}</td>
-                        <td className="px-4 py-2.5 text-right">{fmt$(r.revenue as number | undefined)}</td>
-                        <td className="px-4 py-2.5 text-right text-destructive">{fmt$(r.discounts as number | undefined)}</td>
-                        <td className="px-4 py-2.5 text-right">{fmt$(r.tax as number | undefined)}</td>
-                        <td className="px-4 py-2.5 text-right">{fmt$(r.shipping as number | undefined)}</td>
-                        <td className="px-4 py-2.5 text-right text-destructive">{fmt$(r.fees as number | undefined)}</td>
-                        <td className="px-4 py-2.5 text-right text-destructive">{fmt$(r.refunds as number | undefined)}</td>
-                        <td className={cn("px-4 py-2.5 text-right font-semibold", nr >= 0 ? "text-[#29845a]" : "text-destructive")}>{fmt$(nr)}</td>
-                      </tr>
-                    );
-                  })}
-                </tbody>
-                {totals && (
-                  <tfoot>
-                    <tr className="border-t-2 border-border bg-muted/20 font-semibold">
-                      <td className="px-4 py-2.5">Total</td>
-                      <td className="px-4 py-2.5 text-right">{fmt$(t.revenue as number | undefined)}</td>
-                      <td className="px-4 py-2.5 text-right text-destructive">{fmt$(t.discounts as number | undefined)}</td>
-                      <td className="px-4 py-2.5 text-right">{fmt$(t.tax as number | undefined)}</td>
-                      <td className="px-4 py-2.5 text-right">{fmt$(t.shipping as number | undefined)}</td>
-                      <td className="px-4 py-2.5 text-right text-destructive">{fmt$(t.fees as number | undefined)}</td>
-                      <td className="px-4 py-2.5 text-right text-destructive">{fmt$(t.refunds as number | undefined)}</td>
-                      <td className={cn("px-4 py-2.5 text-right", netRev >= 0 ? "text-[#29845a]" : "text-destructive")}>{fmt$(netRev)}</td>
+                  {breakdown.map((r, i) => (
+                    <tr key={i} className="border-b border-border last:border-0 hover:bg-muted/30 transition-colors">
+                      <td className="px-4 py-2.5 font-medium capitalize">{r.method ?? "—"}</td>
+                      <td className="px-4 py-2.5 text-right">{fmtN(r.transactions)}</td>
+                      <td className="px-4 py-2.5 text-right">{fmt$(r.amount)}</td>
+                      <td className="px-4 py-2.5 text-right text-destructive">{fmt$(r.gateway_fee)}</td>
+                      <td className={cn("px-4 py-2.5 text-right font-semibold", (r.net ?? 0) >= 0 ? "text-[#29845a]" : "text-destructive")}>{fmt$(r.net)}</td>
                     </tr>
-                  </tfoot>
-                )}
+                  ))}
+                </tbody>
               </table>
             </div>
           )}

@@ -1586,7 +1586,22 @@ export async function getOrderReport(body: {
 }): Promise<OrderReport> {
   const { data } = await api.post("reports/orders", body);
   const p: Json = data?.payload ?? data?.data ?? data ?? {};
-  const rows: OrderReportRow[] = Array.isArray(p) ? p : p.rows ?? p.orders ?? p.data ?? [];
+  const rawRows: Json[] = Array.isArray(p) ? p : p.rows ?? p.orders ?? p.data ?? [];
+  // Backend returns full_name/email/*_amount/*_fee/order_date — normalize to the shape this page renders.
+  const rows: OrderReportRow[] = rawRows.map((r) => ({
+    ...r,
+    id: r.id,
+    order_number: r.order_number,
+    customer: r.customer ?? { full_name: r.full_name ?? r.name, name: r.full_name ?? r.name },
+    status: r.status,
+    payment_status: r.payment_status,
+    subtotal: Number(r.subtotal ?? 0),
+    discount: Number(r.discount ?? r.discount_amount ?? 0),
+    tax: Number(r.tax ?? r.tax_amount ?? 0),
+    shipping: Number(r.shipping ?? r.shipping_fee ?? 0),
+    total: Number(r.total ?? r.total_amount ?? 0),
+    created_at: r.created_at ?? r.order_date,
+  }));
   const summary = (Array.isArray(p) ? {} : p.summary ?? p.totals ?? {}) as OrderReportSummary;
   const pag: Json = data?.pagination ?? p.pagination ?? {};
   const total = pag.total ?? p.total ?? rows.length;
@@ -1612,7 +1627,19 @@ export async function getInventoryReport(body?: {
 }): Promise<InventoryReport> {
   const { data } = await api.post("reports/inventory", body ?? {});
   const p: Json = data?.payload ?? data?.data ?? data ?? {};
-  const rows: InventoryReportRow[] = Array.isArray(p) ? p : p.items ?? p.rows ?? p.data ?? [];
+  const rawRows: Json[] = Array.isArray(p) ? p : p.items ?? p.rows ?? p.data ?? [];
+  // Backend rows come back as product_id/product_name — normalize to id/name for this page.
+  const rows: InventoryReportRow[] = rawRows.map((r) => ({
+    ...r,
+    id: r.id ?? r.product_id,
+    name: r.name ?? r.title ?? r.product_name,
+    sku: r.sku ?? null,
+    category: r.category ?? null,
+    quantity: Number(r.quantity ?? 0),
+    cost_price: r.cost_price != null ? Number(r.cost_price) : null,
+    stock_value: r.stock_value != null ? Number(r.stock_value) : null,
+    status: r.status,
+  }));
   const summary = (Array.isArray(p) ? {} : p.summary ?? p.totals ?? {}) as InventoryReportSummary;
   return { rows, summary };
 }
@@ -1628,7 +1655,8 @@ export async function getCustomerReport(body?: {
 }): Promise<CustomerReportRow[]> {
   const { data } = await api.post("reports/customers", body ?? {});
   const p: Json = data?.payload ?? data?.data ?? data ?? {};
-  return (Array.isArray(p) ? p : p.customers ?? p.rows ?? p.data ?? []) as CustomerReportRow[];
+  const rows = (Array.isArray(p) ? p : p.customers ?? p.rows ?? p.data ?? []) as Json[];
+  return rows.map((r) => ({ ...r, id: r.id ?? r.user_id })) as CustomerReportRow[];
 }
 
 // Product Performance
@@ -1643,27 +1671,59 @@ export async function getProductPerformanceReport(body: {
 }): Promise<ProductPerfRow[]> {
   const { data } = await api.post("reports/product-performance", body);
   const p: Json = data?.payload ?? data?.data ?? data ?? {};
-  return (Array.isArray(p) ? p : p.products ?? p.rows ?? p.data ?? []) as ProductPerfRow[];
+  const rows = (Array.isArray(p) ? p : p.products ?? p.rows ?? p.data ?? []) as Json[];
+  // Backend returns product_id/product_name/margin_percent — normalize to id/name/margin.
+  return rows.map((r) => ({
+    ...r,
+    id: r.id ?? r.product_id,
+    name: r.name ?? r.title ?? r.product_name,
+    margin: r.margin ?? r.margin_percent,
+  })) as ProductPerfRow[];
 }
 
 // Financial
 export interface FinancialBreakdownRow {
   method?: string; payment_method?: string;
-  revenue?: number; discounts?: number; tax?: number;
-  shipping?: number; fees?: number; refunds?: number; net_revenue?: number;
+  transactions?: number; amount?: number; gateway_fee?: number; net?: number;
+  [k: string]: unknown;
+}
+export interface FinancialTotals {
+  revenue?: number; discounts?: number; tax?: number; shipping?: number;
+  amount_paid?: number; refunds?: number; refund_count?: number;
+  gateway_fees?: number; net_revenue?: number; orders_count?: number;
   [k: string]: unknown;
 }
 export interface FinancialReport {
   breakdown: FinancialBreakdownRow[];
-  totals?: FinancialBreakdownRow;
+  totals?: FinancialTotals;
 }
 export async function getFinancialReport(body: {
   startDate: string; endDate: string;
 }): Promise<FinancialReport> {
   const { data } = await api.post("reports/financial", body);
   const p: Json = data?.payload ?? data?.data ?? data ?? {};
-  const breakdown = (Array.isArray(p) ? p : p.breakdown ?? p.rows ?? p.data ?? []) as FinancialBreakdownRow[];
-  const totals = (Array.isArray(p) ? undefined : p.totals ?? p.summary) as FinancialBreakdownRow | undefined;
+  // Backend returns a flat summary (gross_revenue, discounts_given, ...) plus a
+  // by_payment_method breakdown of transactions/amount/gateway_fee — normalize both.
+  const rawBreakdown = (Array.isArray(p) ? [] : p.by_payment_method ?? p.breakdown ?? p.rows ?? []) as Json[];
+  const breakdown: FinancialBreakdownRow[] = rawBreakdown.map((r) => ({
+    method: r.method ?? r.payment_method,
+    transactions: Number(r.transactions ?? 0),
+    amount: Number(r.amount ?? 0),
+    gateway_fee: Number(r.gateway_fee ?? 0),
+    net: Number(r.amount ?? 0) - Number(r.gateway_fee ?? 0),
+  }));
+  const totals: FinancialTotals | undefined = Array.isArray(p) ? undefined : {
+    revenue: Number(p.gross_revenue ?? 0),
+    discounts: Number(p.discounts_given ?? 0),
+    tax: Number(p.tax_collected ?? 0),
+    shipping: Number(p.shipping_collected ?? 0),
+    amount_paid: Number(p.amount_paid ?? 0),
+    refunds: Number(p.total_refunds ?? 0),
+    refund_count: Number(p.refund_count ?? 0),
+    gateway_fees: Number(p.total_gateway_fees ?? 0),
+    net_revenue: Number(p.net_revenue ?? 0),
+    orders_count: Number(p.orders_count ?? 0),
+  };
   return { breakdown, totals };
 }
 
@@ -1678,7 +1738,9 @@ export async function getCouponUsageReport(body?: {
 }): Promise<CouponUsageRow[]> {
   const { data } = await api.post("reports/coupon-usage", body ?? {});
   const p: Json = data?.payload ?? data?.data ?? data ?? {};
-  return (Array.isArray(p) ? p : p.coupons ?? p.rows ?? p.data ?? []) as CouponUsageRow[];
+  const rows = (Array.isArray(p) ? p : p.coupons ?? p.rows ?? p.data ?? []) as Json[];
+  // Backend field is total_discount_given — normalize to total_discount.
+  return rows.map((r) => ({ ...r, total_discount: r.total_discount ?? r.total_discount_given })) as CouponUsageRow[];
 }
 
 // ─── Global Search (Admin) ────────────────────────────────────────────────────
