@@ -7,7 +7,6 @@ import { Heart, Search } from "lucide-react";
 import type { DateRange } from "react-day-picker";
 import { toast } from "sonner";
 
-import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Input } from "@/components/ui/input";
 import { MultiSelectFilter } from "@/components/multi-select-filter";
@@ -17,7 +16,7 @@ import { ExportMenu } from "@/components/export-menu";
 import { DateRangePicker } from "@/components/date-range-picker";
 import { StatusBadge } from "@/components/status-badge";
 import { apiErrorMessage } from "@/lib/auth-api";
-import { exportRowsToCsv, imgUrl } from "@/lib/utils";
+import { imgUrl } from "@/lib/utils";
 import { listWishlists, type WishlistRow } from "@/lib/admin-api";
 
 const DEFAULT_PAGE_SIZE = 20;

@@ -25,7 +25,7 @@ import { ExportMenu } from "@/components/export-menu";
 import { DateRangePicker } from "@/components/date-range-picker";
 import { StatusBadge, type BadgeTone } from "@/components/status-badge";
 import { apiErrorMessage } from "@/lib/auth-api";
-import { exportRowsToCsv, fileUrl, imgUrl } from "@/lib/utils";
+import { fileUrl, imgUrl } from "@/lib/utils";
 import {
   listDesignUploads,
   updateDesignUpload,

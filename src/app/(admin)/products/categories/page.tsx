@@ -159,10 +159,6 @@ export default function ProductCategoriesPage() {
   };
 
   // The whole tree is already loaded, so "everything" needs no extra request.
-  const selectedRows = React.useMemo(
-    () => flat.filter((n) => selected.has(String(n.id))),
-    [flat, selected]
-  );
   const fetchAllForExport = async () => flat;
 
   const allIds = React.useMemo(() => flat.map((n) => String(n.id)), [flat]);
