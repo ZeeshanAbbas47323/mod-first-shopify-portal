@@ -2,9 +2,8 @@
 
 import * as React from "react";
 import { useRouter } from "next/navigation";
-import { format } from "date-fns";
 import { type ColumnDef } from "@tanstack/react-table";
-import { Download, Loader2, Lock, LockOpen, Search, X } from "lucide-react";
+import { Loader2, Lock, LockOpen, Search, X } from "lucide-react";
 import { toast } from "sonner";
 
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
@@ -12,15 +11,12 @@ import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
 import { MultiSelectFilter } from "@/components/multi-select-filter";
 import { SummaryStatStrip, type SummaryTile } from "@/components/summary-stat-strip";
-import {
-  DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger,
-} from "@/components/ui/dropdown-menu";
-import { DataTable } from "@/components/data-table";
+import { DataTable, type ColumnFilterDef } from "@/components/data-table";
+import { ExportMenu } from "@/components/export-menu";
 import { DateRangePicker } from "@/components/date-range-picker";
 import { StatusBadge } from "@/components/status-badge";
 import { apiErrorMessage } from "@/lib/auth-api";
 import { usePermissions } from "@/stores/menu-store";
-import { exportRowsToCsv } from "@/lib/utils";
 import { listUsers, getUsersSummary, unlockUser, type UserRow, type UsersSummary } from "@/lib/admin-api";
 import type { DateRange } from "react-day-picker";
 
@@ -41,6 +37,24 @@ const EMPTY_SUMMARY: UsersSummary = {
   new_customers: { current: 0, previous: 0, change_percent: null },
   subscribed: 0,
   locked: 0,
+};
+
+/** Filter controls rendered under each column header. */
+const COLUMN_FILTERS: Record<string, ColumnFilterDef> = {
+  full_name: { type: "text", placeholder: "Name or email" },
+  email_subscription: {
+    type: "select",
+    options: SUBSCRIPTION_OPTIONS,
+    placeholder: "Any",
+  },
+  is_locked: {
+    type: "select",
+    options: [
+      { value: "yes", label: "Locked" },
+      { value: "no", label: "Not locked" },
+    ],
+    placeholder: "Any",
+  },
 };
 
 const exportColumns = [
@@ -176,7 +190,6 @@ export default function CustomersPage() {
   const [loading, setLoading] = React.useState(false);
   const [selected, setSelected] = React.useState<UserRow[]>([]);
   const [clearKey, setClearKey] = React.useState(0);
-  const [exportBusy, setExportBusy] = React.useState(false);
   const [summary, setSummary] = React.useState<UsersSummary>(EMPTY_SUMMARY);
   const [summaryLoading, setSummaryLoading] = React.useState(true);
 
@@ -186,17 +199,30 @@ export default function CustomersPage() {
   const [subscriptions, setSubscriptions] = React.useState<string[]>([]);
   const [searchInput, setSearchInput] = React.useState("");
   const [search, setSearch] = React.useState("");
+  const [columnFilters, setColumnFilters] = React.useState<Record<string, string[]>>({});
 
-  React.useEffect(() => { setPage(1); }, [dateRange, statuses, subscriptions, search]);
+  React.useEffect(() => { setPage(1); }, [dateRange, statuses, subscriptions, search, columnFilters]);
 
   const buildFilters = React.useCallback((): Record<string, unknown> => {
     const filters: Record<string, unknown> = { role: "customer" };
     if (statuses.length === 1) filters.is_active = statuses[0] === "active";
     // Both selected (or neither) means no opinion — only a single pick narrows it.
     if (subscriptions.length === 1) filters.email_subscribed = subscriptions[0] === "subscribed";
-    if (search) filters.full_name = search;
+    // A bare string reaches Prisma as an exact match, so a search box has to
+    // spell out `contains` or it only ever finds a perfectly typed full name.
+    if (search) filters.full_name = { contains: search };
+
+    // Column filters sit closer to the data than the top bar, so they win.
+    const name = columnFilters.full_name?.[0];
+    if (name) filters.full_name = { contains: name };
+    if (columnFilters.email_subscription?.length === 1) {
+      filters.email_subscribed = columnFilters.email_subscription[0] === "subscribed";
+    }
+    if (columnFilters.is_locked?.length === 1) {
+      filters.is_locked = columnFilters.is_locked[0] === "yes";
+    }
     return filters;
-  }, [statuses, subscriptions, search]);
+  }, [statuses, subscriptions, search, columnFilters]);
 
   const load = React.useCallback(() => {
     setLoading(true);
@@ -233,25 +259,11 @@ export default function CustomersPage() {
     }
   };
 
-  const runExport = async (scope: "selected" | "all") => {
-    setExportBusy(true);
-    try {
-      const exportRows =
-        scope === "selected"
-          ? selected
-          : (await listUsers({ page: 1, limit: EXPORT_CAP, dateRange, filters: buildFilters() })).rows;
-      if (!exportRows.length) {
-        toast.error("Nothing to export.");
-        return;
-      }
-      exportRowsToCsv(`customers-${format(new Date(), "yyyy-MM-dd")}`, exportColumns, exportRows);
-      toast.success(`Exported ${exportRows.length} customer${exportRows.length === 1 ? "" : "s"}.`);
-    } catch (error) {
-      toast.error(apiErrorMessage(error, "Couldn't export customers."));
-    } finally {
-      setExportBusy(false);
-    }
-  };
+  const fetchAllForExport = React.useCallback(
+    async () =>
+      (await listUsers({ page: 1, limit: EXPORT_CAP, dateRange, filters: buildFilters() })).rows,
+    [dateRange, buildFilters]
+  );
 
   const columns = React.useMemo(
     () => buildColumns(!!permissions.can_edit, unlockingId, handleUnlock),
@@ -274,25 +286,14 @@ export default function CustomersPage() {
       {/* Header */}
       <div className="flex flex-wrap items-center justify-between gap-3">
         <h1 className="text-xl font-bold">Customers</h1>
-        <DropdownMenu>
-          <DropdownMenuTrigger
-            disabled={exportBusy}
-            render={
-              <Button variant="outline">
-                {exportBusy ? <Loader2 className="size-4 animate-spin" /> : <Download className="size-4" />}
-                Export
-              </Button>
-            }
-          />
-          <DropdownMenuContent align="end" className="w-64">
-            <DropdownMenuItem disabled={!selected.length} onClick={() => runExport("selected")}>
-              Export {selected.length || ""} selected customer{selected.length === 1 ? "" : "s"}
-            </DropdownMenuItem>
-            <DropdownMenuItem onClick={() => runExport("all")}>
-              Export all customers matching filters ({total})
-            </DropdownMenuItem>
-          </DropdownMenuContent>
-        </DropdownMenu>
+        <ExportMenu
+          filename="customers"
+          columns={exportColumns}
+          selected={selected}
+          fetchAll={fetchAllForExport}
+          total={total}
+          noun="customer"
+        />
       </div>
 
       {/* Summary stat strip */}
@@ -339,10 +340,15 @@ export default function CustomersPage() {
           <span className="text-sm font-medium">
             {selected.length} customer{selected.length === 1 ? "" : "s"} selected
           </span>
-          <Button size="sm" variant="outline" disabled={exportBusy} onClick={() => runExport("selected")}>
-            {exportBusy ? <Loader2 className="size-4 animate-spin" /> : <Download className="size-4" />}
-            Export selected
-          </Button>
+          <ExportMenu
+            filename="customers"
+            columns={exportColumns}
+            selected={selected}
+            fetchAll={fetchAllForExport}
+            total={total}
+            noun="customer"
+            size="sm"
+          />
           <button
             type="button"
             onClick={() => setClearKey((k) => k + 1)}
@@ -361,6 +367,8 @@ export default function CustomersPage() {
         onSelectionChange={setSelected}
         clearSelectionKey={clearKey}
         onRowClick={(row) => router.push(`/customers/${row.id}`)}
+        columnFilterDefs={COLUMN_FILTERS}
+        serverColumnFilters={{ value: columnFilters, onChange: setColumnFilters }}
         serverPagination={{
           pageIndex: page - 1,
           pageCount: totalPages,

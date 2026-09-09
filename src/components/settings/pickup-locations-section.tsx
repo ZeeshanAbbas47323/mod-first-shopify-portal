@@ -3,7 +3,7 @@
 import * as React from "react";
 import { type ColumnDef } from "@tanstack/react-table";
 import { format } from "date-fns";
-import { Download, Loader2, MapPin, Plus, Search, Trash2 } from "lucide-react";
+import { Loader2, MapPin, Plus, Search, Trash2 } from "lucide-react";
 import { useForm, Controller } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
@@ -20,10 +20,11 @@ import { ConfirmDeleteDialog } from "@/components/confirm-delete-dialog";
 import {
   Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
 } from "@/components/ui/select";
-import { DataTable } from "@/components/data-table";
+import { DataTable, type ColumnFilterDef } from "@/components/data-table";
 import { StatusToggle } from "@/components/status-badge";
 import { apiErrorMessage } from "@/lib/auth-api";
-import { exportRowsToCsv } from "@/lib/utils";
+import { exportRows as writeExport, type ExportFormat } from "@/lib/export";
+import { ExportFormatMenu } from "@/components/export-menu";
 import {
   listPickupLocations, createPickupLocation, updatePickupLocation, deletePickupLocation, updateRecordStatus,
   type PickupLocationRow,
@@ -83,6 +84,11 @@ function getColumns(
   ];
 }
 
+/** Filter controls rendered under each column header. */
+const COLUMN_FILTERS: Record<string, ColumnFilterDef> = {
+  name: { type: "text", placeholder: "Search locations" },
+};
+
 export function PickupLocationsSection() {
   const [rows, setRows] = React.useState<PickupLocationRow[]>([]);
   const [loading, setLoading] = React.useState(true);
@@ -109,6 +115,23 @@ export function PickupLocationsSection() {
     [debounced]
   );
 
+  /**
+   * The header filter row edits the same state as the toolbar above it, so
+   * a pick in one shows up in the other instead of silently competing.
+   */
+  const columnFilterValues = React.useMemo(() => {
+    const values: Record<string, string[]> = {};
+    if (search) values.name = [search];
+    return values;
+  }, [search]);
+
+  const applyColumnFilters = React.useCallback(
+    (next: Record<string, string[]>) => {
+      setSearch(next.name?.[0] ?? "");
+    },
+    []
+  );
+
   React.useEffect(() => {
     let cancelled = false;
     setLoading(true);
@@ -122,7 +145,7 @@ export function PickupLocationsSection() {
     return () => { cancelled = true; };
   }, [page, pageSize, buildFilters, refreshKey]);
 
-  const runExport = async () => {
+  const runExport = async (fileFormat: ExportFormat) => {
     setExportBusy(true);
     try {
       const exportRows = (await listPickupLocations({ page: 1, limit: EXPORT_CAP, filters: buildFilters() })).rows;
@@ -130,7 +153,7 @@ export function PickupLocationsSection() {
         toast.error("Nothing to export.");
         return;
       }
-      exportRowsToCsv("pickup-locations", [
+      await writeExport(fileFormat, "pickup-locations", [
         { key: "name", label: "Location", value: (r: PickupLocationRow) => r.name ?? "" },
         { key: "address", label: "Address", value: (r: PickupLocationRow) => r.address ?? "" },
         { key: "city", label: "City", value: (r: PickupLocationRow) => r.city ?? "" },
@@ -166,10 +189,7 @@ export function PickupLocationsSection() {
           <Input value={search} onChange={(e) => setSearch(e.target.value)}
             placeholder="Search locations" className="bg-card pl-8" />
         </div>
-        <Button variant="outline" onClick={runExport} disabled={exportBusy}>
-          {exportBusy ? <Loader2 className="size-4 animate-spin" /> : <Download className="size-4" />}
-          Export
-        </Button>
+        <ExportFormatMenu onSelect={runExport} busy={exportBusy} />
         <Button className="ml-auto" onClick={() => { setEditing(null); setDialogOpen(true); }}>
           <Plus className="size-4" /> Add location
         </Button>
@@ -184,6 +204,8 @@ export function PickupLocationsSection() {
       <DataTable
         columns={columns} data={rows} loading={loading}
         onRowClick={(row) => { setEditing(row); setDialogOpen(true); }}
+        columnFilterDefs={COLUMN_FILTERS}
+        serverColumnFilters={{ value: columnFilterValues, onChange: applyColumnFilters }}
         serverPagination={{
           pageIndex: page,
           pageCount,

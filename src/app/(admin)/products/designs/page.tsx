@@ -18,16 +18,14 @@ import {
 } from "@/components/ui/dialog";
 import { MultiSelectFilter } from "@/components/multi-select-filter";
 import {
-  DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger,
-} from "@/components/ui/dropdown-menu";
-import {
   Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
 } from "@/components/ui/select";
-import { DataTable } from "@/components/data-table";
+import { DataTable, type ColumnFilterDef } from "@/components/data-table";
+import { ExportMenu } from "@/components/export-menu";
 import { DateRangePicker } from "@/components/date-range-picker";
 import { StatusBadge, type BadgeTone } from "@/components/status-badge";
 import { apiErrorMessage } from "@/lib/auth-api";
-import { exportRowsToCsv, fileUrl, imgUrl } from "@/lib/utils";
+import { fileUrl, imgUrl } from "@/lib/utils";
 import {
   listDesignUploads,
   updateDesignUpload,
@@ -59,6 +57,13 @@ const isImage = (row: DesignUploadRow) =>
 const designCustomerName = (row: DesignUploadRow) =>
   row.user?.full_name ?? row.user?.name ?? (row.user_id != null ? `User #${row.user_id}` : "—");
 
+/** Filter controls rendered under each column header. */
+const COLUMN_FILTERS: Record<string, ColumnFilterDef> = {
+  order_id: { type: "text", placeholder: "Order ID" },
+  print_method: { type: "select", options: PRINT_METHODS, placeholder: "Any" },
+  status: { type: "select", options: DESIGN_STATUSES, placeholder: "Any" },
+};
+
 const exportColumns = [
   { key: "file_name", label: "Artwork", value: (r: DesignUploadRow) => r.file_name ?? `Design #${r.id}` },
   { key: "customer", label: "Customer", value: (r: DesignUploadRow) => designCustomerName(r) },
@@ -78,7 +83,6 @@ export default function DesignUploadsPage() {
 
   const [selected, setSelected] = React.useState<DesignUploadRow[]>([]);
   const [clearKey, setClearKey] = React.useState(0);
-  const [exportBusy, setExportBusy] = React.useState(false);
 
   const [orderId, setOrderId] = React.useState("");
   const [debounced, setDebounced] = React.useState("");
@@ -106,6 +110,27 @@ export default function DesignUploadsPage() {
       print_method: methods.length ? methods : undefined,
     }),
     [dateRange, debounced, statuses, methods]
+  );
+
+  /**
+   * The header filter row edits the same state as the filter bar above it,
+   * so a pick in one shows up in the other instead of silently competing.
+   */
+  const columnFilterValues = React.useMemo(() => {
+    const values: Record<string, string[]> = {};
+    if (orderId) values.order_id = [orderId];
+    if (methods.length) values.print_method = methods;
+    if (statuses.length) values.status = statuses;
+    return values;
+  }, [orderId, methods, statuses]);
+
+  const applyColumnFilters = React.useCallback(
+    (next: Record<string, string[]>) => {
+      setOrderId(next.order_id?.[0] ?? "");
+      setMethods(next.print_method ?? []);
+      setStatuses(next.status ?? []);
+    },
+    []
   );
 
   React.useEffect(() => {
@@ -140,13 +165,8 @@ export default function DesignUploadsPage() {
     };
   }, [page, pageSize, activeFilters, refreshKey]);
 
-  const runExport = async (scope: "selected" | "all") => {
-    setExportBusy(true);
-    try {
-      const exportRows =
-        scope === "selected"
-          ? selected
-          : (
+  const fetchAllForExport = async () =>
+    (
               await listDesignUploads({
                 page: 1, limit: EXPORT_CAP,
                 dateRange: activeFilters.dateRange,
@@ -154,18 +174,6 @@ export default function DesignUploadsPage() {
                 filters: { status: activeFilters.status, print_method: activeFilters.print_method },
               })
             ).rows;
-      if (!exportRows.length) {
-        toast.error("Nothing to export.");
-        return;
-      }
-      exportRowsToCsv(`design-uploads-${format(new Date(), "yyyy-MM-dd")}`, exportColumns, exportRows);
-      toast.success(`Exported ${exportRows.length} design${exportRows.length === 1 ? "" : "s"}.`);
-    } catch (error) {
-      toast.error(apiErrorMessage(error, "Couldn't export design uploads."));
-    } finally {
-      setExportBusy(false);
-    }
-  };
 
   const columns = React.useMemo<ColumnDef<DesignUploadRow>[]>(
     () => [
@@ -280,25 +288,14 @@ export default function DesignUploadsPage() {
             Artwork customers sent in — review it before it goes to production.
           </p>
         </div>
-        <DropdownMenu>
-          <DropdownMenuTrigger
-            disabled={exportBusy}
-            render={
-              <Button variant="outline">
-                {exportBusy ? <Loader2 className="size-4 animate-spin" /> : <Download className="size-4" />}
-                Export
-              </Button>
-            }
-          />
-          <DropdownMenuContent align="end" className="w-64">
-            <DropdownMenuItem disabled={!selected.length} onClick={() => runExport("selected")}>
-              Export {selected.length || ""} selected design{selected.length === 1 ? "" : "s"}
-            </DropdownMenuItem>
-            <DropdownMenuItem onClick={() => runExport("all")}>
-              Export all matching filters ({total})
-            </DropdownMenuItem>
-          </DropdownMenuContent>
-        </DropdownMenu>
+        <ExportMenu
+          filename="design-uploads"
+          columns={exportColumns}
+          selected={selected}
+          fetchAll={fetchAllForExport}
+          total={total}
+          noun="upload"
+        />
       </div>
 
       <div className="flex flex-wrap items-center gap-2">
@@ -322,10 +319,15 @@ export default function DesignUploadsPage() {
           <span className="text-sm font-medium">
             {selected.length} design{selected.length === 1 ? "" : "s"} selected
           </span>
-          <Button size="sm" variant="outline" disabled={exportBusy} onClick={() => runExport("selected")}>
-            {exportBusy ? <Loader2 className="size-4 animate-spin" /> : <Download className="size-4" />}
-            Export selected
-          </Button>
+          <ExportMenu
+            filename="design-uploads"
+            columns={exportColumns}
+            selected={selected}
+            fetchAll={fetchAllForExport}
+            total={total}
+            noun="upload"
+            size="sm"
+          />
           <button
             type="button"
             onClick={() => setClearKey((k) => k + 1)}
@@ -343,6 +345,8 @@ export default function DesignUploadsPage() {
         onSelectionChange={setSelected}
         clearSelectionKey={clearKey}
         onRowClick={setDetail}
+        columnFilterDefs={COLUMN_FILTERS}
+        serverColumnFilters={{ value: columnFilterValues, onChange: applyColumnFilters }}
         serverPagination={{
           pageIndex: page,
           pageCount,

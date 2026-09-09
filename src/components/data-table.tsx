@@ -4,6 +4,7 @@ import * as React from "react";
 import {
   type ColumnDef,
   type ColumnFiltersState,
+  type FilterFn,
   type SortingState,
   type VisibilityState,
   flexRender,
@@ -19,11 +20,16 @@ import {
   ChevronLeft,
   ChevronRight,
   ChevronsUpDown,
+  FilterX,
   Search,
   SlidersHorizontal,
 } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
+import {
+  MultiSelectFilter,
+  type MultiSelectOption,
+} from "@/components/multi-select-filter";
 import {
   DropdownMenu,
   DropdownMenuCheckboxItem,
@@ -63,6 +69,77 @@ function humanizeColumnId(id: string) {
 }
 
 export const PAGE_SIZE_OPTIONS = [10, 20, 50, 100] as const;
+
+/**
+ * Per-column filter descriptors, keyed by column id. A column absent from the
+ * map gets no filter control, which keeps the row from sprouting inputs under
+ * checkbox and action columns.
+ */
+export type ColumnFilterDef =
+  | { type: "text"; placeholder?: string }
+  | {
+      type: "select";
+      options: readonly string[] | MultiSelectOption[];
+      placeholder?: string;
+    };
+
+export interface ServerColumnFilters {
+  /** Active filters, column id → selected values (text filters hold one). */
+  value: Record<string, string[]>;
+  onChange: (next: Record<string, string[]>) => void;
+}
+
+/**
+ * Handles both control types with one function: a select passes an array and
+ * wants an exact match, a text box passes a string and wants "contains".
+ */
+const columnFilter: FilterFn<unknown> = (row, columnId, filterValue) => {
+  if (filterValue == null || filterValue === "") return true;
+  const raw = row.getValue(columnId);
+  const cell = raw == null ? "" : String(raw).toLowerCase();
+  if (Array.isArray(filterValue)) {
+    if (!filterValue.length) return true;
+    return filterValue.some((v) => String(v).toLowerCase() === cell);
+  }
+  return cell.includes(String(filterValue).toLowerCase());
+};
+
+/**
+ * Typing straight into a server-filtered table would fire a request per
+ * keystroke, so the text box keeps its own value and reports upward once the
+ * user pauses.
+ */
+function TextColumnFilter({
+  value,
+  placeholder,
+  onChange,
+}: {
+  value: string;
+  placeholder?: string;
+  onChange: (value: string) => void;
+}) {
+  const [draft, setDraft] = React.useState(value);
+
+  // Re-sync when the filter is cleared from outside (Clear filters button).
+  React.useEffect(() => setDraft(value), [value]);
+
+  React.useEffect(() => {
+    if (draft === value) return;
+    const id = setTimeout(() => onChange(draft), 350);
+    return () => clearTimeout(id);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [draft]);
+
+  return (
+    <Input
+      value={draft}
+      placeholder={placeholder ?? "Filter…"}
+      onChange={(e) => setDraft(e.target.value)}
+      onClick={(e) => e.stopPropagation()}
+      className="h-7 w-full min-w-24 bg-card px-2 text-xs"
+    />
+  );
+}
 
 interface ServerPagination {
   pageIndex: number;
@@ -111,6 +188,10 @@ interface DataTableProps<TData, TValue> {
   serverPagination?: ServerPagination;
   /** Pass to sort on the server instead of within the loaded page. */
   serverSort?: ServerSort;
+  /** Renders a filter control under each named column's header. */
+  columnFilterDefs?: Record<string, ColumnFilterDef>;
+  /** Pass to filter on the server instead of within the loaded page. */
+  serverColumnFilters?: ServerColumnFilters;
   /** Receives the currently selected rows, for bulk actions in the toolbar. */
   onSelectionChange?: (rows: TData[]) => void;
   /** Bump this to clear the selection after a bulk action completes. */
@@ -127,6 +208,8 @@ export function DataTable<TData, TValue>({
   toolbar,
   serverPagination,
   serverSort,
+  columnFilterDefs,
+  serverColumnFilters,
   loading = false,
   onSelectionChange,
   clearSelectionKey,
@@ -177,9 +260,17 @@ export function DataTable<TData, TValue>({
     serverSort.onSortChange(key, order);
   };
 
+  const [localColumnFilterValues, setLocalColumnFilterValues] = React.useState<
+    Record<string, string[]>
+  >({});
+
+  const columnFilterValues =
+    serverColumnFilters?.value ?? localColumnFilterValues;
+
   const table = useReactTable({
     data,
     columns,
+    defaultColumn: { filterFn: columnFilter as FilterFn<TData> },
     getCoreRowModel: getCoreRowModel(),
     ...(serverSort ? {} : { getSortedRowModel: getSortedRowModel() }),
     getFilteredRowModel: getFilteredRowModel(),
@@ -192,6 +283,47 @@ export function DataTable<TData, TValue>({
     initialState: { pagination: { pageSize: 10 } },
     state: { sorting: sortingState, columnFilters, columnVisibility, rowSelection },
   });
+
+  const setColumnFilterValue = React.useCallback(
+    (columnId: string, values: string[]) => {
+      if (serverColumnFilters) {
+        const next = { ...serverColumnFilters.value };
+        if (values.length) next[columnId] = values;
+        else delete next[columnId];
+        serverColumnFilters.onChange(next);
+        return;
+      }
+      setLocalColumnFilterValues((prev) => {
+        const next = { ...prev };
+        if (values.length) next[columnId] = values;
+        else delete next[columnId];
+        return next;
+      });
+      const def = columnFilterDefs?.[columnId];
+      const filterValue = !values.length
+        ? undefined
+        : def?.type === "text"
+          ? values[0]
+          : values;
+      table.getColumn(columnId)?.setFilterValue(filterValue);
+    },
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [serverColumnFilters, columnFilterDefs]
+  );
+
+  const activeColumnFilterCount = Object.keys(columnFilterValues).length;
+
+  const clearColumnFilters = React.useCallback(() => {
+    if (serverColumnFilters) {
+      serverColumnFilters.onChange({});
+      return;
+    }
+    setLocalColumnFilterValues({});
+    Object.keys(columnFilterDefs ?? {}).forEach((id) =>
+      table.getColumn(id)?.setFilterValue(undefined)
+    );
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [serverColumnFilters, columnFilterDefs]);
 
   // Keep the client-side table in step with the length selector.
   React.useEffect(() => {
@@ -234,6 +366,19 @@ export function DataTable<TData, TValue>({
           </div>
         )}
         {toolbar}
+        {activeColumnFilterCount > 0 && (
+          <Button
+            variant="ghost"
+            size="sm"
+            onClick={clearColumnFilters}
+            className="text-muted-foreground"
+          >
+            <FilterX className="size-4" />
+            <span className="hidden sm:inline">
+              Clear filters ({activeColumnFilterCount})
+            </span>
+          </Button>
+        )}
         <DropdownMenu>
           <DropdownMenuTrigger
             render={
@@ -314,6 +459,37 @@ export function DataTable<TData, TValue>({
                   })}
                 </TableRow>
               ))}
+              {columnFilterDefs && (
+                <TableRow className="hover:bg-transparent">
+                  {table.getVisibleLeafColumns().map((column) => {
+                    const def = columnFilterDefs[column.id];
+                    return (
+                      <TableHead
+                        key={`filter-${column.id}`}
+                        className="h-auto border-b bg-[#f7f7f7] px-2 pb-2 font-normal"
+                      >
+                        {!def ? null : def.type === "text" ? (
+                          <TextColumnFilter
+                            value={columnFilterValues[column.id]?.[0] ?? ""}
+                            placeholder={def.placeholder}
+                            onChange={(v) =>
+                              setColumnFilterValue(column.id, v ? [v] : [])
+                            }
+                          />
+                        ) : (
+                          <MultiSelectFilter
+                            label={def.placeholder ?? "All"}
+                            options={def.options}
+                            value={columnFilterValues[column.id] ?? []}
+                            onChange={(v) => setColumnFilterValue(column.id, v)}
+                            className="h-7 w-full min-w-24 justify-between px-2 text-xs font-normal"
+                          />
+                        )}
+                      </TableHead>
+                    );
+                  })}
+                </TableRow>
+              )}
             </TableHeader>
             <TableBody>
               {loading && data.length === 0 ? (

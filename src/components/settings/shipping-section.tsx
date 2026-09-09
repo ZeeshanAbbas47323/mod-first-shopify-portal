@@ -3,7 +3,7 @@
 import * as React from "react";
 import { type ColumnDef } from "@tanstack/react-table";
 import { format } from "date-fns";
-import { CalendarClock, Download, Eye, Loader2, Plus, Search, Trash2, X } from "lucide-react";
+import { CalendarClock, Eye, Loader2, Plus, Search, Trash2, X } from "lucide-react";
 import { useForm, Controller } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
@@ -24,12 +24,13 @@ import {
 import {
   Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
 } from "@/components/ui/select";
-import { DataTable } from "@/components/data-table";
+import { DataTable, type ColumnFilterDef } from "@/components/data-table";
 import { ConfirmDeleteDialog } from "@/components/confirm-delete-dialog";
 import { StatusBadge } from "@/components/status-badge";
 import { MultiSelectFilter } from "@/components/multi-select-filter";
 import { apiErrorMessage } from "@/lib/auth-api";
-import { exportRowsToCsv } from "@/lib/utils";
+import { exportRows as writeExport, type ExportFormat } from "@/lib/export";
+import { ExportFormatMenu } from "@/components/export-menu";
 import {
   listShipments,
   getShipmentById,
@@ -55,6 +56,12 @@ function statusTone(s?: string) {
   if (v === "FAILED") return "critical" as const;
   return "warning" as const;
 }
+
+/** Filter controls rendered under each column header. */
+const COLUMN_FILTERS: Record<string, ColumnFilterDef> = {
+  tracking_number: { type: "text", placeholder: "Tracking #" },
+  status: { type: "select", options: SHIPMENT_STATUSES, placeholder: "Any" },
+};
 
 export function ShippingSection() {
   const [rows, setRows] = React.useState<ShipmentRow[]>([]);
@@ -93,6 +100,25 @@ export function ShippingSection() {
     [debounced, statuses]
   );
 
+  /**
+   * The header filter row edits the same state as the toolbar above it, so
+   * a pick in one shows up in the other instead of silently competing.
+   */
+  const columnFilterValues = React.useMemo(() => {
+    const values: Record<string, string[]> = {};
+    if (search) values.tracking_number = [search];
+    if (statuses.length) values.status = statuses;
+    return values;
+  }, [search, statuses]);
+
+  const applyColumnFilters = React.useCallback(
+    (next: Record<string, string[]>) => {
+      setSearch(next.tracking_number?.[0] ?? "");
+      setStatuses(next.status ?? []);
+    },
+    []
+  );
+
   React.useEffect(() => {
     let cancelled = false;
     setLoading(true);
@@ -108,7 +134,7 @@ export function ShippingSection() {
     return () => { cancelled = true; };
   }, [page, pageSize, buildFilters, refreshKey]);
 
-  const runExport = async () => {
+  const runExport = async (fileFormat: ExportFormat) => {
     setExportBusy(true);
     try {
       const exportRows = (await listShipments({ page: 1, limit: EXPORT_CAP, filters: buildFilters() })).rows;
@@ -116,7 +142,7 @@ export function ShippingSection() {
         toast.error("Nothing to export.");
         return;
       }
-      exportRowsToCsv("shipments", [
+      await writeExport(fileFormat, "shipments", [
         { key: "shipment_number", label: "Shipment", value: (r: ShipmentRow) => r.shipment_number ?? `#${r.id}` },
         { key: "order_id", label: "Order", value: (r: ShipmentRow) => (r.order_id ? `#${r.order_id}` : "") },
         { key: "service_name", label: "Service", value: (r: ShipmentRow) => r.service_name ?? "" },
@@ -241,10 +267,7 @@ export function ShippingSection() {
           />
         </div>
         <MultiSelectFilter label="Status" options={SHIPMENT_STATUSES} value={statuses} onChange={setStatuses} />
-        <Button variant="outline" onClick={runExport} disabled={exportBusy}>
-          {exportBusy ? <Loader2 className="size-4 animate-spin" /> : <Download className="size-4" />}
-          Export
-        </Button>
+        <ExportFormatMenu onSelect={runExport} busy={exportBusy} />
         <Button className="ml-auto" onClick={() => setCreateOpen(true)}>
           <Plus className="size-4" /> Create shipment
         </Button>
@@ -261,6 +284,8 @@ export function ShippingSection() {
         data={rows}
         loading={loading}
         onRowClick={openDetail}
+        columnFilterDefs={COLUMN_FILTERS}
+        serverColumnFilters={{ value: columnFilterValues, onChange: applyColumnFilters }}
         serverPagination={{
           pageIndex: page,
           pageCount,

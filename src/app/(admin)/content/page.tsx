@@ -3,7 +3,7 @@
 import * as React from "react";
 import { type ColumnDef } from "@tanstack/react-table";
 import { format } from "date-fns";
-import { Download, Loader2, Plus, Search } from "lucide-react";
+import { Loader2, Plus, Search } from "lucide-react";
 import { useForm, Controller } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
@@ -32,17 +32,14 @@ import {
 } from "@/components/ui/select";
 import { MultiSelectFilter } from "@/components/multi-select-filter";
 import { SummaryStatStrip, type SummaryTile } from "@/components/summary-stat-strip";
-import {
-  DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger,
-} from "@/components/ui/dropdown-menu";
 import { Textarea } from "@/components/ui/textarea";
-import { DataTable } from "@/components/data-table";
+import { DataTable, type ColumnFilterDef } from "@/components/data-table";
+import { ExportMenu } from "@/components/export-menu";
 import { DateRangePicker } from "@/components/date-range-picker";
 import { MediaUpload } from "@/components/media-upload";
 import { StatusBadge } from "@/components/status-badge";
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { apiErrorMessage } from "@/lib/auth-api";
-import { exportRowsToCsv } from "@/lib/utils";
 import {
   BLOG_STATUSES,
   createBlog,
@@ -58,6 +55,13 @@ import { PopupsTab } from "@/components/content/popups-tab";
 const DEFAULT_PAGE_SIZE = 10;
 const EXPORT_CAP = 5000;
 const EMPTY_SUMMARY: BlogsSummary = { total_posts: 0, published: 0, draft: 0, archived: 0 };
+
+/** Filter controls rendered under each column header. */
+const COLUMN_FILTERS: Record<string, ColumnFilterDef> = {
+  title: { type: "text", placeholder: "Search titles" },
+  category: { type: "text", placeholder: "Category" },
+  status: { type: "select", options: BLOG_STATUSES, placeholder: "Any" },
+};
 
 const exportColumns = [
   { key: "title", label: "Post", value: (r: BlogRow) => r.title },
@@ -172,7 +176,6 @@ export default function ContentPage() {
 
   const [selected, setSelected] = React.useState<BlogRow[]>([]);
   const [clearKey, setClearKey] = React.useState(0);
-  const [exportBusy, setExportBusy] = React.useState(false);
   const [summary, setSummary] = React.useState<BlogsSummary>(EMPTY_SUMMARY);
   const [summaryLoading, setSummaryLoading] = React.useState(true);
 
@@ -202,6 +205,27 @@ export default function ContentPage() {
       status: statuses.length ? statuses : undefined,
     }),
     [dateRange, debounced, statuses]
+  );
+
+  /**
+   * The header filter row edits the same state as the filter bar above it,
+   * so a pick in one shows up in the other instead of silently competing.
+   */
+  const columnFilterValues = React.useMemo(() => {
+    const values: Record<string, string[]> = {};
+    if (search) values.title = [search];
+    if (category) values.category = [category];
+    if (statuses.length) values.status = statuses;
+    return values;
+  }, [search, category, statuses]);
+
+  const applyColumnFilters = React.useCallback(
+    (next: Record<string, string[]>) => {
+      setSearch(next.title?.[0] ?? "");
+      setCategory(next.category?.[0] ?? "");
+      setStatuses(next.status ?? []);
+    },
+    []
   );
 
   React.useEffect(() => {
@@ -241,30 +265,13 @@ export default function ContentPage() {
     return () => { cancelled = true; };
   }, [activeTab, activeFilters]);
 
-  const runExport = async (scope: "selected" | "all") => {
-    setExportBusy(true);
-    try {
-      const exportRows =
-        scope === "selected"
-          ? selected
-          : (
+  const fetchAllForExport = async () =>
+    (
               await listBlogs({
                 page: 1, limit: EXPORT_CAP, dateRange: activeFilters.dateRange,
                 filters: { title: activeFilters.title, category: activeFilters.category, status: activeFilters.status },
               })
             ).rows;
-      if (!exportRows.length) {
-        toast.error("Nothing to export.");
-        return;
-      }
-      exportRowsToCsv(`blog-posts-${format(new Date(), "yyyy-MM-dd")}`, exportColumns, exportRows);
-      toast.success(`Exported ${exportRows.length} post${exportRows.length === 1 ? "" : "s"}.`);
-    } catch (error) {
-      toast.error(apiErrorMessage(error, "Couldn't export blog posts."));
-    } finally {
-      setExportBusy(false);
-    }
-  };
 
   const tiles: SummaryTile[] = [
     { label: "Total posts", value: summary.total_posts.toLocaleString("en-US") },
@@ -298,25 +305,14 @@ export default function ContentPage() {
       <div className="flex flex-wrap items-center justify-between gap-3">
         <div />
         <div className="flex gap-2">
-          <DropdownMenu>
-            <DropdownMenuTrigger
-              disabled={exportBusy}
-              render={
-                <Button variant="outline">
-                  {exportBusy ? <Loader2 className="size-4 animate-spin" /> : <Download className="size-4" />}
-                  Export
-                </Button>
-              }
-            />
-            <DropdownMenuContent align="end" className="w-64">
-              <DropdownMenuItem disabled={!selected.length} onClick={() => runExport("selected")}>
-                Export {selected.length || ""} selected
-              </DropdownMenuItem>
-              <DropdownMenuItem onClick={() => runExport("all")}>
-                Export all matching filters ({total})
-              </DropdownMenuItem>
-            </DropdownMenuContent>
-          </DropdownMenu>
+          <ExportMenu
+            filename="blog-posts"
+            columns={exportColumns}
+            selected={selected}
+            fetchAll={fetchAllForExport}
+            total={total}
+            noun="post"
+          />
           <Button
             onClick={() => {
               setEditing(null);
@@ -383,6 +379,8 @@ export default function ContentPage() {
           setEditing(row);
           setDialogOpen(true);
         }}
+        columnFilterDefs={COLUMN_FILTERS}
+        serverColumnFilters={{ value: columnFilterValues, onChange: applyColumnFilters }}
         serverPagination={{
           pageIndex: page,
           pageCount,

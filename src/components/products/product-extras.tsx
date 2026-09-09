@@ -26,6 +26,7 @@ import {
 import { ConfirmDeleteDialog } from "@/components/confirm-delete-dialog";
 import { apiErrorMessage } from "@/lib/auth-api";
 import { uploadImages } from "@/lib/upload-api";
+import { moveRow } from "@/lib/sort-order";
 import { cn, imgUrl } from "@/lib/utils";
 import {
   createProductDescription,
@@ -38,27 +39,10 @@ import {
   updateProductDescription,
   updateProductFaq,
   updateProductImage,
-  updateSortOrder,
   type ProductDescriptionRow,
   type ProductFaqDetailRow,
   type ProductImageDetailRow,
 } from "@/lib/admin-api";
-
-/** Swap sort_order with the neighbour, then reload. */
-async function swapOrder(
-  table: "productImage" | "productDescription" | "productFaq",
-  rows: { id: number | string; sort_order?: number }[],
-  index: number,
-  dir: "up" | "down"
-) {
-  const target = index + (dir === "up" ? -1 : 1);
-  if (target < 0 || target >= rows.length) return false;
-  await updateSortOrder(table, [
-    { id: rows[index].id, sort_order: rows[target].sort_order ?? target },
-    { id: rows[target].id, sort_order: rows[index].sort_order ?? index },
-  ]);
-  return true;
-}
 
 function MoveButtons({
   index,
@@ -172,7 +156,7 @@ function GallerySection({ productId }: { productId: number | string }) {
 
   const move = async (index: number, dir: "up" | "down") => {
     try {
-      if (await swapOrder("productImage", rows, index, dir)) reload();
+      if (await moveRow("productImage", rows, index, dir)) reload();
     } catch (e) {
       toast.error(apiErrorMessage(e, "Couldn't reorder the images."));
     }
@@ -335,7 +319,7 @@ function DescriptionsSection({ productId }: { productId: number | string }) {
 
   const move = async (index: number, dir: "up" | "down") => {
     try {
-      if (await swapOrder("productDescription", rows, index, dir)) reload();
+      if (await moveRow("productDescription", rows, index, dir)) reload();
     } catch (e) {
       toast.error(apiErrorMessage(e, "Couldn't reorder the blocks."));
     }
@@ -582,7 +566,7 @@ function FaqsSection({ productId }: { productId: number | string }) {
 
   const move = async (index: number, dir: "up" | "down") => {
     try {
-      if (await swapOrder("productFaq", rows, index, dir)) reload();
+      if (await moveRow("productFaq", rows, index, dir)) reload();
     } catch (e) {
       toast.error(apiErrorMessage(e, "Couldn't reorder the FAQs."));
     }

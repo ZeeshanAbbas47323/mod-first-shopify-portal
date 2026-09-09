@@ -17,7 +17,7 @@ import {
   Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
 } from "@/components/ui/select";
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { DataTable } from "@/components/data-table";
+import { DataTable, type ColumnFilterDef } from "@/components/data-table";
 import { ConfirmDeleteDialog } from "@/components/confirm-delete-dialog";
 import { StatusBadge } from "@/components/status-badge";
 import { apiErrorMessage } from "@/lib/auth-api";
@@ -34,6 +34,11 @@ import {
 } from "@/lib/pos-api";
 
 const DEFAULT_PAGE_SIZE = 15;
+
+/** Filter controls rendered under each column header. */
+const COLUMN_FILTERS: Record<string, ColumnFilterDef> = {
+  status: { type: "select", options: [{ value: "online", label: "Online" }, { value: "offline", label: "Offline" }], placeholder: "Any" },
+};
 
 export default function TerminalsPage() {
   const [tab, setTab] = React.useState<"readers" | "locations">("readers");
@@ -82,6 +87,25 @@ function ReadersTab({ branches }: { branches: BranchRow[] }) {
   const [pageCount, setPageCount] = React.useState(1);
   const [total, setTotal] = React.useState(0);
   const [status, setStatus] = React.useState("all");
+
+  /**
+   * The header filter row edits the same state as the toolbar above it, so
+   * a pick in one shows up in the other instead of silently competing.
+   */
+  const columnFilterValues = React.useMemo(() => {
+    const values: Record<string, string[]> = {};
+    if (status !== "all") values.status = [status];
+    return values;
+  }, [status]);
+
+  const applyColumnFilters = React.useCallback(
+    (next: Record<string, string[]>) => {
+      // Picking every option says nothing, same as picking none.
+      const picked = next.status ?? [];
+      setStatus(picked.length === 1 ? picked[0] : "all");
+    },
+    []
+  );
   const [dialogOpen, setDialogOpen] = React.useState(false);
   const [deleteTarget, setDeleteTarget] = React.useState<TerminalReaderRow | null>(null);
   const [deleting, setDeleting] = React.useState(false);
@@ -238,6 +262,8 @@ function ReadersTab({ branches }: { branches: BranchRow[] }) {
         columns={columns}
         data={rows}
         loading={loading}
+        columnFilterDefs={COLUMN_FILTERS}
+        serverColumnFilters={{ value: columnFilterValues, onChange: applyColumnFilters }}
         serverPagination={{
           pageIndex: page,
           pageCount,

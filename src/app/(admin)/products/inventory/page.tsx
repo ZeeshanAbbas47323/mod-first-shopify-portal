@@ -3,7 +3,7 @@
 import * as React from "react";
 import { type ColumnDef } from "@tanstack/react-table";
 import { format } from "date-fns";
-import { AlertTriangle, ArrowDown, ArrowUp, Download, Loader2, PackageX, RefreshCw, Search } from "lucide-react";
+import { AlertTriangle, ArrowDown, ArrowUp, PackageX, RefreshCw, Search } from "lucide-react";
 import { toast } from "sonner";
 
 import { Button } from "@/components/ui/button";
@@ -16,7 +16,9 @@ import { DataTable } from "@/components/data-table";
 import { StatusBadge, type BadgeTone } from "@/components/status-badge";
 import { StockDialog } from "@/components/products/stock-dialog";
 import { apiErrorMessage } from "@/lib/auth-api";
-import { cn, exportRowsToCsv } from "@/lib/utils";
+import { cn } from "@/lib/utils";
+import { exportRows as writeExport, type ExportFormat } from "@/lib/export";
+import { ExportFormatMenu } from "@/components/export-menu";
 import {
   fetchAllProductCategories,
   getInventoryReport,
@@ -413,7 +415,7 @@ export default function InventoryPage() {
   );
 
   const [exportBusy, setExportBusy] = React.useState(false);
-  const runExport = () => {
+  const runExport = async (fileFormat: ExportFormat) => {
     setExportBusy(true);
     try {
       if (tab === "stock") {
@@ -421,7 +423,8 @@ export default function InventoryPage() {
           toast.error("Nothing to export.");
           return;
         }
-        exportRowsToCsv(
+        await writeExport(
+          fileFormat,
           `inventory-stock-${format(new Date(), "yyyy-MM-dd")}`,
           [
             { key: "name", label: "Product", value: (r: InventoryReportRow) => r.name ?? r.title ?? "" },
@@ -440,7 +443,8 @@ export default function InventoryPage() {
           toast.error("Nothing to export on this page — switch pages or export stock levels instead.");
           return;
         }
-        exportRowsToCsv(
+        await writeExport(
+          fileFormat,
           `inventory-activity-${format(new Date(), "yyyy-MM-dd")}`,
           [
             { key: "created_at", label: "When", value: (r: InventoryLogRow) => r.created_at ?? "" },
@@ -472,10 +476,7 @@ export default function InventoryPage() {
           </p>
         </div>
         <div className="flex items-center gap-2">
-          <Button variant="outline" onClick={runExport} disabled={exportBusy}>
-            {exportBusy ? <Loader2 className="size-4 animate-spin" /> : <Download className="size-4" />}
-            Export
-          </Button>
+          <ExportFormatMenu onSelect={runExport} busy={exportBusy} />
           <Button
             variant="outline"
             onClick={() => setRefreshKey((k) => k + 1)}

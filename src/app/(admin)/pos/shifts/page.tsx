@@ -15,7 +15,7 @@ import {
 import {
   Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
 } from "@/components/ui/select";
-import { DataTable } from "@/components/data-table";
+import { DataTable, type ColumnFilterDef } from "@/components/data-table";
 import { DateRangePicker } from "@/components/date-range-picker";
 import { StatusBadge, type BadgeTone } from "@/components/status-badge";
 import { apiErrorMessage } from "@/lib/auth-api";
@@ -65,6 +65,12 @@ const cashDiff = (s: ShiftRow): number | null => {
   return Number(s.counted_cash) - expected;
 };
 
+/** Filter controls rendered under each column header. */
+const COLUMN_FILTERS: Record<string, ColumnFilterDef> = {
+  shift_code: { type: "text", placeholder: "Search shifts" },
+  status: { type: "select", options: SHIFT_STATUSES, placeholder: "Any" },
+};
+
 export default function PosShiftsPage() {
   const [current, setCurrent] = React.useState<ShiftRow | null>(null);
   const [currentLoading, setCurrentLoading] = React.useState(true);
@@ -83,6 +89,27 @@ export default function PosShiftsPage() {
   const [refreshKey, setRefreshKey] = React.useState(0);
 
   const [detail, setDetail] = React.useState<ShiftRow | null>(null);
+
+  /**
+   * The header filter row edits the same state as the toolbar above it, so
+   * a pick in one shows up in the other instead of silently competing.
+   */
+  const columnFilterValues = React.useMemo(() => {
+    const values: Record<string, string[]> = {};
+    if (search) values.shift_code = [search];
+    if (status !== "all") values.status = [status];
+    return values;
+  }, [search, status]);
+
+  const applyColumnFilters = React.useCallback(
+    (next: Record<string, string[]>) => {
+      setSearch(next.shift_code?.[0] ?? "");
+      // Picking every option says nothing, same as picking none.
+      const picked = next.status ?? [];
+      setStatus(picked.length === 1 ? picked[0] : "all");
+    },
+    []
+  );
 
   React.useEffect(() => {
     setCurrentLoading(true);
@@ -292,6 +319,8 @@ export default function PosShiftsPage() {
             .then(setDetail)
             .catch(() => {});
         }}
+        columnFilterDefs={COLUMN_FILTERS}
+        serverColumnFilters={{ value: columnFilterValues, onChange: applyColumnFilters }}
         serverPagination={{
           pageIndex: page,
           pageCount,

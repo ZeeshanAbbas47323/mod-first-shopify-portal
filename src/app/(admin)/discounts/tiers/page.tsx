@@ -3,7 +3,7 @@
 import * as React from "react";
 import { type ColumnDef } from "@tanstack/react-table";
 import { format } from "date-fns";
-import { Download, Loader2, Plus, Search } from "lucide-react";
+import { Loader2, Plus, Search } from "lucide-react";
 import type { DateRange } from "react-day-picker";
 import { toast } from "sonner";
 
@@ -20,14 +20,11 @@ import {
 } from "@/components/ui/select";
 import { MultiSelectFilter } from "@/components/multi-select-filter";
 import { SummaryStatStrip, type SummaryTile } from "@/components/summary-stat-strip";
-import {
-  DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger,
-} from "@/components/ui/dropdown-menu";
-import { DataTable } from "@/components/data-table";
+import { DataTable, type ColumnFilterDef } from "@/components/data-table";
+import { ExportMenu } from "@/components/export-menu";
 import { DateRangePicker } from "@/components/date-range-picker";
 import { StatusBadge, StatusToggle } from "@/components/status-badge";
 import { apiErrorMessage } from "@/lib/auth-api";
-import { exportRowsToCsv } from "@/lib/utils";
 import {
   DISCOUNT_TIER_TYPES,
   DISCOUNT_TIER_TYPE_LABELS,
@@ -43,6 +40,13 @@ const DEFAULT_PAGE_SIZE = 20;
 const EXPORT_CAP = 5000;
 const STATUS_OPTIONS = ["active", "inactive"] as const;
 const EMPTY_SUMMARY: DiscountTiersSummary = { total_tiers: 0, active: 0, inactive: 0 };
+
+/** Filter controls rendered under each column header. */
+const COLUMN_FILTERS: Record<string, ColumnFilterDef> = {
+  name: { type: "text", placeholder: "Search names" },
+  discount_type: { type: "select", options: DISCOUNT_TIER_TYPES, placeholder: "Any" },
+  status: { type: "select", options: STATUS_OPTIONS, placeholder: "Any" },
+};
 
 const exportColumns = [
   { key: "name", label: "Tier", value: (r: DiscountTierRow) => r.name },
@@ -71,7 +75,6 @@ export default function DiscountTiersPage() {
 
   const [selected, setSelected] = React.useState<DiscountTierRow[]>([]);
   const [clearKey, setClearKey] = React.useState(0);
-  const [exportBusy, setExportBusy] = React.useState(false);
   const [summary, setSummary] = React.useState<DiscountTiersSummary>(EMPTY_SUMMARY);
   const [summaryLoading, setSummaryLoading] = React.useState(true);
 
@@ -102,6 +105,27 @@ export default function DiscountTiersPage() {
       is_active: statuses.length === 1 ? statuses[0] === "active" : undefined,
     }),
     [dateRange, debounced, types, statuses]
+  );
+
+  /**
+   * The header filter row edits the same state as the filter bar above it,
+   * so a pick in one shows up in the other instead of silently competing.
+   */
+  const columnFilterValues = React.useMemo(() => {
+    const values: Record<string, string[]> = {};
+    if (search) values.name = [search];
+    if (types.length) values.discount_type = types;
+    if (statuses.length) values.status = statuses;
+    return values;
+  }, [search, types, statuses]);
+
+  const applyColumnFilters = React.useCallback(
+    (next: Record<string, string[]>) => {
+      setSearch(next.name?.[0] ?? "");
+      setTypes(next.discount_type ?? []);
+      setStatuses(next.status ?? []);
+    },
+    []
   );
 
   React.useEffect(() => {
@@ -140,30 +164,13 @@ export default function DiscountTiersPage() {
     return () => { cancelled = true; };
   }, [activeFilters]);
 
-  const runExport = async (scope: "selected" | "all") => {
-    setExportBusy(true);
-    try {
-      const exportRows =
-        scope === "selected"
-          ? selected
-          : (
+  const fetchAllForExport = async () =>
+    (
               await listDiscountTiers({
                 page: 1, limit: EXPORT_CAP, dateRange: activeFilters.dateRange,
                 filters: { name: activeFilters.name, discount_type: activeFilters.discount_type, is_active: activeFilters.is_active },
               })
             ).rows;
-      if (!exportRows.length) {
-        toast.error("Nothing to export.");
-        return;
-      }
-      exportRowsToCsv(`discount-tiers-${format(new Date(), "yyyy-MM-dd")}`, exportColumns, exportRows);
-      toast.success(`Exported ${exportRows.length} tier${exportRows.length === 1 ? "" : "s"}.`);
-    } catch (error) {
-      toast.error(apiErrorMessage(error, "Couldn't export discount tiers."));
-    } finally {
-      setExportBusy(false);
-    }
-  };
 
   // There is no common/update-status table for tiers, so the toggle updates
   // the record itself.
@@ -271,25 +278,14 @@ export default function DiscountTiersPage() {
           </p>
         </div>
         <div className="flex gap-2">
-          <DropdownMenu>
-            <DropdownMenuTrigger
-              disabled={exportBusy}
-              render={
-                <Button variant="outline">
-                  {exportBusy ? <Loader2 className="size-4 animate-spin" /> : <Download className="size-4" />}
-                  Export
-                </Button>
-              }
-            />
-            <DropdownMenuContent align="end" className="w-64">
-              <DropdownMenuItem disabled={!selected.length} onClick={() => runExport("selected")}>
-                Export {selected.length || ""} selected
-              </DropdownMenuItem>
-              <DropdownMenuItem onClick={() => runExport("all")}>
-                Export all matching filters ({total})
-              </DropdownMenuItem>
-            </DropdownMenuContent>
-          </DropdownMenu>
+          <ExportMenu
+            filename="discount-tiers"
+            columns={exportColumns}
+            selected={selected}
+            fetchAll={fetchAllForExport}
+            total={total}
+            noun="tier"
+          />
           <Button
             onClick={() => {
               setEditing(null);
@@ -344,6 +340,8 @@ export default function DiscountTiersPage() {
           setEditing(row);
           setDialogOpen(true);
         }}
+        columnFilterDefs={COLUMN_FILTERS}
+        serverColumnFilters={{ value: columnFilterValues, onChange: applyColumnFilters }}
         serverPagination={{
           pageIndex: page,
           pageCount,

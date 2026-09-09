@@ -797,8 +797,8 @@ export async function updateRecordStatus(
 // ─── Generic sort order ────────────────────────────────────────────────────────
 
 export const SORT_ORDER_TABLES = [
-  "menu", "category", "generalFaq", "productDescription", "productImage",
-  "productFaq", "homeBanner", "homeSection", "homeSectionItem",
+  "menu", "category", "productCategory", "generalFaq", "productDescription",
+  "productImage", "productFaq", "homeBanner", "homeSection", "homeSectionItem",
   "footerSection", "footerLink",
 ] as const;
 export type SortOrderTable = (typeof SORT_ORDER_TABLES)[number];

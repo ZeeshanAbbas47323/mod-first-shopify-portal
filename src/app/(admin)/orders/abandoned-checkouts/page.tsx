@@ -3,20 +3,16 @@
 import * as React from "react";
 import { type ColumnDef } from "@tanstack/react-table";
 import { format } from "date-fns";
-import { Download, Loader2, Mail, Phone } from "lucide-react";
+import { Mail, Phone } from "lucide-react";
 import type { DateRange } from "react-day-picker";
 import { toast } from "sonner";
 
-import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
 import { DataTable } from "@/components/data-table";
+import { ExportMenu } from "@/components/export-menu";
 import { SummaryStatStrip, type SummaryTile } from "@/components/summary-stat-strip";
 import { DateRangePicker } from "@/components/date-range-picker";
-import {
-  DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger,
-} from "@/components/ui/dropdown-menu";
 import { apiErrorMessage } from "@/lib/auth-api";
-import { exportRowsToCsv } from "@/lib/utils";
 import {
   listAbandonedCarts, getAbandonedCartsSummary,
   type AbandonedCartRow, type AbandonedCartsSummary,
@@ -139,7 +135,6 @@ export default function AbandonedCheckoutsPage() {
   const [dateRange, setDateRange] = React.useState<DateRange | undefined>();
   const [selected, setSelected] = React.useState<AbandonedCartRow[]>([]);
   const [clearKey, setClearKey] = React.useState(0);
-  const [exportBusy, setExportBusy] = React.useState(false);
   const [summary, setSummary] = React.useState<AbandonedCartsSummary>(EMPTY_SUMMARY);
   const [summaryLoading, setSummaryLoading] = React.useState(true);
 
@@ -178,25 +173,8 @@ export default function AbandonedCheckoutsPage() {
     return () => { cancelled = true; };
   }, [dateRange]);
 
-  const runExport = async (scope: "selected" | "all") => {
-    setExportBusy(true);
-    try {
-      const exportRows =
-        scope === "selected"
-          ? selected
-          : (await listAbandonedCarts({ page: 1, limit: EXPORT_CAP, dateRange })).rows;
-      if (!exportRows.length) {
-        toast.error("Nothing to export.");
-        return;
-      }
-      exportRowsToCsv(`abandoned-checkouts-${format(new Date(), "yyyy-MM-dd")}`, exportColumns, exportRows);
-      toast.success(`Exported ${exportRows.length} checkout${exportRows.length === 1 ? "" : "s"}.`);
-    } catch (error) {
-      toast.error(apiErrorMessage(error, "Couldn't export abandoned checkouts."));
-    } finally {
-      setExportBusy(false);
-    }
-  };
+  const fetchAllForExport = async () =>
+    (await listAbandonedCarts({ page: 1, limit: EXPORT_CAP, dateRange })).rows;
 
   const tiles: SummaryTile[] = [
     { label: "Abandoned checkouts", value: summary.abandoned_carts.toLocaleString("en-US") },
@@ -214,25 +192,14 @@ export default function AbandonedCheckoutsPage() {
             Customers who filled a cart and haven&apos;t ordered since.
           </p>
         </div>
-        <DropdownMenu>
-          <DropdownMenuTrigger
-            disabled={exportBusy}
-            render={
-              <Button variant="outline">
-                {exportBusy ? <Loader2 className="size-4 animate-spin" /> : <Download className="size-4" />}
-                Export
-              </Button>
-            }
-          />
-          <DropdownMenuContent align="end" className="w-64">
-            <DropdownMenuItem disabled={!selected.length} onClick={() => runExport("selected")}>
-              Export {selected.length || ""} selected checkout{selected.length === 1 ? "" : "s"}
-            </DropdownMenuItem>
-            <DropdownMenuItem onClick={() => runExport("all")}>
-              Export all matching filters ({total})
-            </DropdownMenuItem>
-          </DropdownMenuContent>
-        </DropdownMenu>
+        <ExportMenu
+          filename="abandoned-checkouts"
+          columns={exportColumns}
+          selected={selected}
+          fetchAll={fetchAllForExport}
+          total={total}
+          noun="checkout"
+        />
       </div>
 
       <SummaryStatStrip tiles={tiles} loading={summaryLoading} />
@@ -246,10 +213,15 @@ export default function AbandonedCheckoutsPage() {
           <span className="text-sm font-medium">
             {selected.length} checkout{selected.length === 1 ? "" : "s"} selected
           </span>
-          <Button size="sm" variant="outline" disabled={exportBusy} onClick={() => runExport("selected")}>
-            {exportBusy ? <Loader2 className="size-4 animate-spin" /> : <Download className="size-4" />}
-            Export selected
-          </Button>
+          <ExportMenu
+            filename="abandoned-checkouts"
+            columns={exportColumns}
+            selected={selected}
+            fetchAll={fetchAllForExport}
+            total={total}
+            noun="checkout"
+            size="sm"
+          />
           <button
             type="button"
             onClick={() => setClearKey((k) => k + 1)}

@@ -3,7 +3,7 @@
 import * as React from "react";
 import { type ColumnDef } from "@tanstack/react-table";
 import { format } from "date-fns";
-import { Download, Loader2, Plus, Search, Trash2 } from "lucide-react";
+import { Loader2, Plus, Search, Trash2 } from "lucide-react";
 import { useForm, Controller } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
@@ -29,10 +29,11 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { DataTable } from "@/components/data-table";
+import { DataTable, type ColumnFilterDef } from "@/components/data-table";
 import { StatusToggle } from "@/components/status-badge";
 import { apiErrorMessage } from "@/lib/auth-api";
-import { exportRowsToCsv } from "@/lib/utils";
+import { exportRows as writeExport, type ExportFormat } from "@/lib/export";
+import { ExportFormatMenu } from "@/components/export-menu";
 import { createSize, deleteRecord, listSizes, updateRecordStatus, updateSize, type SizeRow } from "@/lib/admin-api";
 
 const DEFAULT_PAGE_SIZE = 10;
@@ -84,6 +85,12 @@ function getColumns(
   ];
 }
 
+/** Filter controls rendered under each column header. */
+const COLUMN_FILTERS: Record<string, ColumnFilterDef> = {
+  display_name: { type: "text", placeholder: "Search names" },
+  status: { type: "select", options: [{ value: "active", label: "Active" }, { value: "inactive", label: "Inactive" }], placeholder: "Any" },
+};
+
 export function SizesSection() {
   const [rows, setRows] = React.useState<SizeRow[]>([]);
   const [loading, setLoading] = React.useState(true);
@@ -117,6 +124,26 @@ export function SizesSection() {
     [debouncedSearch, status]
   );
 
+  /**
+   * The header filter row edits the same state as the toolbar above it, so
+   * a pick in one shows up in the other instead of silently competing.
+   */
+  const columnFilterValues = React.useMemo(() => {
+    const values: Record<string, string[]> = {};
+    if (search) values.display_name = [search];
+    if (status !== "all") values.status = [status];
+    return values;
+  }, [search, status]);
+
+  const applyColumnFilters = React.useCallback(
+    (next: Record<string, string[]>) => {
+      setSearch(next.display_name?.[0] ?? "");
+      const picked = next.status ?? [];
+      setStatus(picked.length === 1 ? picked[0] : "all");
+    },
+    []
+  );
+
   React.useEffect(() => {
     let cancelled = false;
     setLoading(true);
@@ -142,7 +169,7 @@ export function SizesSection() {
     };
   }, [page, pageSize, buildFilters, refreshKey]);
 
-  const runExport = async () => {
+  const runExport = async (fileFormat: ExportFormat) => {
     setExportBusy(true);
     try {
       const exportRows = (await listSizes({ page: 1, limit: EXPORT_CAP, filters: buildFilters() })).rows;
@@ -150,7 +177,7 @@ export function SizesSection() {
         toast.error("Nothing to export.");
         return;
       }
-      exportRowsToCsv("sizes", [
+      await writeExport(fileFormat, "sizes", [
         { key: "name", label: "Size", value: (r: SizeRow) => r.name ?? "" },
         { key: "display_name", label: "Display name", value: (r: SizeRow) => r.display_name ?? "" },
         { key: "is_active", label: "Active", value: (r: SizeRow) => (r.is_active === false ? "No" : "Yes") },
@@ -196,10 +223,7 @@ export function SizesSection() {
             <SelectItem value="inactive">Inactive</SelectItem>
           </SelectContent>
         </Select>
-        <Button variant="outline" onClick={runExport} disabled={exportBusy}>
-          {exportBusy ? <Loader2 className="size-4 animate-spin" /> : <Download className="size-4" />}
-          Export
-        </Button>
+        <ExportFormatMenu onSelect={runExport} busy={exportBusy} />
         <Button className="ml-auto" onClick={() => { setEditing(null); setDialogOpen(true); }}>
           <Plus className="size-4" />
           Add size
@@ -218,6 +242,8 @@ export function SizesSection() {
         data={rows}
         loading={loading}
         onRowClick={(row) => { setEditing(row); setDialogOpen(true); }}
+        columnFilterDefs={COLUMN_FILTERS}
+        serverColumnFilters={{ value: columnFilterValues, onChange: applyColumnFilters }}
         serverPagination={{
           pageIndex: page,
           pageCount,

@@ -3,17 +3,17 @@
 import * as React from "react";
 import { type ColumnDef } from "@tanstack/react-table";
 import { format } from "date-fns";
-import { Download, Loader2, Search } from "lucide-react";
+import { Search } from "lucide-react";
 import type { DateRange } from "react-day-picker";
 import { toast } from "sonner";
 
-import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { DataTable } from "@/components/data-table";
+import { DataTable, type ColumnFilterDef } from "@/components/data-table";
 import { DateRangePicker } from "@/components/date-range-picker";
 import { StatusBadge, type BadgeTone } from "@/components/status-badge";
 import { apiErrorMessage } from "@/lib/auth-api";
-import { exportRowsToCsv } from "@/lib/utils";
+import { exportRows as writeExport, type ExportFormat } from "@/lib/export";
+import { ExportFormatMenu } from "@/components/export-menu";
 import { listActivityLogs, type ActivityLogRow } from "@/lib/admin-api";
 
 const DEFAULT_PAGE_SIZE = 25;
@@ -42,6 +42,12 @@ const actorName = (row: ActivityLogRow) =>
   row.user?.full_name ??
   row.user?.name ??
   (row.performed_by != null ? `User #${row.performed_by}` : "System");
+
+/** Filter controls rendered under each column header. */
+const COLUMN_FILTERS: Record<string, ColumnFilterDef> = {
+  action: { type: "text", placeholder: "Action" },
+  entity_type: { type: "text", placeholder: "Entity" },
+};
 
 export function ActivityLogSection() {
   const [rows, setRows] = React.useState<ActivityLogRow[]>([]);
@@ -76,6 +82,25 @@ export function ActivityLogSection() {
     [debounced]
   );
 
+  /**
+   * The header filter row edits the same state as the toolbar above it, so
+   * a pick in one shows up in the other instead of silently competing.
+   */
+  const columnFilterValues = React.useMemo(() => {
+    const values: Record<string, string[]> = {};
+    if (action) values.action = [action];
+    if (entityType) values.entity_type = [entityType];
+    return values;
+  }, [action, entityType]);
+
+  const applyColumnFilters = React.useCallback(
+    (next: Record<string, string[]>) => {
+      setAction(next.action?.[0] ?? "");
+      setEntityType(next.entity_type?.[0] ?? "");
+    },
+    []
+  );
+
   React.useEffect(() => {
     let cancelled = false;
     setLoading(true);
@@ -102,7 +127,7 @@ export function ActivityLogSection() {
     };
   }, [page, pageSize, buildFilters, dateRange]);
 
-  const runExport = async () => {
+  const runExport = async (fileFormat: ExportFormat) => {
     setExportBusy(true);
     try {
       const exportRows = (await listActivityLogs({ page: 1, limit: EXPORT_CAP, dateRange, filters: buildFilters() })).rows;
@@ -110,7 +135,7 @@ export function ActivityLogSection() {
         toast.error("Nothing to export.");
         return;
       }
-      exportRowsToCsv("activity-log", [
+      await writeExport(fileFormat, "activity-log", [
         { key: "created_at", label: "When", value: (r: ActivityLogRow) => (r.created_at ? format(new Date(r.created_at), "yyyy-MM-dd HH:mm") : "") },
         { key: "action", label: "Action", value: (r: ActivityLogRow) => r.action ?? "" },
         { key: "entity_type", label: "Record", value: (r: ActivityLogRow) => r.entity_type ?? "" },
@@ -206,16 +231,15 @@ export function ActivityLogSection() {
           className="w-44 bg-card"
         />
         <DateRangePicker value={dateRange} onChange={setDateRange} />
-        <Button variant="outline" className="ml-auto" onClick={runExport} disabled={exportBusy}>
-          {exportBusy ? <Loader2 className="size-4 animate-spin" /> : <Download className="size-4" />}
-          Export
-        </Button>
+        <ExportFormatMenu onSelect={runExport} busy={exportBusy} className="ml-auto" />
       </div>
 
       <DataTable
         columns={columns}
         data={rows}
         loading={loading}
+        columnFilterDefs={COLUMN_FILTERS}
+        serverColumnFilters={{ value: columnFilterValues, onChange: applyColumnFilters }}
         serverPagination={{
           pageIndex: page,
           pageCount,

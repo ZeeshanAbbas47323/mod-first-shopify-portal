@@ -3,7 +3,7 @@
 import * as React from "react";
 import { type ColumnDef } from "@tanstack/react-table";
 import { format } from "date-fns";
-import { Check, Download, Loader2, Minus, Plus, Trash2 } from "lucide-react";
+import { Check, Loader2, Minus, Plus, Trash2 } from "lucide-react";
 import { useForm, Controller } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
@@ -30,16 +30,21 @@ import {
 } from "@/components/ui/select";
 import { DataTable } from "@/components/data-table";
 import { StatusBadge } from "@/components/status-badge";
+import { Checkbox } from "@/components/ui/checkbox";
 import { MultiSelectFilter } from "@/components/multi-select-filter";
 import { apiErrorMessage } from "@/lib/auth-api";
-import { exportRowsToCsv } from "@/lib/utils";
+import { cn } from "@/lib/utils";
+import { exportRows as writeExport, type ExportFormat } from "@/lib/export";
+import { ExportFormatMenu } from "@/components/export-menu";
 import {
   createMenuRight,
   deleteRecord,
   listMenuRights,
+  listMenus,
   updateMenuRight,
   USER_ROLES,
   type MenuRightRow,
+  type MenuRow,
 } from "@/lib/admin-api";
 
 const DEFAULT_PAGE_SIZE = 10;
@@ -177,7 +182,7 @@ export function MenuRightsSection() {
     };
   }, [page, pageSize, buildFilters, refreshKey]);
 
-  const runExport = async () => {
+  const runExport = async (fileFormat: ExportFormat) => {
     setExportBusy(true);
     try {
       const exportRows = (await listMenuRights({ page: 1, limit: EXPORT_CAP, filters: buildFilters() })).rows;
@@ -185,7 +190,7 @@ export function MenuRightsSection() {
         toast.error("Nothing to export.");
         return;
       }
-      exportRowsToCsv("menu-rights", [
+      await writeExport(fileFormat, "menu-rights", [
         { key: "menu", label: "Menu", value: (r: MenuRightRow) => r.menu?.name ?? `Menu #${r.menu_id}` },
         { key: "role", label: "Role", value: (r: MenuRightRow) => humanizeRole(r.role) },
         { key: "can_view", label: "View", value: (r: MenuRightRow) => (r.can_view ? "Yes" : "No") },
@@ -230,10 +235,7 @@ export function MenuRightsSection() {
         {triSelect("View", canView, setCanView)}
         {triSelect("Edit", canEdit, setCanEdit)}
         {triSelect("Delete", canDelete, setCanDelete)}
-        <Button variant="outline" onClick={runExport} disabled={exportBusy}>
-          {exportBusy ? <Loader2 className="size-4 animate-spin" /> : <Download className="size-4" />}
-          Export
-        </Button>
+        <ExportFormatMenu onSelect={runExport} busy={exportBusy} />
         <Button
           className="ml-auto"
           onClick={() => {
@@ -275,11 +277,13 @@ export function MenuRightsSection() {
 }
 
 const ROLE_FORM_ITEMS: Record<string, string> = Object.fromEntries(
-  USER_ROLES.map((r) => [r, humanizeRole(r)])
+  STAFF_ROLES.map((r) => [r, humanizeRole(r)])
 );
 
 const menuRightSchema = z.object({
-  menu_id: z.number({ error: "Menu ID must be a number" }).int().positive("Menu ID is required"),
+  // Granting a new role its whole set of menus one row at a time is the slow
+  // path this dialog exists to avoid, so creating takes a list of menus.
+  menu_ids: z.array(z.number().int().positive()).min(1, "Pick at least one menu"),
   role: z.string().min(1, "Role is required"),
   can_view: z.boolean(),
   can_create: z.boolean(),
@@ -287,6 +291,142 @@ const menuRightSchema = z.object({
   can_delete: z.boolean(),
 });
 type MenuRightValues = z.infer<typeof menuRightSchema>;
+
+/** Indent child menus so the tree shape is readable in a flat list. */
+function menuDepth(menu: MenuRow, byId: Map<number, MenuRow>): number {
+  let depth = 0;
+  let parent = menu.parent_id != null ? byId.get(Number(menu.parent_id)) : undefined;
+  while (parent && depth < 5) {
+    depth += 1;
+    parent = parent.parent_id != null ? byId.get(Number(parent.parent_id)) : undefined;
+  }
+  return depth;
+}
+
+/**
+ * Searchable checkbox list of dashboard menus. Replaces the old free-typed
+ * "Menu ID" box, which meant looking each id up in another section first.
+ */
+function MenuPicker({
+  menus,
+  loading,
+  value,
+  onChange,
+  disabled,
+  assigned,
+}: {
+  menus: MenuRow[];
+  loading: boolean;
+  value: number[];
+  onChange: (next: number[]) => void;
+  disabled?: boolean;
+  /** Menus this role already has a right for — nothing stops a duplicate row
+   *  being created at the database level, so they're blocked here instead. */
+  assigned?: Set<number>;
+}) {
+  const [query, setQuery] = React.useState("");
+
+  const byId = React.useMemo(
+    () => new Map(menus.map((m) => [Number(m.id), m])),
+    [menus]
+  );
+
+  const visible = React.useMemo(() => {
+    const q = query.trim().toLowerCase();
+    if (!q) return menus;
+    return menus.filter(
+      (m) =>
+        m.name.toLowerCase().includes(q) || (m.slug ?? "").toLowerCase().includes(q)
+    );
+  }, [menus, query]);
+
+  const toggle = (id: number) =>
+    onChange(value.includes(id) ? value.filter((v) => v !== id) : [...value, id]);
+
+  const allVisibleIds = visible
+    .map((m) => Number(m.id))
+    .filter((id) => !assigned?.has(id));
+  const allSelected =
+    allVisibleIds.length > 0 && allVisibleIds.every((id) => value.includes(id));
+
+  return (
+    <div className="rounded-lg border border-input bg-card">
+      <div className="flex items-center gap-2 border-b border-input p-2">
+        <Input
+          value={query}
+          onChange={(e) => setQuery(e.target.value)}
+          placeholder="Search menus"
+          disabled={disabled}
+          className="h-8 text-sm"
+        />
+        <Button
+          type="button"
+          size="sm"
+          variant="outline"
+          disabled={disabled || !allVisibleIds.length}
+          onClick={() =>
+            onChange(
+              allSelected
+                ? value.filter((id) => !allVisibleIds.includes(id))
+                : [...new Set([...value, ...allVisibleIds])]
+            )
+          }
+        >
+          {allSelected ? "Clear" : "All"}
+        </Button>
+      </div>
+
+      <div className="max-h-56 overflow-y-auto p-1">
+        {loading ? (
+          <p className="flex items-center gap-2 px-2 py-6 text-sm text-muted-foreground">
+            <Loader2 className="size-4 animate-spin" />
+            Loading menus…
+          </p>
+        ) : !visible.length ? (
+          <p className="px-2 py-6 text-center text-sm text-muted-foreground">
+            {menus.length ? "No menus match that search." : "No dashboard menus found."}
+          </p>
+        ) : (
+          visible.map((menu) => {
+            const id = Number(menu.id);
+            const taken = !!assigned?.has(id);
+            return (
+              <label
+                key={id}
+                className={cn(
+                  "flex items-center gap-2 rounded-md px-2 py-1.5 text-sm",
+                  taken ? "cursor-not-allowed opacity-55" : "cursor-pointer hover:bg-muted"
+                )}
+                style={{ paddingLeft: 8 + menuDepth(menu, byId) * 14 }}
+              >
+                <Checkbox
+                  checked={taken || value.includes(id)}
+                  onCheckedChange={() => !taken && toggle(id)}
+                  disabled={disabled || taken}
+                />
+                <span className="truncate">{menu.name}</span>
+                {menu.slug && (
+                  <span className="truncate font-mono text-xs text-muted-foreground">
+                    /{menu.slug}
+                  </span>
+                )}
+                {taken && (
+                  <span className="ml-auto shrink-0 text-xs text-muted-foreground">
+                    Already added
+                  </span>
+                )}
+              </label>
+            );
+          })
+        )}
+      </div>
+
+      <div className="border-t border-input px-3 py-1.5 text-xs text-muted-foreground">
+        {value.length} selected
+      </div>
+    </div>
+  );
+}
 
 function MenuRightDialog({
   editing,
@@ -304,11 +444,13 @@ function MenuRightDialog({
     handleSubmit,
     control,
     reset,
+    watch,
+    setValue,
     formState: { errors, isSubmitting },
   } = useForm<MenuRightValues>({
     resolver: zodResolver(menuRightSchema),
     defaultValues: {
-      menu_id: undefined as unknown as number,
+      menu_ids: [],
       role: "manager",
       can_view: true,
       can_create: false,
@@ -317,10 +459,64 @@ function MenuRightDialog({
     },
   });
 
+  const [menus, setMenus] = React.useState<MenuRow[]>([]);
+  const [menusLoading, setMenusLoading] = React.useState(false);
+  const [assigned, setAssigned] = React.useState<Set<number>>(new Set());
+
+  const role = watch("role");
+  const selectedMenuIds = watch("menu_ids");
+
+  // Let the effect below read the current tick list without re-running on it.
+  const selectedMenuIdsRef = React.useRef(selectedMenuIds);
+  selectedMenuIdsRef.current = selectedMenuIds;
+
+  /**
+   * Which menus this role already holds. Nothing in the database stops a second
+   * identical row, so the picker has to be the thing that prevents it.
+   */
+  React.useEffect(() => {
+    if (!open || editing || !role) return;
+    let cancelled = false;
+    listMenuRights({ page: 1, limit: 500, filters: { role } })
+      .then((res) => {
+        if (cancelled) return;
+        const taken = new Set(res.rows.map((r) => Number(r.menu_id)));
+        setAssigned(taken);
+        // A menu ticked under the previous role may already be granted here.
+        setValue(
+          "menu_ids",
+          (selectedMenuIdsRef.current ?? []).filter((id) => !taken.has(id))
+        );
+      })
+      .catch(() => !cancelled && setAssigned(new Set()));
+    return () => {
+      cancelled = true;
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [open, editing, role]);
+
+
+  // Menu access is a dashboard-only concept, so storefront menus are no help here.
+  React.useEffect(() => {
+    if (!open || menus.length) return;
+    let cancelled = false;
+    setMenusLoading(true);
+    listMenus({ page: 1, limit: 500, filters: { menu_type: "dashboard" } })
+      .then((res) => !cancelled && setMenus(res.rows))
+      .catch((error) => {
+        if (cancelled) return;
+        toast.error(apiErrorMessage(error, "Couldn't load the menu list."));
+      })
+      .finally(() => !cancelled && setMenusLoading(false));
+    return () => {
+      cancelled = true;
+    };
+  }, [open, menus.length]);
+
   React.useEffect(() => {
     if (open) {
       reset({
-        menu_id: editing?.menu_id ?? (undefined as unknown as number),
+        menu_ids: editing?.menu_id != null ? [Number(editing.menu_id)] : [],
         role: editing?.role ?? "manager",
         can_view: editing?.can_view ?? true,
         can_create: editing?.can_create ?? false,
@@ -331,25 +527,54 @@ function MenuRightDialog({
   }, [open, editing, reset]);
 
   const onSubmit = async (values: MenuRightValues) => {
-    try {
-      const body = {
-        menu_id: values.menu_id,
-        role: values.role,
-        can_view: values.can_view,
-        can_create: values.can_create,
-        can_edit: values.can_edit,
-        can_delete: values.can_delete,
-      };
-      const message = editing
-        ? await updateMenuRight(editing.id, body)
-        : await createMenuRight(body);
-      toast.success(message);
+    const permissions = {
+      role: values.role,
+      can_view: values.can_view,
+      can_create: values.can_create,
+      can_edit: values.can_edit,
+      can_delete: values.can_delete,
+    };
+
+    if (editing) {
+      try {
+        toast.success(
+          await updateMenuRight(editing.id, {
+            menu_id: Number(editing.menu_id),
+            ...permissions,
+          })
+        );
+        onOpenChange(false);
+        onSaved();
+      } catch (error) {
+        toast.error(apiErrorMessage(error, "Couldn't update the menu right."));
+      }
+      return;
+    }
+
+    // One request per menu — the endpoint takes a single menu at a time, and a
+    // duplicate row rejects on its own, so the rest must not be lost with it.
+    const results = await Promise.allSettled(
+      values.menu_ids.map((menu_id) => createMenuRight({ menu_id, ...permissions }))
+    );
+
+    const failed = results.flatMap((result, i) =>
+      result.status === "rejected"
+        ? [{ menu_id: values.menu_ids[i], reason: result.reason }]
+        : []
+    );
+    const created = results.length - failed.length;
+
+    if (created) {
+      toast.success(`Added ${created} menu right${created === 1 ? "" : "s"}.`);
+    }
+    failed.forEach(({ menu_id, reason }) => {
+      const name = menus.find((m) => Number(m.id) === menu_id)?.name ?? `Menu #${menu_id}`;
+      toast.error(`${name}: ${apiErrorMessage(reason, "couldn't be added.")}`);
+    });
+
+    if (created) {
       onOpenChange(false);
       onSaved();
-    } catch (error) {
-      toast.error(
-        apiErrorMessage(error, `Couldn't ${editing ? "update" : "create"} the menu right.`)
-      );
     }
   };
 
@@ -395,21 +620,29 @@ function MenuRightDialog({
         </DialogHeader>
         <form onSubmit={handleSubmit(onSubmit)} className="space-y-4" noValidate>
           <div className="space-y-1.5">
-            <Label htmlFor="mr-menu-id">Menu ID</Label>
-            <Input
-              id="mr-menu-id"
-              type="number"
-              placeholder="5"
-              disabled={!!editing}
-              aria-invalid={!!errors.menu_id}
-              {...register("menu_id", { valueAsNumber: true })}
+            <Label>{editing ? "Menu" : "Menus"}</Label>
+            <Controller
+              control={control}
+              name="menu_ids"
+              render={({ field }) => (
+                <MenuPicker
+                  menus={menus}
+                  loading={menusLoading}
+                  value={field.value}
+                  onChange={field.onChange}
+                  disabled={!!editing}
+                  assigned={editing ? undefined : assigned}
+                />
+              )}
             />
-            {errors.menu_id && (
-              <p className="text-sm text-destructive">{errors.menu_id.message}</p>
+            {errors.menu_ids && (
+              <p className="text-sm text-destructive">{errors.menu_ids.message}</p>
             )}
-            <p className="text-xs text-muted-foreground">
-              Find IDs in the Menus section above.
-            </p>
+            {!editing && (
+              <p className="text-xs text-muted-foreground">
+                Pick as many as you like — the same permissions are applied to each.
+              </p>
+            )}
           </div>
 
           <div className="space-y-1.5">
@@ -423,7 +656,7 @@ function MenuRightDialog({
                     <SelectValue />
                   </SelectTrigger>
                   <SelectContent>
-                    {USER_ROLES.map((r) => (
+                    {STAFF_ROLES.map((r) => (
                       <SelectItem key={r} value={r}>
                         {humanizeRole(r)}
                       </SelectItem>

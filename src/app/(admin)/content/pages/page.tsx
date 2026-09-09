@@ -5,7 +5,7 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { type ColumnDef } from "@tanstack/react-table";
 import { format } from "date-fns";
-import { Download, Loader2, Plus, Search } from "lucide-react";
+import { Plus, Search } from "lucide-react";
 import type { DateRange } from "react-day-picker";
 import { toast } from "sonner";
 
@@ -14,15 +14,12 @@ import { Checkbox } from "@/components/ui/checkbox";
 import { Input } from "@/components/ui/input";
 import { MultiSelectFilter } from "@/components/multi-select-filter";
 import { SummaryStatStrip, type SummaryTile } from "@/components/summary-stat-strip";
-import {
-  DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger,
-} from "@/components/ui/dropdown-menu";
-import { DataTable } from "@/components/data-table";
+import { DataTable, type ColumnFilterDef } from "@/components/data-table";
+import { ExportMenu } from "@/components/export-menu";
 import { DateRangePicker } from "@/components/date-range-picker";
 import { StatusBadge } from "@/components/status-badge";
 import { apiErrorMessage } from "@/lib/auth-api";
 import { usePermissions } from "@/stores/menu-store";
-import { exportRowsToCsv } from "@/lib/utils";
 import {
   CONTENT_TYPES,
   CONTENT_TYPE_LABELS,
@@ -44,6 +41,13 @@ const excerpt = (html?: string) =>
     .replace(/&nbsp;/g, " ")
     .replace(/\s+/g, " ")
     .trim();
+
+/** Filter controls rendered under each column header. */
+const COLUMN_FILTERS: Record<string, ColumnFilterDef> = {
+  title: { type: "text", placeholder: "Search titles" },
+  content_type: { type: "select", options: CONTENT_TYPES, placeholder: "Any" },
+  is_active: { type: "select", options: STATUS_OPTIONS, placeholder: "Any" },
+};
 
 const exportColumns = [
   { key: "title", label: "Page", value: (r: ContentPageRow) => r.title },
@@ -150,7 +154,6 @@ export default function ContentPagesPage() {
 
   const [selected, setSelected] = React.useState<ContentPageRow[]>([]);
   const [clearKey, setClearKey] = React.useState(0);
-  const [exportBusy, setExportBusy] = React.useState(false);
   const [summary, setSummary] = React.useState<ContentPagesSummary>(EMPTY_SUMMARY);
   const [summaryLoading, setSummaryLoading] = React.useState(true);
 
@@ -179,6 +182,27 @@ export default function ContentPagesPage() {
       is_active: statuses.length === 1 ? statuses[0] === "active" : undefined,
     }),
     [dateRange, debounced, contentTypes, statuses]
+  );
+
+  /**
+   * The header filter row edits the same state as the filter bar above it,
+   * so a pick in one shows up in the other instead of silently competing.
+   */
+  const columnFilterValues = React.useMemo(() => {
+    const values: Record<string, string[]> = {};
+    if (search) values.title = [search];
+    if (contentTypes.length) values.content_type = contentTypes;
+    if (statuses.length) values.is_active = statuses;
+    return values;
+  }, [search, contentTypes, statuses]);
+
+  const applyColumnFilters = React.useCallback(
+    (next: Record<string, string[]>) => {
+      setSearch(next.title?.[0] ?? "");
+      setContentTypes(next.content_type ?? []);
+      setStatuses(next.is_active ?? []);
+    },
+    []
   );
 
   React.useEffect(() => {
@@ -220,13 +244,8 @@ export default function ContentPagesPage() {
     return () => { cancelled = true; };
   }, [activeFilters]);
 
-  const runExport = async (scope: "selected" | "all") => {
-    setExportBusy(true);
-    try {
-      const exportRows =
-        scope === "selected"
-          ? selected
-          : (
+  const fetchAllForExport = async () =>
+    (
               await listContentPages({
                 page: 1, limit: EXPORT_CAP, dateRange: activeFilters.dateRange,
                 filters: {
@@ -235,18 +254,6 @@ export default function ContentPagesPage() {
                 },
               })
             ).rows;
-      if (!exportRows.length) {
-        toast.error("Nothing to export.");
-        return;
-      }
-      exportRowsToCsv(`pages-${format(new Date(), "yyyy-MM-dd")}`, exportColumns, exportRows);
-      toast.success(`Exported ${exportRows.length} page${exportRows.length === 1 ? "" : "s"}.`);
-    } catch (error) {
-      toast.error(apiErrorMessage(error, "Couldn't export pages."));
-    } finally {
-      setExportBusy(false);
-    }
-  };
 
   const tiles: SummaryTile[] = [
     { label: "Total pages", value: summary.total_pages.toLocaleString("en-US") },
@@ -265,25 +272,14 @@ export default function ContentPagesPage() {
           </p>
         </div>
         <div className="flex gap-2">
-          <DropdownMenu>
-            <DropdownMenuTrigger
-              disabled={exportBusy}
-              render={
-                <Button variant="outline">
-                  {exportBusy ? <Loader2 className="size-4 animate-spin" /> : <Download className="size-4" />}
-                  Export
-                </Button>
-              }
-            />
-            <DropdownMenuContent align="end" className="w-64">
-              <DropdownMenuItem disabled={!selected.length} onClick={() => runExport("selected")}>
-                Export {selected.length || ""} selected
-              </DropdownMenuItem>
-              <DropdownMenuItem onClick={() => runExport("all")}>
-                Export all matching filters ({total})
-              </DropdownMenuItem>
-            </DropdownMenuContent>
-          </DropdownMenu>
+          <ExportMenu
+            filename="pages"
+            columns={exportColumns}
+            selected={selected}
+            fetchAll={fetchAllForExport}
+            total={total}
+            noun="page"
+          />
           {permissions.can_create && (
             <Button render={<Link href="/content/pages/new" />}>
               <Plus className="size-4" />
@@ -338,6 +334,8 @@ export default function ContentPagesPage() {
         onSelectionChange={setSelected}
         clearSelectionKey={clearKey}
         onRowClick={(row) => router.push(`/content/pages/${row.id}`)}
+        columnFilterDefs={COLUMN_FILTERS}
+        serverColumnFilters={{ value: columnFilterValues, onChange: applyColumnFilters }}
         serverPagination={{
           pageIndex: page,
           pageCount,

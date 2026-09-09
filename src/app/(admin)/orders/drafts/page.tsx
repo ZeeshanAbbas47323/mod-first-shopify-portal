@@ -5,14 +5,15 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { type ColumnDef } from "@tanstack/react-table";
 import { format } from "date-fns";
-import { Download, Loader2, Plus, Search } from "lucide-react";
+import { Plus, Search } from "lucide-react";
 import { toast } from "sonner";
 import type { DateRange } from "react-day-picker";
 
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Input } from "@/components/ui/input";
-import { DataTable } from "@/components/data-table";
+import { DataTable, type ColumnFilterDef } from "@/components/data-table";
+import { ExportMenu } from "@/components/export-menu";
 import { MultiSelectFilter } from "@/components/multi-select-filter";
 import { SummaryStatStrip, type SummaryTile } from "@/components/summary-stat-strip";
 import {
@@ -20,14 +21,10 @@ import {
   FulfillmentPreviewPopover,
   pickupOrDeliveryBlurb,
 } from "@/components/orders/order-popovers";
-import {
-  DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger,
-} from "@/components/ui/dropdown-menu";
 import { DateRangePicker } from "@/components/date-range-picker";
 import { StatusBadge, type BadgeTone } from "@/components/status-badge";
 import { apiErrorMessage } from "@/lib/auth-api";
 import { usePermissions } from "@/stores/menu-store";
-import { exportRowsToCsv } from "@/lib/utils";
 import {
   DRAFT_STATUSES,
   DRAFT_STATUS_LABELS,
@@ -85,6 +82,13 @@ const EMPTY_SUMMARY: DraftOrdersSummary = {
   completed: { current: 0, previous: 0, change_percent: null },
 };
 
+/** Filter controls rendered under each column header. */
+const COLUMN_FILTERS: Record<string, ColumnFilterDef> = {
+  draft_number: { type: "text", placeholder: "Search drafts" },
+  status: { type: "select", options: DRAFT_STATUSES, placeholder: "Any" },
+  channel: { type: "select", options: ORDER_CHANNELS, placeholder: "Any" },
+};
+
 const exportColumns = [
   { key: "draft_number", label: "Draft", value: (r: DraftOrderRow) => r.draft_number ?? `#${r.id}` },
   { key: "date", label: "Date", value: (r: DraftOrderRow) => r.created_at ?? "" },
@@ -108,7 +112,6 @@ export default function DraftOrdersPage() {
   const [total, setTotal] = React.useState(0);
   const [selected, setSelected] = React.useState<DraftOrderRow[]>([]);
   const [clearKey, setClearKey] = React.useState(0);
-  const [exportBusy, setExportBusy] = React.useState(false);
 
   const [search, setSearch] = React.useState("");
   const [debounced, setDebounced] = React.useState("");
@@ -138,6 +141,27 @@ export default function DraftOrdersPage() {
       channel: channels,
     }),
     [debounced, dateRange, statuses, channels]
+  );
+
+  /**
+   * The header filter row edits the same state as the filter bar above it,
+   * so a pick in one shows up in the other instead of silently competing.
+   */
+  const columnFilterValues = React.useMemo(() => {
+    const values: Record<string, string[]> = {};
+    if (search) values.draft_number = [search];
+    if (statuses.length) values.status = statuses;
+    if (channels.length) values.channel = channels;
+    return values;
+  }, [search, statuses, channels]);
+
+  const applyColumnFilters = React.useCallback(
+    (next: Record<string, string[]>) => {
+      setSearch(next.draft_number?.[0] ?? "");
+      setStatuses(next.status ?? []);
+      setChannels(next.channel ?? []);
+    },
+    []
   );
 
   const load = React.useCallback(() => {
@@ -178,13 +202,8 @@ export default function DraftOrdersPage() {
     return () => { cancelled = true; };
   }, [activeFilters]);
 
-  const runExport = async (scope: "selected" | "all") => {
-    setExportBusy(true);
-    try {
-      const exportRows =
-        scope === "selected"
-          ? selected
-          : (
+  const fetchAllForExport = async () =>
+    (
               await listDraftOrders({
                 page: 1,
                 limit: EXPORT_CAP,
@@ -196,18 +215,6 @@ export default function DraftOrdersPage() {
                 },
               })
             ).rows;
-      if (!exportRows.length) {
-        toast.error("Nothing to export.");
-        return;
-      }
-      exportRowsToCsv(`drafts-${format(new Date(), "yyyy-MM-dd")}`, exportColumns, exportRows);
-      toast.success(`Exported ${exportRows.length} draft${exportRows.length === 1 ? "" : "s"}.`);
-    } catch (error) {
-      toast.error(apiErrorMessage(error, "Couldn't export drafts."));
-    } finally {
-      setExportBusy(false);
-    }
-  };
 
   const tiles: SummaryTile[] = [
     { label: "Drafts", value: summary.drafts.current.toLocaleString("en-US"), changePercent: summary.drafts.change_percent },
@@ -326,25 +333,14 @@ export default function DraftOrdersPage() {
           </p>
         </div>
         <div className="flex gap-2">
-          <DropdownMenu>
-            <DropdownMenuTrigger
-              disabled={exportBusy}
-              render={
-                <Button variant="outline">
-                  {exportBusy ? <Loader2 className="size-4 animate-spin" /> : <Download className="size-4" />}
-                  Export
-                </Button>
-              }
-            />
-            <DropdownMenuContent align="end" className="w-64">
-              <DropdownMenuItem disabled={!selected.length} onClick={() => runExport("selected")}>
-                Export {selected.length || ""} selected draft{selected.length === 1 ? "" : "s"}
-              </DropdownMenuItem>
-              <DropdownMenuItem onClick={() => runExport("all")}>
-                Export all drafts matching filters ({total})
-              </DropdownMenuItem>
-            </DropdownMenuContent>
-          </DropdownMenu>
+          <ExportMenu
+            filename="drafts"
+            columns={exportColumns}
+            selected={selected}
+            fetchAll={fetchAllForExport}
+            total={total}
+            noun="draft"
+          />
           {permissions.can_create && (
             <Button render={<Link href="/orders/drafts/new" />}>
               <Plus className="size-4" />
@@ -376,10 +372,15 @@ export default function DraftOrdersPage() {
           <span className="text-sm font-medium">
             {selected.length} draft{selected.length === 1 ? "" : "s"} selected
           </span>
-          <Button size="sm" variant="outline" disabled={exportBusy} onClick={() => runExport("selected")}>
-            {exportBusy ? <Loader2 className="size-4 animate-spin" /> : <Download className="size-4" />}
-            Export selected
-          </Button>
+          <ExportMenu
+            filename="drafts"
+            columns={exportColumns}
+            selected={selected}
+            fetchAll={fetchAllForExport}
+            total={total}
+            noun="draft"
+            size="sm"
+          />
           <button
             type="button"
             onClick={() => setClearKey((k) => k + 1)}
@@ -397,6 +398,8 @@ export default function DraftOrdersPage() {
         onSelectionChange={setSelected}
         clearSelectionKey={clearKey}
         onRowClick={(row) => router.push(`/orders/drafts/${row.id}`)}
+        columnFilterDefs={COLUMN_FILTERS}
+        serverColumnFilters={{ value: columnFilterValues, onChange: applyColumnFilters }}
         serverPagination={{
           pageIndex: page,
           pageCount,

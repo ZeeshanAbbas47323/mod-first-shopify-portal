@@ -3,7 +3,7 @@
 import * as React from "react";
 import { type ColumnDef } from "@tanstack/react-table";
 import { format } from "date-fns";
-import { Bell, Download, Loader2, Search, Send } from "lucide-react";
+import { Bell, Loader2, Search, Send } from "lucide-react";
 import { toast } from "sonner";
 
 import { Button } from "@/components/ui/button";
@@ -14,7 +14,8 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { apiErrorMessage } from "@/lib/auth-api";
-import { exportRowsToCsv } from "@/lib/utils";
+import { exportRows as writeExport, type ExportFormat } from "@/lib/export";
+import { ExportFormatMenu } from "@/components/export-menu";
 import {
   NOTIFIABLE_ROLES,
   listNotifications,
@@ -139,7 +140,7 @@ export function NotificationsSection() {
     };
   }, [page, pageSize, search, refreshKey]);
 
-  const runExport = async () => {
+  const runExport = async (fileFormat: ExportFormat) => {
     setExportBusy(true);
     try {
       const exportRows = (await listNotifications({ page: 1, limit: EXPORT_CAP, search: search || undefined })).rows;
@@ -147,7 +148,7 @@ export function NotificationsSection() {
         toast.error("Nothing to export.");
         return;
       }
-      exportRowsToCsv("notifications", [
+      await writeExport(fileFormat, "notifications", [
         { key: "title", label: "Title", value: (r: AdminNotificationRow) => r.title ?? "" },
         { key: "body", label: "Message", value: (r: AdminNotificationRow) => r.body ?? "" },
         { key: "recipient", label: "Sent to", value: (r: AdminNotificationRow) => r.recipient?.full_name ?? "" },
@@ -230,10 +231,7 @@ export function NotificationsSection() {
             className="h-9 w-56 pl-8"
           />
         </div>
-        <Button variant="outline" size="sm" onClick={runExport} disabled={exportBusy}>
-          {exportBusy ? <Loader2 className="size-4 animate-spin" /> : <Download className="size-4" />}
-          Export
-        </Button>
+        <ExportFormatMenu onSelect={runExport} busy={exportBusy} size="sm" />
       </div>
 
       <DataTable

@@ -2,7 +2,7 @@
 
 import * as React from "react";
 import {
-  ChevronDown, ChevronRight, LayoutGrid,
+  ChevronDown, ChevronRight, ChevronUp, LayoutGrid,
 } from "lucide-react";
 
 import { Checkbox } from "@/components/ui/checkbox";
@@ -38,6 +38,8 @@ export function buildCategoryTree(rows: ProductCategoryRow[]): CategoryTreeNode[
   });
 
   const assignDepth = (nodes: CategoryTreeNode[], depth: number, path: string[]) => {
+    // Siblings render in the order the sort buttons write, not insertion order.
+    nodes.sort((a, b) => (a.sort_order ?? 0) - (b.sort_order ?? 0));
     nodes.forEach((n) => {
       n.depth = depth;
       n.path = [...path, n.name];
@@ -74,11 +76,17 @@ interface CategoryTreeProps {
   onRowClick: (row: ProductCategoryRow) => void;
   /** Ids to keep highlighted, e.g. search matches. */
   matchedIds?: Set<string>;
+  /** Reorders within one row of siblings; omit to hide the arrows. */
+  onMove?: (
+    node: CategoryTreeNode,
+    siblings: CategoryTreeNode[],
+    direction: "up" | "down"
+  ) => void;
 }
 
 export function CategoryTree({
   nodes, expanded, onToggleExpand, selected, onToggleSelect,
-  onToggleStatus, onRowClick, matchedIds,
+  onToggleStatus, onRowClick, matchedIds, onMove,
 }: CategoryTreeProps) {
   if (!nodes.length) {
     return (
@@ -95,6 +103,7 @@ export function CategoryTree({
         <span className="flex-1">Category</span>
         <span className="w-20 text-right">Products</span>
         <span className="w-20 text-right">Status</span>
+        {onMove && <span className="w-12" />}
       </div>
       <div className="divide-y divide-border">
         {nodes.map((node) => (
@@ -108,6 +117,8 @@ export function CategoryTree({
             onToggleStatus={onToggleStatus}
             onRowClick={onRowClick}
             matchedIds={matchedIds}
+            onMove={onMove}
+            siblings={nodes}
           />
         ))}
       </div>
@@ -117,9 +128,15 @@ export function CategoryTree({
 
 function CategoryTreeRow({
   node, expanded, onToggleExpand, selected, onToggleSelect,
-  onToggleStatus, onRowClick, matchedIds,
+  onToggleStatus, onRowClick, matchedIds, onMove, siblings,
 }: {
   node: CategoryTreeNode;
+  siblings: CategoryTreeNode[];
+  onMove?: (
+    node: CategoryTreeNode,
+    siblings: CategoryTreeNode[],
+    direction: "up" | "down"
+  ) => void;
   expanded: Set<string>;
   onToggleExpand: (id: string) => void;
   selected: Set<string>;
@@ -133,6 +150,7 @@ function CategoryTreeRow({
   const isOpen = expanded.has(id);
   const src = imgSrc(node);
   const dimmed = matchedIds && matchedIds.size > 0 && !matchedIds.has(id);
+  const index = siblings.findIndex((s) => String(s.id) === id);
 
   return (
     <>
@@ -193,6 +211,31 @@ function CategoryTreeRow({
             onToggle={(next) => onToggleStatus(node, next)}
           />
         </span>
+        {onMove && (
+          <span
+            className="flex w-12 shrink-0 items-center justify-end gap-0.5"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <button
+              type="button"
+              aria-label="Move up"
+              disabled={index <= 0}
+              onClick={() => onMove(node, siblings, "up")}
+              className="rounded p-1 text-muted-foreground hover:bg-muted hover:text-foreground disabled:pointer-events-none disabled:opacity-25"
+            >
+              <ChevronUp className="size-3.5" />
+            </button>
+            <button
+              type="button"
+              aria-label="Move down"
+              disabled={index < 0 || index >= siblings.length - 1}
+              onClick={() => onMove(node, siblings, "down")}
+              className="rounded p-1 text-muted-foreground hover:bg-muted hover:text-foreground disabled:pointer-events-none disabled:opacity-25"
+            >
+              <ChevronDown className="size-3.5" />
+            </button>
+          </span>
+        )}
       </div>
 
       {hasChildren && isOpen &&
@@ -207,6 +250,8 @@ function CategoryTreeRow({
             onToggleStatus={onToggleStatus}
             onRowClick={onRowClick}
             matchedIds={matchedIds}
+            onMove={onMove}
+            siblings={node.children}
           />
         ))}
     </>

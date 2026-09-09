@@ -3,7 +3,7 @@
 import * as React from "react";
 import { type ColumnDef } from "@tanstack/react-table";
 import { format } from "date-fns";
-import { Building2, Download, Loader2, LogOut, MoreHorizontal, Pencil, Plus, Search, Trash2, Unlock, UserMinus } from "lucide-react";
+import { Building2, Loader2, LogOut, MoreHorizontal, Pencil, Plus, Search, Trash2, Unlock, UserMinus } from "lucide-react";
 import { useForm, Controller } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
@@ -38,13 +38,14 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { DataTable } from "@/components/data-table";
+import { DataTable, type ColumnFilterDef } from "@/components/data-table";
 import { DateRangePicker } from "@/components/date-range-picker";
 import { StatusBadge, StatusToggle } from "@/components/status-badge";
 import { MultiSelectFilter } from "@/components/multi-select-filter";
 import { SummaryStatStrip } from "@/components/summary-stat-strip";
 import { apiErrorMessage } from "@/lib/auth-api";
-import { exportRowsToCsv } from "@/lib/utils";
+import { exportRows as writeExport, type ExportFormat } from "@/lib/export";
+import { ExportFormatMenu } from "@/components/export-menu";
 import {
   assignUserToBranch,
   createUser,
@@ -206,6 +207,12 @@ function getColumns(
   ];
 }
 
+/** Filter controls rendered under each column header. */
+const COLUMN_FILTERS: Record<string, ColumnFilterDef> = {
+  full_name: { type: "text", placeholder: "Search staff" },
+  status: { type: "select", options: [{ value: "active", label: "Active" }, { value: "inactive", label: "Inactive" }], placeholder: "Any" },
+};
+
 export function UsersSection() {
   const [rows, setRows] = React.useState<UserRow[]>([]);
   const [loading, setLoading] = React.useState(true);
@@ -243,6 +250,26 @@ export function UsersSection() {
       is_active: status === "all" ? undefined : status === "active",
     }),
     [debouncedSearch, roles, status]
+  );
+
+  /**
+   * The header filter row edits the same state as the toolbar above it, so
+   * a pick in one shows up in the other instead of silently competing.
+   */
+  const columnFilterValues = React.useMemo(() => {
+    const values: Record<string, string[]> = {};
+    if (search) values.full_name = [search];
+    if (status !== "all") values.status = [status];
+    return values;
+  }, [search, status]);
+
+  const applyColumnFilters = React.useCallback(
+    (next: Record<string, string[]>) => {
+      setSearch(next.full_name?.[0] ?? "");
+      const picked = next.status ?? [];
+      setStatus(picked.length === 1 ? picked[0] : "all");
+    },
+    []
   );
 
   React.useEffect(() => {
@@ -284,7 +311,7 @@ export function UsersSection() {
     };
   }, [dateRange, buildFilters, refreshKey]);
 
-  const runExport = async () => {
+  const runExport = async (fileFormat: ExportFormat) => {
     setExportBusy(true);
     try {
       const exportRows = (await listUsers({ page: 1, limit: EXPORT_CAP, dateRange, filters: buildFilters() })).rows;
@@ -292,7 +319,7 @@ export function UsersSection() {
         toast.error("Nothing to export.");
         return;
       }
-      exportRowsToCsv(`staff-users-${format(new Date(), "yyyy-MM-dd")}`, [
+      await writeExport(fileFormat, `staff-users-${format(new Date(), "yyyy-MM-dd")}`, [
         { key: "full_name", label: "Name", value: (r: UserRow) => r.full_name ?? "" },
         { key: "email", label: "Email", value: (r: UserRow) => r.email ?? "" },
         { key: "role", label: "Role", value: (r: UserRow) => humanizeRole(r.role) },
@@ -436,10 +463,7 @@ export function UsersSection() {
           </SelectContent>
         </Select>
         <DateRangePicker value={dateRange} onChange={setDateRange} />
-        <Button variant="outline" onClick={runExport} disabled={exportBusy}>
-          {exportBusy ? <Loader2 className="size-4 animate-spin" /> : <Download className="size-4" />}
-          Export
-        </Button>
+        <ExportFormatMenu onSelect={runExport} busy={exportBusy} />
         <Button className="ml-auto" onClick={() => { setEditing(null); setDialogOpen(true); }}>
           <Plus className="size-4" />
           Add user
@@ -486,6 +510,8 @@ export function UsersSection() {
         data={rows}
         loading={loading}
         onRowClick={(row) => { setEditing(row); setDialogOpen(true); }}
+        columnFilterDefs={COLUMN_FILTERS}
+        serverColumnFilters={{ value: columnFilterValues, onChange: applyColumnFilters }}
         serverPagination={{
           pageIndex: page,
           pageCount,

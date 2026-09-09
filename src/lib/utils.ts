@@ -103,34 +103,14 @@ export function parseNum(v?: unknown): number | undefined {
   return isNaN(n) ? undefined : n;
 }
 
-/** One CSV field, quoted only when it actually needs it. */
-function csvCell(v: unknown): string {
-  const s = v === null || v === undefined ? "" : String(v);
-  return /[",\n]/.test(s) ? `"${s.replace(/"/g, '""')}"` : s;
-}
-
 /**
- * Rows → CSV → real browser download. Shared by every data-table page's
- * Export button (orders, drafts, shipping labels, abandoned checkouts, …) so
- * the format stays identical across them.
+ * Table exports live in `@/lib/export` now that Excel is supported too. These
+ * re-exports keep the pages that already import from here working.
  */
-export function exportRowsToCsv<T extends Record<string, unknown>>(
-  filename: string,
-  columns: { key: string; label: string; value: (row: T) => unknown }[],
-  rows: T[]
-): void {
-  const header = columns.map((c) => csvCell(c.label)).join(",");
-  const lines = rows.map((row) =>
-    columns.map((c) => csvCell(c.value(row))).join(",")
-  );
-  const csv = [header, ...lines].join("\r\n");
-  const blob = new Blob(["﻿" + csv], { type: "text/csv;charset=utf-8;" });
-  const url = URL.createObjectURL(blob);
-  const a = document.createElement("a");
-  a.href = url;
-  a.download = filename.endsWith(".csv") ? filename : `${filename}.csv`;
-  document.body.appendChild(a);
-  a.click();
-  a.remove();
-  URL.revokeObjectURL(url);
-}
+export {
+  exportRows,
+  exportRowsToCsv,
+  exportRowsToExcel,
+  type ExportColumn,
+  type ExportFormat,
+} from "./export";

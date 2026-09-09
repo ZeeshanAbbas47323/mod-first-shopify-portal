@@ -3,7 +3,7 @@
 import * as React from "react";
 import { type ColumnDef } from "@tanstack/react-table";
 import { format } from "date-fns";
-import { Download, Loader2, Plus, Search, Trash2 } from "lucide-react";
+import { Loader2, Plus, Search, Trash2 } from "lucide-react";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
@@ -30,11 +30,12 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { DataTable } from "@/components/data-table";
+import { DataTable, type ColumnFilterDef } from "@/components/data-table";
 import { DateRangePicker } from "@/components/date-range-picker";
 import { StatusToggle } from "@/components/status-badge";
 import { apiErrorMessage } from "@/lib/auth-api";
-import { exportRowsToCsv } from "@/lib/utils";
+import { exportRows as writeExport, type ExportFormat } from "@/lib/export";
+import { ExportFormatMenu } from "@/components/export-menu";
 import { createBranch, deleteRecord, listBranches, updateBranch, updateRecordStatus, type BranchRow } from "@/lib/admin-api";
 
 const DEFAULT_PAGE_SIZE = 10;
@@ -127,6 +128,12 @@ function getColumns(
   ];
 }
 
+/** Filter controls rendered under each column header. */
+const COLUMN_FILTERS: Record<string, ColumnFilterDef> = {
+  name: { type: "text", placeholder: "Search branches" },
+  status: { type: "select", options: [{ value: "active", label: "Active" }, { value: "inactive", label: "Inactive" }], placeholder: "Any" },
+};
+
 export function BranchesSection() {
   const [rows, setRows] = React.useState<BranchRow[]>([]);
   const [loading, setLoading] = React.useState(true);
@@ -163,6 +170,26 @@ export function BranchesSection() {
     [debounced, status]
   );
 
+  /**
+   * The header filter row edits the same state as the toolbar above it, so
+   * a pick in one shows up in the other instead of silently competing.
+   */
+  const columnFilterValues = React.useMemo(() => {
+    const values: Record<string, string[]> = {};
+    if (search) values.name = [search];
+    if (status !== "all") values.status = [status];
+    return values;
+  }, [search, status]);
+
+  const applyColumnFilters = React.useCallback(
+    (next: Record<string, string[]>) => {
+      setSearch(next.name?.[0] ?? "");
+      const picked = next.status ?? [];
+      setStatus(picked.length === 1 ? picked[0] : "all");
+    },
+    []
+  );
+
   React.useEffect(() => {
     let cancelled = false;
     setLoading(true);
@@ -189,7 +216,7 @@ export function BranchesSection() {
     };
   }, [page, pageSize, buildFilters, dateRange, refreshKey]);
 
-  const runExport = async () => {
+  const runExport = async (fileFormat: ExportFormat) => {
     setExportBusy(true);
     try {
       const exportRows = (await listBranches({ page: 1, limit: EXPORT_CAP, dateRange, filters: buildFilters() })).rows;
@@ -197,7 +224,7 @@ export function BranchesSection() {
         toast.error("Nothing to export.");
         return;
       }
-      exportRowsToCsv("branches", [
+      await writeExport(fileFormat, "branches", [
         { key: "name", label: "Branch", value: (r: BranchRow) => r.name ?? "" },
         { key: "code", label: "Code", value: (r: BranchRow) => r.code ?? "" },
         { key: "city", label: "City", value: (r: BranchRow) => r.city ?? "" },
@@ -256,10 +283,7 @@ export function BranchesSection() {
           </SelectContent>
         </Select>
         <DateRangePicker value={dateRange} onChange={setDateRange} />
-        <Button variant="outline" onClick={runExport} disabled={exportBusy}>
-          {exportBusy ? <Loader2 className="size-4 animate-spin" /> : <Download className="size-4" />}
-          Export
-        </Button>
+        <ExportFormatMenu onSelect={runExport} busy={exportBusy} />
         <Button className="ml-auto" onClick={() => { setEditing(null); setDialogOpen(true); }}>
           <Plus className="size-4" />
           Add branch
@@ -278,6 +302,8 @@ export function BranchesSection() {
         data={rows}
         loading={loading}
         onRowClick={(row) => { setEditing(row); setDialogOpen(true); }}
+        columnFilterDefs={COLUMN_FILTERS}
+        serverColumnFilters={{ value: columnFilterValues, onChange: applyColumnFilters }}
         serverPagination={{
           pageIndex: page,
           pageCount,

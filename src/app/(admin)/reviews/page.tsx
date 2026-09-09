@@ -3,7 +3,7 @@
 import * as React from "react";
 import { type ColumnDef } from "@tanstack/react-table";
 import { format } from "date-fns";
-import { Download, Loader2, Search, Star, ThumbsUp } from "lucide-react";
+import { Loader2, Search, Star, ThumbsUp } from "lucide-react";
 import { useForm, Controller } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
@@ -31,15 +31,12 @@ import {
 } from "@/components/ui/select";
 import { MultiSelectFilter } from "@/components/multi-select-filter";
 import { SummaryStatStrip, type SummaryTile } from "@/components/summary-stat-strip";
-import {
-  DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger,
-} from "@/components/ui/dropdown-menu";
 import { Textarea } from "@/components/ui/textarea";
-import { DataTable } from "@/components/data-table";
+import { DataTable, type ColumnFilterDef } from "@/components/data-table";
+import { ExportMenu } from "@/components/export-menu";
 import { DateRangePicker } from "@/components/date-range-picker";
 import { StatusBadge } from "@/components/status-badge";
 import { apiErrorMessage } from "@/lib/auth-api";
-import { exportRowsToCsv } from "@/lib/utils";
 import {
   REVIEW_STATUSES,
   listReviews,
@@ -69,6 +66,12 @@ const exportColumns = [
   { key: "helpful_count", label: "Helpful", value: (r: ReviewRow) => r.helpful_count ?? 0 },
   { key: "created_at", label: "Date", value: (r: ReviewRow) => r.created_at ?? "" },
 ];
+
+/** Filter controls rendered under each column header. */
+const COLUMN_FILTERS: Record<string, ColumnFilterDef> = {
+  title: { type: "text", placeholder: "Search titles" },
+  status: { type: "select", options: REVIEW_STATUSES, placeholder: "Any" },
+};
 
 const STATUS_FORM_ITEMS: Record<string, string> = {
   pending: "Pending",
@@ -210,7 +213,6 @@ export default function ReviewsPage() {
 
   const [selected, setSelected] = React.useState<ReviewRow[]>([]);
   const [clearKey, setClearKey] = React.useState(0);
-  const [exportBusy, setExportBusy] = React.useState(false);
   const [summary, setSummary] = React.useState<ReviewsSummary>(EMPTY_SUMMARY);
   const [summaryLoading, setSummaryLoading] = React.useState(true);
 
@@ -238,6 +240,25 @@ export default function ReviewsPage() {
       status: statuses.length ? statuses : undefined,
     }),
     [dateRange, debounced, statuses]
+  );
+
+  /**
+   * The header filter row edits the same state as the filter bar above it,
+   * so a pick in one shows up in the other instead of silently competing.
+   */
+  const columnFilterValues = React.useMemo(() => {
+    const values: Record<string, string[]> = {};
+    if (search) values.title = [search];
+    if (statuses.length) values.status = statuses;
+    return values;
+  }, [search, statuses]);
+
+  const applyColumnFilters = React.useCallback(
+    (next: Record<string, string[]>) => {
+      setSearch(next.title?.[0] ?? "");
+      setStatuses(next.status ?? []);
+    },
+    []
   );
 
   React.useEffect(() => {
@@ -276,30 +297,13 @@ export default function ReviewsPage() {
     return () => { cancelled = true; };
   }, [activeFilters]);
 
-  const runExport = async (scope: "selected" | "all") => {
-    setExportBusy(true);
-    try {
-      const exportRows =
-        scope === "selected"
-          ? selected
-          : (
+  const fetchAllForExport = async () =>
+    (
               await listReviews({
                 page: 1, limit: EXPORT_CAP, dateRange: activeFilters.dateRange,
                 filters: { title: activeFilters.title, status: activeFilters.status },
               })
             ).rows;
-      if (!exportRows.length) {
-        toast.error("Nothing to export.");
-        return;
-      }
-      exportRowsToCsv(`reviews-${format(new Date(), "yyyy-MM-dd")}`, exportColumns, exportRows);
-      toast.success(`Exported ${exportRows.length} review${exportRows.length === 1 ? "" : "s"}.`);
-    } catch (error) {
-      toast.error(apiErrorMessage(error, "Couldn't export reviews."));
-    } finally {
-      setExportBusy(false);
-    }
-  };
 
   const openReview = async (row: ReviewRow) => {
     setEditing(row);
@@ -323,25 +327,14 @@ export default function ReviewsPage() {
     <div className="flex flex-col gap-4">
       <div className="flex flex-wrap items-center justify-between gap-3">
         <h1 className="text-xl font-bold">Reviews</h1>
-        <DropdownMenu>
-          <DropdownMenuTrigger
-            disabled={exportBusy}
-            render={
-              <Button variant="outline">
-                {exportBusy ? <Loader2 className="size-4 animate-spin" /> : <Download className="size-4" />}
-                Export
-              </Button>
-            }
-          />
-          <DropdownMenuContent align="end" className="w-64">
-            <DropdownMenuItem disabled={!selected.length} onClick={() => runExport("selected")}>
-              Export {selected.length || ""} selected
-            </DropdownMenuItem>
-            <DropdownMenuItem onClick={() => runExport("all")}>
-              Export all matching filters ({total})
-            </DropdownMenuItem>
-          </DropdownMenuContent>
-        </DropdownMenu>
+        <ExportMenu
+          filename="reviews"
+          columns={exportColumns}
+          selected={selected}
+          fetchAll={fetchAllForExport}
+          total={total}
+          noun="review"
+        />
       </div>
 
       <SummaryStatStrip tiles={tiles} loading={summaryLoading} />
@@ -389,6 +382,8 @@ export default function ReviewsPage() {
         onSelectionChange={setSelected}
         clearSelectionKey={clearKey}
         onRowClick={openReview}
+        columnFilterDefs={COLUMN_FILTERS}
+        serverColumnFilters={{ value: columnFilterValues, onChange: applyColumnFilters }}
         serverPagination={{
           pageIndex: page,
           pageCount,

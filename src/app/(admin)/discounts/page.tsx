@@ -3,7 +3,7 @@
 import * as React from "react";
 import { type ColumnDef } from "@tanstack/react-table";
 import { format } from "date-fns";
-import { CheckCircle2, Download, Loader2, Plus, Search, Tag, Trash2, XCircle } from "lucide-react";
+import { CheckCircle2, Loader2, Plus, Search, Tag, Trash2, XCircle } from "lucide-react";
 import { useForm, Controller } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
@@ -23,16 +23,14 @@ import {
 } from "@/components/ui/select";
 import { MultiSelectFilter } from "@/components/multi-select-filter";
 import { SummaryStatStrip, type SummaryTile } from "@/components/summary-stat-strip";
-import {
-  DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger,
-} from "@/components/ui/dropdown-menu";
-import { DataTable } from "@/components/data-table";
+import { DataTable, type ColumnFilterDef } from "@/components/data-table";
+import { ExportMenu } from "@/components/export-menu";
 import { DateRangePicker } from "@/components/date-range-picker";
 import { StatusBadge, StatusToggle } from "@/components/status-badge";
 import { ConfirmDeleteDialog } from "@/components/confirm-delete-dialog";
 import { apiErrorMessage } from "@/lib/auth-api";
 import { usePermissions } from "@/stores/menu-store";
-import { exportRowsToCsv, parseServerDate, toLocalDateInput } from "@/lib/utils";
+import { parseServerDate, toLocalDateInput } from "@/lib/utils";
 import {
   COUPON_TYPES,
   COUPON_STATUSES,
@@ -60,6 +58,13 @@ const typeLabel: Record<CouponType, string> = {
 };
 
 // Status tones now live in the shared toneMap (src/components/status-badge.tsx).
+
+/** Filter controls rendered under each column header. */
+const COLUMN_FILTERS: Record<string, ColumnFilterDef> = {
+  code: { type: "text", placeholder: "Search codes" },
+  type: { type: "select", options: COUPON_TYPES, placeholder: "Any" },
+  status: { type: "select", options: COUPON_STATUSES, placeholder: "Any" },
+};
 
 const exportColumns = [
   { key: "code", label: "Code", value: (r: CouponRow) => r.code },
@@ -188,7 +193,6 @@ export default function DiscountsPage() {
   const [total, setTotal] = React.useState(0);
   const [selected, setSelected] = React.useState<CouponRow[]>([]);
   const [clearKey, setClearKey] = React.useState(0);
-  const [exportBusy, setExportBusy] = React.useState(false);
   const [summary, setSummary] = React.useState<CouponsSummary>(EMPTY_SUMMARY);
   const [summaryLoading, setSummaryLoading] = React.useState(true);
 
@@ -218,6 +222,27 @@ export default function DiscountsPage() {
       type: types.length ? types : undefined,
     }),
     [dateRange, debounced, statuses, types]
+  );
+
+  /**
+   * The header filter row edits the same state as the filter bar above it,
+   * so a pick in one shows up in the other instead of silently competing.
+   */
+  const columnFilterValues = React.useMemo(() => {
+    const values: Record<string, string[]> = {};
+    if (search) values.code = [search];
+    if (types.length) values.type = types;
+    if (statuses.length) values.status = statuses;
+    return values;
+  }, [search, types, statuses]);
+
+  const applyColumnFilters = React.useCallback(
+    (next: Record<string, string[]>) => {
+      setSearch(next.code?.[0] ?? "");
+      setTypes(next.type ?? []);
+      setStatuses(next.status ?? []);
+    },
+    []
   );
 
   React.useEffect(() => {
@@ -252,30 +277,13 @@ export default function DiscountsPage() {
     return () => { cancelled = true; };
   }, [activeFilters]);
 
-  const runExport = async (scope: "selected" | "all") => {
-    setExportBusy(true);
-    try {
-      const exportRows =
-        scope === "selected"
-          ? selected
-          : (
+  const fetchAllForExport = async () =>
+    (
               await listCoupons({
                 page: 1, limit: EXPORT_CAP, dateRange: activeFilters.dateRange,
                 filters: { code: activeFilters.code, status: activeFilters.status, type: activeFilters.type },
               })
             ).rows;
-      if (!exportRows.length) {
-        toast.error("Nothing to export.");
-        return;
-      }
-      exportRowsToCsv(`coupons-${format(new Date(), "yyyy-MM-dd")}`, exportColumns, exportRows);
-      toast.success(`Exported ${exportRows.length} coupon${exportRows.length === 1 ? "" : "s"}.`);
-    } catch (error) {
-      toast.error(apiErrorMessage(error, "Couldn't export coupons."));
-    } finally {
-      setExportBusy(false);
-    }
-  };
 
   const handleToggleStatus = async (row: CouponRow, next: boolean) => {
     try {
@@ -303,25 +311,14 @@ export default function DiscountsPage() {
           <Button variant="outline" onClick={() => setValidateOpen(true)}>
             <CheckCircle2 className="size-4" /> Validate code
           </Button>
-          <DropdownMenu>
-            <DropdownMenuTrigger
-              disabled={exportBusy}
-              render={
-                <Button variant="outline">
-                  {exportBusy ? <Loader2 className="size-4 animate-spin" /> : <Download className="size-4" />}
-                  Export
-                </Button>
-              }
-            />
-            <DropdownMenuContent align="end" className="w-64">
-              <DropdownMenuItem disabled={!selected.length} onClick={() => runExport("selected")}>
-                Export {selected.length || ""} selected
-              </DropdownMenuItem>
-              <DropdownMenuItem onClick={() => runExport("all")}>
-                Export all matching filters ({total})
-              </DropdownMenuItem>
-            </DropdownMenuContent>
-          </DropdownMenu>
+          <ExportMenu
+            filename="coupons"
+            columns={exportColumns}
+            selected={selected}
+            fetchAll={fetchAllForExport}
+            total={total}
+            noun="coupon"
+          />
           {permissions.can_create && (
             <Button onClick={() => { setEditing(null); setDialogOpen(true); }}>
               <Plus className="size-4" /> Create coupon
@@ -371,6 +368,8 @@ export default function DiscountsPage() {
         onSelectionChange={setSelected}
         clearSelectionKey={clearKey}
         onRowClick={(row) => { setEditing(row); setDialogOpen(true); }}
+        columnFilterDefs={COLUMN_FILTERS}
+        serverColumnFilters={{ value: columnFilterValues, onChange: applyColumnFilters }}
         serverPagination={{
           pageIndex: page,
           pageCount,

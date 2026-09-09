@@ -19,7 +19,7 @@ import {
 import {
   Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
 } from "@/components/ui/select";
-import { DataTable } from "@/components/data-table";
+import { DataTable, type ColumnFilterDef } from "@/components/data-table";
 import { StatusBadge } from "@/components/status-badge";
 import { apiErrorMessage } from "@/lib/auth-api";
 import { listBranches, type BranchRow } from "@/lib/admin-api";
@@ -53,6 +53,12 @@ const STATUS_ITEMS: Record<string, string> = {
   inactive: "Inactive",
 };
 
+/** Filter controls rendered under each column header. */
+const COLUMN_FILTERS: Record<string, ColumnFilterDef> = {
+  name: { type: "text", placeholder: "Search devices" },
+  is_active: { type: "select", options: [{ value: "active", label: "Active" }, { value: "inactive", label: "Inactive" }], placeholder: "Any" },
+};
+
 export default function PosDevicesPage() {
   const [rows, setRows] = React.useState<PosDeviceRow[]>([]);
   const [loading, setLoading] = React.useState(true);
@@ -70,6 +76,27 @@ export default function PosDevicesPage() {
   const [dialogOpen, setDialogOpen] = React.useState(false);
   const [editing, setEditing] = React.useState<PosDeviceRow | null>(null);
   const [refreshKey, setRefreshKey] = React.useState(0);
+
+  /**
+   * The header filter row edits the same state as the toolbar above it, so
+   * a pick in one shows up in the other instead of silently competing.
+   */
+  const columnFilterValues = React.useMemo(() => {
+    const values: Record<string, string[]> = {};
+    if (search) values.name = [search];
+    if (status !== "all") values.is_active = [status];
+    return values;
+  }, [search, status]);
+
+  const applyColumnFilters = React.useCallback(
+    (next: Record<string, string[]>) => {
+      setSearch(next.name?.[0] ?? "");
+      // Picking every option says nothing, same as picking none.
+      const picked = next.is_active ?? [];
+      setStatus(picked.length === 1 ? picked[0] : "all");
+    },
+    []
+  );
 
   React.useEffect(() => {
     listBranches({ page: 1, limit: 100 })
@@ -260,6 +287,8 @@ export default function PosDevicesPage() {
           setEditing(row);
           setDialogOpen(true);
         }}
+        columnFilterDefs={COLUMN_FILTERS}
+        serverColumnFilters={{ value: columnFilterValues, onChange: applyColumnFilters }}
         serverPagination={{
           pageIndex: page,
           pageCount,

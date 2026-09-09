@@ -4,13 +4,14 @@ import * as React from "react";
 import { useRouter } from "next/navigation";
 import { format, subDays } from "date-fns";
 import { type ColumnDef } from "@tanstack/react-table";
-import { ChevronDown, Download, Loader2, Search, X } from "lucide-react";
+import { ChevronDown, Loader2, Search, X } from "lucide-react";
 import { toast } from "sonner";
 
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { DataTable } from "@/components/data-table";
+import { DataTable, type ColumnFilterDef } from "@/components/data-table";
+import { ExportMenu } from "@/components/export-menu";
 import { MultiSelectFilter } from "@/components/multi-select-filter";
 import { SummaryStatStrip, type SummaryTile } from "@/components/summary-stat-strip";
 import {
@@ -27,7 +28,6 @@ import {
 import { DateRangePicker } from "@/components/date-range-picker";
 import { StatusBadge } from "@/components/status-badge";
 import { apiErrorMessage } from "@/lib/auth-api";
-import { exportRowsToCsv } from "@/lib/utils";
 import {
   listOrders, getOrdersSummary, bulkUpdateOrderStatus,
   ORDER_STATUSES, PAYMENT_STATUSES, DELIVERY_TYPES, ORDER_CHANNELS,
@@ -203,6 +203,16 @@ const EMPTY_SUMMARY: OrdersSummary = {
   trend: [],
 };
 
+/** Filter controls rendered under each column header. */
+const COLUMN_FILTERS: Record<string, ColumnFilterDef> = {
+  order_number: { type: "text", placeholder: "Order #" },
+  customer: { type: "text", placeholder: "Name or email" },
+  channel: { type: "select", options: ORDER_CHANNELS, placeholder: "Any" },
+  payment_status: { type: "select", options: PAYMENT_STATUSES, placeholder: "Any" },
+  status: { type: "select", options: ORDER_STATUSES, placeholder: "Any" },
+  delivery_type: { type: "select", options: DELIVERY_TYPES, placeholder: "Any" },
+};
+
 const exportColumns = [
   { key: "order_number", label: "Order", value: (r: OrderRow) => r.order_number ?? `#${r.id}` },
   { key: "date", label: "Date", value: (r: OrderRow) => r.order_date ?? r.created_at ?? "" },
@@ -224,7 +234,6 @@ export default function OrdersPage() {
   const [selected, setSelected] = React.useState<OrderRow[]>([]);
   const [clearKey, setClearKey] = React.useState(0);
   const [bulkBusy, setBulkBusy] = React.useState(false);
-  const [exportBusy, setExportBusy] = React.useState(false);
   const [rows, setRows] = React.useState<OrderRow[]>([]);
   const [total, setTotal] = React.useState(0);
   const [totalPages, setTotalPages] = React.useState(1);
@@ -242,23 +251,52 @@ export default function OrdersPage() {
   const [channels, setChannels] = React.useState<string[]>([]);
   const [search, setSearch] = React.useState("");
   const [searchInput, setSearchInput] = React.useState("");
+  const [statuses, setStatuses] = React.useState<string[]>([]);
+  const [orderNumber, setOrderNumber] = React.useState("");
 
   // Reset page when filters/tab change
   React.useEffect(() => {
     setPage(1);
-  }, [tab, dateRange, payStatuses, deliveryTypes, channels, search]);
+  }, [tab, dateRange, payStatuses, deliveryTypes, channels, search, statuses, orderNumber]);
 
   const activeFilters = React.useMemo(
     () => ({
       dateRange,
-      status: TAB_STATUS[tab],
+      // An explicit status filter is a narrower statement than the tab, so it wins.
+      status: statuses.length ? statuses : TAB_STATUS[tab],
       payment_status: payStatuses,
       delivery_type: deliveryTypes,
       channel: channels,
       search: search || undefined,
+      order_number: orderNumber || undefined,
     }),
-    [dateRange, tab, payStatuses, deliveryTypes, channels, search]
+    [dateRange, tab, payStatuses, deliveryTypes, channels, search, statuses, orderNumber]
   );
+
+  /**
+   * The header filter row and the filter bar above it edit the same state, so
+   * a pick in one shows up in the other instead of silently competing.
+   */
+  const columnFilterValues = React.useMemo(() => {
+    const values: Record<string, string[]> = {};
+    if (orderNumber) values.order_number = [orderNumber];
+    if (search) values.customer = [search];
+    if (channels.length) values.channel = channels;
+    if (payStatuses.length) values.payment_status = payStatuses;
+    if (statuses.length) values.status = statuses;
+    if (deliveryTypes.length) values.delivery_type = deliveryTypes;
+    return values;
+  }, [orderNumber, search, channels, payStatuses, statuses, deliveryTypes]);
+
+  const applyColumnFilters = React.useCallback((next: Record<string, string[]>) => {
+    setOrderNumber(next.order_number?.[0] ?? "");
+    setSearch(next.customer?.[0] ?? "");
+    setSearchInput(next.customer?.[0] ?? "");
+    setChannels(next.channel ?? []);
+    setPayStatuses(next.payment_status ?? []);
+    setStatuses(next.status ?? []);
+    setDeliveryTypes(next.delivery_type ?? []);
+  }, []);
 
   const load = React.useCallback(() => {
     setLoading(true);
@@ -309,25 +347,10 @@ export default function OrdersPage() {
     }
   };
 
-  const runExport = async (scope: "selected" | "all") => {
-    setExportBusy(true);
-    try {
-      const exportRows =
-        scope === "selected"
-          ? selected
-          : (await listOrders({ page: 1, limit: EXPORT_CAP, ...activeFilters })).rows;
-      if (!exportRows.length) {
-        toast.error("Nothing to export.");
-        return;
-      }
-      exportRowsToCsv(`orders-${format(new Date(), "yyyy-MM-dd")}`, exportColumns, exportRows);
-      toast.success(`Exported ${exportRows.length} order${exportRows.length === 1 ? "" : "s"}.`);
-    } catch (error) {
-      toast.error(apiErrorMessage(error, "Couldn't export orders."));
-    } finally {
-      setExportBusy(false);
-    }
-  };
+  const fetchAllForExport = React.useCallback(
+    async () => (await listOrders({ page: 1, limit: EXPORT_CAP, ...activeFilters })).rows,
+    [activeFilters]
+  );
 
   const tiles: SummaryTile[] = [
     {
@@ -359,28 +382,14 @@ export default function OrdersPage() {
       <div className="flex flex-wrap items-center justify-between gap-3">
         <h1 className="text-xl font-bold">Orders</h1>
         <div className="flex gap-2">
-          <DropdownMenu>
-            <DropdownMenuTrigger
-              disabled={exportBusy}
-              render={
-                <Button variant="outline">
-                  {exportBusy ? <Loader2 className="size-4 animate-spin" /> : <Download className="size-4" />}
-                  Export
-                </Button>
-              }
-            />
-            <DropdownMenuContent align="end" className="w-64">
-              <DropdownMenuItem
-                disabled={!selected.length}
-                onClick={() => runExport("selected")}
-              >
-                Export {selected.length || ""} selected order{selected.length === 1 ? "" : "s"}
-              </DropdownMenuItem>
-              <DropdownMenuItem onClick={() => runExport("all")}>
-                Export all orders matching filters ({total})
-              </DropdownMenuItem>
-            </DropdownMenuContent>
-          </DropdownMenu>
+          <ExportMenu
+            filename="orders"
+            columns={exportColumns}
+            selected={selected}
+            fetchAll={fetchAllForExport}
+            total={total}
+            noun="order"
+          />
         </div>
       </div>
 
@@ -485,15 +494,15 @@ export default function OrdersPage() {
               ))}
             </DropdownMenuContent>
           </DropdownMenu>
-          <Button
+          <ExportMenu
+            filename="orders"
+            columns={exportColumns}
+            selected={selected}
+            fetchAll={fetchAllForExport}
+            total={total}
+            noun="order"
             size="sm"
-            variant="outline"
-            disabled={exportBusy}
-            onClick={() => runExport("selected")}
-          >
-            {exportBusy ? <Loader2 className="size-4 animate-spin" /> : <Download className="size-4" />}
-            Export selected
-          </Button>
+          />
           <button
             type="button"
             onClick={() => setClearKey((k) => k + 1)}
@@ -512,6 +521,8 @@ export default function OrdersPage() {
         onSelectionChange={setSelected}
         clearSelectionKey={clearKey}
         onRowClick={(row) => router.push(`/orders/${row.id}`)}
+        columnFilterDefs={COLUMN_FILTERS}
+        serverColumnFilters={{ value: columnFilterValues, onChange: applyColumnFilters }}
         serverPagination={{
           pageIndex: page - 1,
           pageCount: totalPages,

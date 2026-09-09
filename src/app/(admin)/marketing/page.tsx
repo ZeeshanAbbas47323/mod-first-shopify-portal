@@ -3,7 +3,7 @@
 import * as React from "react";
 import { type ColumnDef } from "@tanstack/react-table";
 import { format } from "date-fns";
-import { Download, Loader2, Plus, Search, Send } from "lucide-react";
+import { Loader2, Plus, Search, Send } from "lucide-react";
 import { useForm, Controller } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
@@ -26,9 +26,6 @@ import { Label } from "@/components/ui/label";
 import { RichTextEditor } from "@/components/ui/rich-text-editor";
 import { MultiSelectFilter } from "@/components/multi-select-filter";
 import {
-  DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger,
-} from "@/components/ui/dropdown-menu";
-import {
   Select,
   SelectContent,
   SelectItem,
@@ -36,12 +33,12 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { DataTable } from "@/components/data-table";
+import { DataTable, type ColumnFilterDef } from "@/components/data-table";
 import { DateRangePicker } from "@/components/date-range-picker";
 import { MediaUpload } from "@/components/media-upload";
 import { StatusBadge } from "@/components/status-badge";
 import { apiErrorMessage } from "@/lib/auth-api";
-import { exportRowsToCsv } from "@/lib/utils";
+import { ExportMenu } from "@/components/export-menu";
 import {
   CAMPAIGN_STATUSES,
   SUBSCRIBER_SOURCES,
@@ -176,6 +173,12 @@ const campaignColumns: ColumnDef<CampaignRow>[] = [
   },
 ];
 
+/** Filter controls rendered under each column header. */
+const CAMPAIGN_COLUMN_FILTERS: Record<string, ColumnFilterDef> = {
+  subject: { type: "text", placeholder: "Search subjects" },
+  status: { type: "select", options: CAMPAIGN_STATUSES, placeholder: "Any" },
+};
+
 function CampaignsTab() {
   const [rows, setRows] = React.useState<CampaignRow[]>([]);
   const [loading, setLoading] = React.useState(true);
@@ -185,7 +188,6 @@ function CampaignsTab() {
   const [total, setTotal] = React.useState(0);
   const [selected, setSelected] = React.useState<CampaignRow[]>([]);
   const [clearKey, setClearKey] = React.useState(0);
-  const [exportBusy, setExportBusy] = React.useState(false);
 
   const [search, setSearch] = React.useState("");
   const [statuses, setStatuses] = React.useState<string[]>([]);
@@ -211,6 +213,25 @@ function CampaignsTab() {
     [debouncedSearch, statuses]
   );
 
+  /**
+   * The header filter row edits the same state as the toolbar above it, so
+   * a pick in one shows up in the other instead of silently competing.
+   */
+  const columnFilterValues = React.useMemo(() => {
+    const values: Record<string, string[]> = {};
+    if (search) values.subject = [search];
+    if (statuses.length) values.status = statuses;
+    return values;
+  }, [search, statuses]);
+
+  const applyColumnFilters = React.useCallback(
+    (next: Record<string, string[]>) => {
+      setSearch(next.subject?.[0] ?? "");
+      setStatuses(next.status ?? []);
+    },
+    []
+  );
+
   React.useEffect(() => {
     let cancelled = false;
     setLoading(true);
@@ -232,25 +253,8 @@ function CampaignsTab() {
     };
   }, [page, pageSize, activeFilters, refreshKey]);
 
-  const runExport = async (scope: "selected" | "all") => {
-    setExportBusy(true);
-    try {
-      const exportRows =
-        scope === "selected"
-          ? selected
-          : (await listCampaigns({ page: 1, limit: EXPORT_CAP, filters: activeFilters })).rows;
-      if (!exportRows.length) {
-        toast.error("Nothing to export.");
-        return;
-      }
-      exportRowsToCsv(`campaigns-${format(new Date(), "yyyy-MM-dd")}`, campaignExportColumns, exportRows);
-      toast.success(`Exported ${exportRows.length} campaign${exportRows.length === 1 ? "" : "s"}.`);
-    } catch (error) {
-      toast.error(apiErrorMessage(error, "Couldn't export campaigns."));
-    } finally {
-      setExportBusy(false);
-    }
-  };
+  const fetchAllForExport = async () =>
+    (await listCampaigns({ page: 1, limit: EXPORT_CAP, filters: activeFilters })).rows;
 
   return (
     <div className="flex flex-col gap-3">
@@ -265,25 +269,14 @@ function CampaignsTab() {
           />
         </div>
         <MultiSelectFilter label="Status" options={CAMPAIGN_STATUSES} value={statuses} onChange={setStatuses} />
-        <DropdownMenu>
-          <DropdownMenuTrigger
-            disabled={exportBusy}
-            render={
-              <Button variant="outline">
-                {exportBusy ? <Loader2 className="size-4 animate-spin" /> : <Download className="size-4" />}
-                Export
-              </Button>
-            }
-          />
-          <DropdownMenuContent align="end" className="w-64">
-            <DropdownMenuItem disabled={!selected.length} onClick={() => runExport("selected")}>
-              Export {selected.length || ""} selected
-            </DropdownMenuItem>
-            <DropdownMenuItem onClick={() => runExport("all")}>
-              Export all matching filters ({total})
-            </DropdownMenuItem>
-          </DropdownMenuContent>
-        </DropdownMenu>
+        <ExportMenu
+          filename="campaigns"
+          columns={campaignExportColumns}
+          selected={selected}
+          fetchAll={fetchAllForExport}
+          total={total}
+          noun="campaign"
+        />
         <Button
           className="ml-auto"
           onClick={() => {
@@ -328,6 +321,8 @@ function CampaignsTab() {
           setEditing(row);
           setDialogOpen(true);
         }}
+        columnFilterDefs={CAMPAIGN_COLUMN_FILTERS}
+        serverColumnFilters={{ value: columnFilterValues, onChange: applyColumnFilters }}
         serverPagination={{
           pageIndex: page,
           pageCount,
@@ -642,6 +637,13 @@ const subscriberColumns: ColumnDef<SubscriberRow>[] = [
   },
 ];
 
+/** Filter controls rendered under each column header. */
+const SUBSCRIBER_COLUMN_FILTERS: Record<string, ColumnFilterDef> = {
+  email: { type: "text", placeholder: "Search emails" },
+  status: { type: "select", options: SUBSCRIBER_STATUSES, placeholder: "Any" },
+  source: { type: "select", options: SUBSCRIBER_SOURCES, placeholder: "Any" },
+};
+
 function SubscribersTab() {
   const [rows, setRows] = React.useState<SubscriberRow[]>([]);
   const [loading, setLoading] = React.useState(true);
@@ -651,7 +653,6 @@ function SubscribersTab() {
   const [total, setTotal] = React.useState(0);
   const [selected, setSelected] = React.useState<SubscriberRow[]>([]);
   const [clearKey, setClearKey] = React.useState(0);
-  const [exportBusy, setExportBusy] = React.useState(false);
 
   const [search, setSearch] = React.useState("");
   const [statuses, setStatuses] = React.useState<string[]>([]);
@@ -681,6 +682,27 @@ function SubscribersTab() {
     [dateRange, debouncedSearch, statuses, sources]
   );
 
+  /**
+   * The header filter row edits the same state as the toolbar above it, so
+   * a pick in one shows up in the other instead of silently competing.
+   */
+  const columnFilterValues = React.useMemo(() => {
+    const values: Record<string, string[]> = {};
+    if (search) values.email = [search];
+    if (statuses.length) values.status = statuses;
+    if (sources.length) values.source = sources;
+    return values;
+  }, [search, statuses, sources]);
+
+  const applyColumnFilters = React.useCallback(
+    (next: Record<string, string[]>) => {
+      setSearch(next.email?.[0] ?? "");
+      setStatuses(next.status ?? []);
+      setSources(next.source ?? []);
+    },
+    []
+  );
+
   React.useEffect(() => {
     let cancelled = false;
     setLoading(true);
@@ -707,30 +729,13 @@ function SubscribersTab() {
     };
   }, [page, pageSize, activeFilters, refreshKey]);
 
-  const runExport = async (scope: "selected" | "all") => {
-    setExportBusy(true);
-    try {
-      const exportRows =
-        scope === "selected"
-          ? selected
-          : (
+  const fetchAllForExport = async () =>
+    (
               await listSubscribers({
                 page: 1, limit: EXPORT_CAP, dateRange: activeFilters.dateRange,
                 filters: { email: activeFilters.email, status: activeFilters.status, source: activeFilters.source },
               })
             ).rows;
-      if (!exportRows.length) {
-        toast.error("Nothing to export.");
-        return;
-      }
-      exportRowsToCsv(`subscribers-${format(new Date(), "yyyy-MM-dd")}`, subscriberExportColumns, exportRows);
-      toast.success(`Exported ${exportRows.length} subscriber${exportRows.length === 1 ? "" : "s"}.`);
-    } catch (error) {
-      toast.error(apiErrorMessage(error, "Couldn't export subscribers."));
-    } finally {
-      setExportBusy(false);
-    }
-  };
 
   return (
     <div className="flex flex-col gap-3">
@@ -747,25 +752,14 @@ function SubscribersTab() {
         <MultiSelectFilter label="Status" options={SUBSCRIBER_STATUSES} value={statuses} onChange={setStatuses} />
         <MultiSelectFilter label="Source" options={SUBSCRIBER_SOURCES} value={sources} onChange={setSources} />
         <DateRangePicker value={dateRange} onChange={setDateRange} />
-        <DropdownMenu>
-          <DropdownMenuTrigger
-            disabled={exportBusy}
-            render={
-              <Button variant="outline">
-                {exportBusy ? <Loader2 className="size-4 animate-spin" /> : <Download className="size-4" />}
-                Export
-              </Button>
-            }
-          />
-          <DropdownMenuContent align="end" className="w-64">
-            <DropdownMenuItem disabled={!selected.length} onClick={() => runExport("selected")}>
-              Export {selected.length || ""} selected
-            </DropdownMenuItem>
-            <DropdownMenuItem onClick={() => runExport("all")}>
-              Export all matching filters ({total})
-            </DropdownMenuItem>
-          </DropdownMenuContent>
-        </DropdownMenu>
+        <ExportMenu
+          filename="subscribers"
+          columns={subscriberExportColumns}
+          selected={selected}
+          fetchAll={fetchAllForExport}
+          total={total}
+          noun="subscriber"
+        />
         <Button
           className="ml-auto"
           onClick={() => {
@@ -810,6 +804,8 @@ function SubscribersTab() {
           setEditing(row);
           setDialogOpen(true);
         }}
+        columnFilterDefs={SUBSCRIBER_COLUMN_FILTERS}
+        serverColumnFilters={{ value: columnFilterValues, onChange: applyColumnFilters }}
         serverPagination={{
           pageIndex: page,
           pageCount,

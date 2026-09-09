@@ -3,7 +3,7 @@
 import * as React from "react";
 import { type ColumnDef } from "@tanstack/react-table";
 import { format } from "date-fns";
-import { Download, Loader2, Plus, Search, Trash2 } from "lucide-react";
+import { Loader2, Plus, Search, Trash2 } from "lucide-react";
 import { useForm, Controller } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
@@ -21,10 +21,11 @@ import { ConfirmDeleteDialog } from "@/components/confirm-delete-dialog";
 import {
   Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
 } from "@/components/ui/select";
-import { DataTable } from "@/components/data-table";
+import { DataTable, type ColumnFilterDef } from "@/components/data-table";
 import { StatusToggle } from "@/components/status-badge";
 import { apiErrorMessage } from "@/lib/auth-api";
-import { exportRowsToCsv } from "@/lib/utils";
+import { exportRows as writeExport, type ExportFormat } from "@/lib/export";
+import { ExportFormatMenu } from "@/components/export-menu";
 import {
   listCouriers, createCourier, updateCourier, deleteCourier, updateRecordStatus,
   type CourierRow,
@@ -95,6 +96,11 @@ function getColumns(
   ];
 }
 
+/** Filter controls rendered under each column header. */
+const COLUMN_FILTERS: Record<string, ColumnFilterDef> = {
+  name: { type: "text", placeholder: "Search couriers" },
+};
+
 export function CouriersSection() {
   const [rows, setRows] = React.useState<CourierRow[]>([]);
   const [loading, setLoading] = React.useState(true);
@@ -121,6 +127,23 @@ export function CouriersSection() {
     [debounced]
   );
 
+  /**
+   * The header filter row edits the same state as the toolbar above it, so
+   * a pick in one shows up in the other instead of silently competing.
+   */
+  const columnFilterValues = React.useMemo(() => {
+    const values: Record<string, string[]> = {};
+    if (search) values.name = [search];
+    return values;
+  }, [search]);
+
+  const applyColumnFilters = React.useCallback(
+    (next: Record<string, string[]>) => {
+      setSearch(next.name?.[0] ?? "");
+    },
+    []
+  );
+
   React.useEffect(() => {
     let cancelled = false;
     setLoading(true);
@@ -134,7 +157,7 @@ export function CouriersSection() {
     return () => { cancelled = true; };
   }, [page, pageSize, buildFilters, refreshKey]);
 
-  const runExport = async () => {
+  const runExport = async (fileFormat: ExportFormat) => {
     setExportBusy(true);
     try {
       const exportRows = (await listCouriers({ page: 1, limit: EXPORT_CAP, filters: buildFilters() })).rows;
@@ -142,7 +165,7 @@ export function CouriersSection() {
         toast.error("Nothing to export.");
         return;
       }
-      exportRowsToCsv("couriers", [
+      await writeExport(fileFormat, "couriers", [
         { key: "name", label: "Courier", value: (r: CourierRow) => r.name ?? "" },
         { key: "code", label: "Code", value: (r: CourierRow) => r.code ?? "" },
         { key: "email", label: "Email", value: (r: CourierRow) => r.email ?? "" },
@@ -177,10 +200,7 @@ export function CouriersSection() {
           <Input value={search} onChange={(e) => setSearch(e.target.value)}
             placeholder="Search couriers" className="bg-card pl-8" />
         </div>
-        <Button variant="outline" onClick={runExport} disabled={exportBusy}>
-          {exportBusy ? <Loader2 className="size-4 animate-spin" /> : <Download className="size-4" />}
-          Export
-        </Button>
+        <ExportFormatMenu onSelect={runExport} busy={exportBusy} />
         <Button className="ml-auto" onClick={() => { setEditing(null); setDialogOpen(true); }}>
           <Plus className="size-4" /> Add courier
         </Button>
@@ -195,6 +215,8 @@ export function CouriersSection() {
       <DataTable
         columns={columns} data={rows} loading={loading}
         onRowClick={(row) => { setEditing(row); setDialogOpen(true); }}
+        columnFilterDefs={COLUMN_FILTERS}
+        serverColumnFilters={{ value: columnFilterValues, onChange: applyColumnFilters }}
         serverPagination={{
           pageIndex: page,
           pageCount,

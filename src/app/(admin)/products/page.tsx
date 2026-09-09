@@ -4,7 +4,7 @@ import * as React from "react";
 import { useRouter } from "next/navigation";
 import { type ColumnDef } from "@tanstack/react-table";
 import { format } from "date-fns";
-import { Boxes, Download, Loader2, Package, Plus, Search } from "lucide-react";
+import { Boxes, Package, Plus, Search } from "lucide-react";
 import { toast } from "sonner";
 import type { DateRange } from "react-day-picker";
 
@@ -12,17 +12,15 @@ import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Input } from "@/components/ui/input";
 import { MultiSelectFilter } from "@/components/multi-select-filter";
-import {
-  DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger,
-} from "@/components/ui/dropdown-menu";
-import { DataTable } from "@/components/data-table";
+import { DataTable, type ColumnFilterDef } from "@/components/data-table";
+import { ExportMenu } from "@/components/export-menu";
 import { DateRangePicker } from "@/components/date-range-picker";
 import { StatusBadge } from "@/components/status-badge";
 import { apiErrorMessage } from "@/lib/auth-api";
 import { usePermissions } from "@/stores/menu-store";
 import { StockDialog } from "@/components/products/stock-dialog";
 import { listProducts, type ProductRow } from "@/lib/admin-api";
-import { cn, exportRowsToCsv, imgUrl } from "@/lib/utils";
+import { cn, imgUrl } from "@/lib/utils";
 
 const DEFAULT_PAGE_SIZE = 20;
 const EXPORT_CAP = 5000;
@@ -62,6 +60,16 @@ const vendorName = (row: ProductRow) => {
     return o.vendor_name ?? o.name ?? "";
   }
   return String(v);
+};
+
+/**
+ * Filter controls rendered under each column header. Category and vendor are
+ * Prisma relations rather than scalar columns, so they can't be filtered
+ * through the generic `filters` object and are left out for now.
+ */
+const COLUMN_FILTERS: Record<string, ColumnFilterDef> = {
+  title: { type: "text", placeholder: "Search products" },
+  status: { type: "select", options: PRODUCT_STATUSES, placeholder: "Any" },
 };
 
 const exportColumns = [
@@ -249,7 +257,6 @@ export default function ProductsPage() {
   const [total, setTotal] = React.useState(0);
   const [selected, setSelected] = React.useState<ProductRow[]>([]);
   const [clearKey, setClearKey] = React.useState(0);
-  const [exportBusy, setExportBusy] = React.useState(false);
 
   const [pageSize, setPageSize] = React.useState<number>(DEFAULT_PAGE_SIZE);
   const [sortBy, setSortBy] = React.useState<string | undefined>();
@@ -278,6 +285,22 @@ export default function ProductsPage() {
     }),
     [dateRange, debounced, statuses]
   );
+
+  /**
+   * The header filter row edits the same state as the filter bar above it, so
+   * a pick in one shows up in the other instead of silently competing.
+   */
+  const columnFilterValues = React.useMemo(() => {
+    const values: Record<string, string[]> = {};
+    if (search) values.title = [search];
+    if (statuses.length) values.status = statuses;
+    return values;
+  }, [search, statuses]);
+
+  const applyColumnFilters = React.useCallback((next: Record<string, string[]>) => {
+    setSearch(next.title?.[0] ?? "");
+    setStatuses(next.status ?? []);
+  }, []);
 
   React.useEffect(() => {
     let cancelled = false;
@@ -308,56 +331,31 @@ export default function ProductsPage() {
     };
   }, [page, pageSize, sortBy, order, activeFilters, refreshKey]);
 
-  const runExport = async (scope: "selected" | "all") => {
-    setExportBusy(true);
-    try {
-      const exportRows =
-        scope === "selected"
-          ? selected
-          : (
-              await listProducts({
-                page: 1, limit: EXPORT_CAP,
-                dateRange: activeFilters.dateRange, search: activeFilters.search,
-                filters: { status: activeFilters.status },
-              })
-            ).rows;
-      if (!exportRows.length) {
-        toast.error("Nothing to export.");
-        return;
-      }
-      exportRowsToCsv(`products-${format(new Date(), "yyyy-MM-dd")}`, exportColumns, exportRows);
-      toast.success(`Exported ${exportRows.length} product${exportRows.length === 1 ? "" : "s"}.`);
-    } catch (error) {
-      toast.error(apiErrorMessage(error, "Couldn't export products."));
-    } finally {
-      setExportBusy(false);
-    }
-  };
+  const fetchAllForExport = React.useCallback(
+    async () =>
+      (
+        await listProducts({
+          page: 1, limit: EXPORT_CAP,
+          dateRange: activeFilters.dateRange, search: activeFilters.search,
+          filters: { status: activeFilters.status },
+        })
+      ).rows,
+    [activeFilters]
+  );
 
   return (
     <div className="flex flex-col gap-4">
       <div className="flex flex-wrap items-center justify-between gap-3">
         <h1 className="text-xl font-bold">Products</h1>
         <div className="flex gap-2">
-          <DropdownMenu>
-            <DropdownMenuTrigger
-              disabled={exportBusy}
-              render={
-                <Button variant="outline">
-                  {exportBusy ? <Loader2 className="size-4 animate-spin" /> : <Download className="size-4" />}
-                  Export
-                </Button>
-              }
-            />
-            <DropdownMenuContent align="end" className="w-64">
-              <DropdownMenuItem disabled={!selected.length} onClick={() => runExport("selected")}>
-                Export {selected.length || ""} selected product{selected.length === 1 ? "" : "s"}
-              </DropdownMenuItem>
-              <DropdownMenuItem onClick={() => runExport("all")}>
-                Export all products matching filters ({total})
-              </DropdownMenuItem>
-            </DropdownMenuContent>
-          </DropdownMenu>
+          <ExportMenu
+            filename="products"
+            columns={exportColumns}
+            selected={selected}
+            fetchAll={fetchAllForExport}
+            total={total}
+            noun="product"
+          />
           {permissions.can_create && (
             <Button onClick={() => router.push("/products/new")}>
               <Plus className="size-4" />
@@ -386,10 +384,15 @@ export default function ProductsPage() {
           <span className="text-sm font-medium">
             {selected.length} product{selected.length === 1 ? "" : "s"} selected
           </span>
-          <Button size="sm" variant="outline" disabled={exportBusy} onClick={() => runExport("selected")}>
-            {exportBusy ? <Loader2 className="size-4 animate-spin" /> : <Download className="size-4" />}
-            Export selected
-          </Button>
+          <ExportMenu
+            filename="products"
+            columns={exportColumns}
+            selected={selected}
+            fetchAll={fetchAllForExport}
+            total={total}
+            noun="product"
+            size="sm"
+          />
           <button
             type="button"
             onClick={() => setClearKey((k) => k + 1)}
@@ -407,6 +410,8 @@ export default function ProductsPage() {
         onSelectionChange={setSelected}
         clearSelectionKey={clearKey}
         onRowClick={(row) => router.push(`/products/${row.id}`)}
+        columnFilterDefs={COLUMN_FILTERS}
+        serverColumnFilters={{ value: columnFilterValues, onChange: applyColumnFilters }}
         serverPagination={{
           pageIndex: page,
           pageCount,

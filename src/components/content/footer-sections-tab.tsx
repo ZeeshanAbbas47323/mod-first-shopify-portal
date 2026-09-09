@@ -24,13 +24,13 @@ import {
 } from "@/components/ui/dialog";
 import { ConfirmDeleteDialog } from "@/components/confirm-delete-dialog";
 import { apiErrorMessage } from "@/lib/auth-api";
+import { moveRow } from "@/lib/sort-order";
 import {
   listFooterSections,
   createFooterSection,
   updateFooterSection,
   manageFooterLinks,
   deleteRecord,
-  updateSortOrder,
   type FooterSectionRow,
   type FooterLinkRow,
 } from "@/lib/admin-api";
@@ -427,16 +427,8 @@ export function FooterSectionsTab() {
   );
 
   const handleMove = async (index: number, direction: "up" | "down") => {
-    const target = direction === "up" ? index - 1 : index + 1;
-    if (target < 0 || target >= sorted.length) return;
-    const a = sorted[index];
-    const b = sorted[target];
     try {
-      await updateSortOrder("footerSection", [
-        { id: a.id, sort_order: b.sort_order ?? target },
-        { id: b.id, sort_order: a.sort_order ?? index },
-      ]);
-      load();
+      if (await moveRow("footerSection", sorted, index, direction)) load();
     } catch (e) {
       toast.error(apiErrorMessage(e, "Couldn't update order."));
     }

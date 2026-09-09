@@ -3,23 +3,20 @@
 import * as React from "react";
 import { type ColumnDef } from "@tanstack/react-table";
 import { format } from "date-fns";
-import { Download, Heart, Loader2, Search } from "lucide-react";
+import { Heart, Search } from "lucide-react";
 import type { DateRange } from "react-day-picker";
 import { toast } from "sonner";
 
-import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Input } from "@/components/ui/input";
 import { MultiSelectFilter } from "@/components/multi-select-filter";
 import { SummaryStatStrip, type SummaryTile } from "@/components/summary-stat-strip";
-import {
-  DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger,
-} from "@/components/ui/dropdown-menu";
-import { DataTable } from "@/components/data-table";
+import { DataTable, type ColumnFilterDef } from "@/components/data-table";
+import { ExportMenu } from "@/components/export-menu";
 import { DateRangePicker } from "@/components/date-range-picker";
 import { StatusBadge } from "@/components/status-badge";
 import { apiErrorMessage } from "@/lib/auth-api";
-import { exportRowsToCsv, imgUrl } from "@/lib/utils";
+import { imgUrl } from "@/lib/utils";
 import { listWishlists, type WishlistRow } from "@/lib/admin-api";
 
 const DEFAULT_PAGE_SIZE = 20;
@@ -37,6 +34,12 @@ const productName = (row: WishlistRow) =>
 
 const customerName = (row: WishlistRow) =>
   row.user?.full_name ?? row.user?.name ?? (row.user_id != null ? `User #${row.user_id}` : "—");
+
+/** Filter controls rendered under each column header. */
+const COLUMN_FILTERS: Record<string, ColumnFilterDef> = {
+  product_id: { type: "text", placeholder: "Product ID" },
+  is_active: { type: "select", options: STATUS_OPTIONS, placeholder: "Any" },
+};
 
 const exportColumns = [
   { key: "product", label: "Product", value: (r: WishlistRow) => productName(r) },
@@ -57,7 +60,6 @@ export default function WishlistsPage() {
 
   const [selected, setSelected] = React.useState<WishlistRow[]>([]);
   const [clearKey, setClearKey] = React.useState(0);
-  const [exportBusy, setExportBusy] = React.useState(false);
 
   const [productId, setProductId] = React.useState("");
   const [debouncedProduct, setDebouncedProduct] = React.useState("");
@@ -81,6 +83,25 @@ export default function WishlistsPage() {
       is_active: statuses.length === 1 ? statuses[0] === "active" : undefined,
     }),
     [dateRange, debouncedProduct, statuses]
+  );
+
+  /**
+   * The header filter row edits the same state as the filter bar above it,
+   * so a pick in one shows up in the other instead of silently competing.
+   */
+  const columnFilterValues = React.useMemo(() => {
+    const values: Record<string, string[]> = {};
+    if (productId) values.product_id = [productId];
+    if (statuses.length) values.is_active = statuses;
+    return values;
+  }, [productId, statuses]);
+
+  const applyColumnFilters = React.useCallback(
+    (next: Record<string, string[]>) => {
+      setProductId(next.product_id?.[0] ?? "");
+      setStatuses(next.is_active ?? []);
+    },
+    []
   );
 
   React.useEffect(() => {
@@ -109,30 +130,13 @@ export default function WishlistsPage() {
     };
   }, [page, pageSize, activeFilters]);
 
-  const runExport = async (scope: "selected" | "all") => {
-    setExportBusy(true);
-    try {
-      const exportRows =
-        scope === "selected"
-          ? selected
-          : (
+  const fetchAllForExport = async () =>
+    (
               await listWishlists({
                 page: 1, limit: EXPORT_CAP, dateRange: activeFilters.dateRange,
                 filters: { product_id: activeFilters.product_id, is_active: activeFilters.is_active },
               })
             ).rows;
-      if (!exportRows.length) {
-        toast.error("Nothing to export.");
-        return;
-      }
-      exportRowsToCsv(`wishlists-${format(new Date(), "yyyy-MM-dd")}`, exportColumns, exportRows);
-      toast.success(`Exported ${exportRows.length} save${exportRows.length === 1 ? "" : "s"}.`);
-    } catch (error) {
-      toast.error(apiErrorMessage(error, "Couldn't export wishlists."));
-    } finally {
-      setExportBusy(false);
-    }
-  };
 
   // Most-saved products on the current page — a quick demand signal.
   const topProducts = React.useMemo(() => {
@@ -264,25 +268,14 @@ export default function WishlistsPage() {
             Products customers have saved — what they want but haven&apos;t bought yet.
           </p>
         </div>
-        <DropdownMenu>
-          <DropdownMenuTrigger
-            disabled={exportBusy}
-            render={
-              <Button variant="outline">
-                {exportBusy ? <Loader2 className="size-4 animate-spin" /> : <Download className="size-4" />}
-                Export
-              </Button>
-            }
-          />
-          <DropdownMenuContent align="end" className="w-64">
-            <DropdownMenuItem disabled={!selected.length} onClick={() => runExport("selected")}>
-              Export {selected.length || ""} selected save{selected.length === 1 ? "" : "s"}
-            </DropdownMenuItem>
-            <DropdownMenuItem onClick={() => runExport("all")}>
-              Export all matching filters ({total})
-            </DropdownMenuItem>
-          </DropdownMenuContent>
-        </DropdownMenu>
+        <ExportMenu
+          filename="wishlists"
+          columns={exportColumns}
+          selected={selected}
+          fetchAll={fetchAllForExport}
+          total={total}
+          noun="wishlist"
+        />
       </div>
 
       <SummaryStatStrip tiles={tiles} loading={loading} />
@@ -307,10 +300,15 @@ export default function WishlistsPage() {
           <span className="text-sm font-medium">
             {selected.length} save{selected.length === 1 ? "" : "s"} selected
           </span>
-          <Button size="sm" variant="outline" disabled={exportBusy} onClick={() => runExport("selected")}>
-            {exportBusy ? <Loader2 className="size-4 animate-spin" /> : <Download className="size-4" />}
-            Export selected
-          </Button>
+          <ExportMenu
+            filename="wishlists"
+            columns={exportColumns}
+            selected={selected}
+            fetchAll={fetchAllForExport}
+            total={total}
+            noun="wishlist"
+            size="sm"
+          />
           <button
             type="button"
             onClick={() => setClearKey((k) => k + 1)}
@@ -327,6 +325,8 @@ export default function WishlistsPage() {
         loading={loading}
         onSelectionChange={setSelected}
         clearSelectionKey={clearKey}
+        columnFilterDefs={COLUMN_FILTERS}
+        serverColumnFilters={{ value: columnFilterValues, onChange: applyColumnFilters }}
         serverPagination={{
           pageIndex: page,
           pageCount,

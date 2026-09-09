@@ -3,19 +3,7 @@
 import * as React from "react";
 import { type ColumnDef } from "@tanstack/react-table";
 import { format } from "date-fns";
-import {
-  Check,
-  Copy,
-  Download,
-  KeyRound,
-  Loader2,
-  MoreHorizontal,
-  Pencil,
-  Plus,
-  RefreshCw,
-  Search,
-  TriangleAlert,
-} from "lucide-react";
+import { Check, Copy, KeyRound, Loader2, MoreHorizontal, Pencil, Plus, RefreshCw, Search, TriangleAlert } from "lucide-react";
 import { toast } from "sonner";
 
 import { Button } from "@/components/ui/button";
@@ -36,10 +24,11 @@ import {
   Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
 } from "@/components/ui/select";
 import { ConfirmDeleteDialog } from "@/components/confirm-delete-dialog";
-import { DataTable } from "@/components/data-table";
+import { DataTable, type ColumnFilterDef } from "@/components/data-table";
 import { StatusBadge } from "@/components/status-badge";
 import { apiErrorMessage } from "@/lib/auth-api";
-import { exportRowsToCsv } from "@/lib/utils";
+import { exportRows as writeExport, type ExportFormat } from "@/lib/export";
+import { ExportFormatMenu } from "@/components/export-menu";
 import {
   createApiUser,
   fetchAllWebsiteSettings,
@@ -66,6 +55,12 @@ const fmtDate = (d?: string | null) => {
   if (!d) return "—";
   const date = new Date(d);
   return isNaN(date.getTime()) ? "—" : format(date, "MMM d, yyyy");
+};
+
+/** Filter controls rendered under each column header. */
+const COLUMN_FILTERS: Record<string, ColumnFilterDef> = {
+  name: { type: "text", placeholder: "Search API users" },
+  status: { type: "select", options: [{ value: "active", label: "Active" }, { value: "inactive", label: "Inactive" }], placeholder: "Any" },
 };
 
 export function ApiUsersSection() {
@@ -119,6 +114,26 @@ export function ApiUsersSection() {
     [debounced, status]
   );
 
+  /**
+   * The header filter row edits the same state as the toolbar above it, so
+   * a pick in one shows up in the other instead of silently competing.
+   */
+  const columnFilterValues = React.useMemo(() => {
+    const values: Record<string, string[]> = {};
+    if (search) values.name = [search];
+    if (status !== "all") values.status = [status];
+    return values;
+  }, [search, status]);
+
+  const applyColumnFilters = React.useCallback(
+    (next: Record<string, string[]>) => {
+      setSearch(next.name?.[0] ?? "");
+      const picked = next.status ?? [];
+      setStatus(picked.length === 1 ? picked[0] : "all");
+    },
+    []
+  );
+
   React.useEffect(() => {
     let cancelled = false;
     setLoading(true);
@@ -161,7 +176,7 @@ export function ApiUsersSection() {
   );
 
   const [exportBusy, setExportBusy] = React.useState(false);
-  const runExport = async () => {
+  const runExport = async (fileFormat: ExportFormat) => {
     setExportBusy(true);
     try {
       const exportRows = (await listApiUsers({ page: 1, limit: EXPORT_CAP, filters: buildFilters() })).rows;
@@ -169,7 +184,7 @@ export function ApiUsersSection() {
         toast.error("Nothing to export.");
         return;
       }
-      exportRowsToCsv("api-users", [
+      await writeExport(fileFormat, "api-users", [
         { key: "name", label: "Credential", value: (r: ApiUserRow) => r.name ?? "" },
         { key: "api_key", label: "API Key", value: (r: ApiUserRow) => r.api_key ?? "" },
         { key: "store", label: "Store", value: (r: ApiUserRow) => storeName(r) },
@@ -314,10 +329,7 @@ export function ApiUsersSection() {
             ))}
           </SelectContent>
         </Select>
-        <Button variant="outline" onClick={runExport} disabled={exportBusy}>
-          {exportBusy ? <Loader2 className="size-4 animate-spin" /> : <Download className="size-4" />}
-          Export
-        </Button>
+        <ExportFormatMenu onSelect={runExport} busy={exportBusy} />
         <Button
           className="ml-auto"
           onClick={() => {
@@ -338,6 +350,8 @@ export function ApiUsersSection() {
           setEditing(row);
           setDialogOpen(true);
         }}
+        columnFilterDefs={COLUMN_FILTERS}
+        serverColumnFilters={{ value: columnFilterValues, onChange: applyColumnFilters }}
         serverPagination={{
           pageIndex: page,
           pageCount,

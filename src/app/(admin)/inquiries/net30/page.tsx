@@ -3,7 +3,7 @@
 import * as React from "react";
 import { type ColumnDef } from "@tanstack/react-table";
 import { format } from "date-fns";
-import { Download, FileText, Loader2, Mail, Phone, Search } from "lucide-react";
+import { FileText, Loader2, Mail, Phone, Search } from "lucide-react";
 import type { DateRange } from "react-day-picker";
 import { toast } from "sonner";
 
@@ -21,14 +21,12 @@ import {
 } from "@/components/ui/select";
 import { MultiSelectFilter } from "@/components/multi-select-filter";
 import { SummaryStatStrip, type SummaryTile } from "@/components/summary-stat-strip";
-import {
-  DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger,
-} from "@/components/ui/dropdown-menu";
-import { DataTable } from "@/components/data-table";
+import { DataTable, type ColumnFilterDef } from "@/components/data-table";
+import { ExportMenu } from "@/components/export-menu";
 import { DateRangePicker } from "@/components/date-range-picker";
 import { StatusBadge } from "@/components/status-badge";
 import { apiErrorMessage } from "@/lib/auth-api";
-import { exportRowsToCsv, fileUrl } from "@/lib/utils";
+import { fileUrl } from "@/lib/utils";
 import {
   INQUIRY_STATUSES,
   INQUIRY_STATUS_LABELS,
@@ -60,6 +58,12 @@ const fmtWhen = (v?: string) => {
   return isNaN(d.getTime()) ? "—" : format(d, "MMM d, yyyy · h:mm a");
 };
 
+/** Filter controls rendered under each column header. */
+const COLUMN_FILTERS: Record<string, ColumnFilterDef> = {
+  company_name: { type: "text", placeholder: "Search companies" },
+  status: { type: "select", options: INQUIRY_STATUSES, placeholder: "Any" },
+};
+
 const exportColumns = [
   { key: "company_name", label: "Company", value: (r: Net30ApplicationRow) => r.company_name },
   { key: "company_tax_id", label: "Tax ID", value: (r: Net30ApplicationRow) => r.company_tax_id ?? "" },
@@ -81,7 +85,6 @@ export default function Net30ApplicationsPage() {
 
   const [selected, setSelected] = React.useState<Net30ApplicationRow[]>([]);
   const [clearKey, setClearKey] = React.useState(0);
-  const [exportBusy, setExportBusy] = React.useState(false);
   const [summary, setSummary] = React.useState<Net30ApplicationsSummary>(EMPTY_SUMMARY);
   const [summaryLoading, setSummaryLoading] = React.useState(true);
 
@@ -109,6 +112,25 @@ export default function Net30ApplicationsPage() {
       status: statuses.length ? statuses : undefined,
     }),
     [dateRange, debounced, statuses]
+  );
+
+  /**
+   * The header filter row edits the same state as the filter bar above it,
+   * so a pick in one shows up in the other instead of silently competing.
+   */
+  const columnFilterValues = React.useMemo(() => {
+    const values: Record<string, string[]> = {};
+    if (company) values.company_name = [company];
+    if (statuses.length) values.status = statuses;
+    return values;
+  }, [company, statuses]);
+
+  const applyColumnFilters = React.useCallback(
+    (next: Record<string, string[]>) => {
+      setCompany(next.company_name?.[0] ?? "");
+      setStatuses(next.status ?? []);
+    },
+    []
   );
 
   React.useEffect(() => {
@@ -147,30 +169,13 @@ export default function Net30ApplicationsPage() {
     return () => { cancelled = true; };
   }, [activeFilters]);
 
-  const runExport = async (scope: "selected" | "all") => {
-    setExportBusy(true);
-    try {
-      const exportRows =
-        scope === "selected"
-          ? selected
-          : (
+  const fetchAllForExport = async () =>
+    (
               await listNet30Applications({
                 page: 1, limit: EXPORT_CAP, dateRange: activeFilters.dateRange,
                 filters: { company_name: activeFilters.company_name, status: activeFilters.status },
               })
             ).rows;
-      if (!exportRows.length) {
-        toast.error("Nothing to export.");
-        return;
-      }
-      exportRowsToCsv(`net30-applications-${format(new Date(), "yyyy-MM-dd")}`, exportColumns, exportRows);
-      toast.success(`Exported ${exportRows.length} application${exportRows.length === 1 ? "" : "s"}.`);
-    } catch (error) {
-      toast.error(apiErrorMessage(error, "Couldn't export applications."));
-    } finally {
-      setExportBusy(false);
-    }
-  };
 
   const columns = React.useMemo<ColumnDef<Net30ApplicationRow>[]>(
     () => [
@@ -291,25 +296,14 @@ export default function Net30ApplicationsPage() {
             Business credit applications from the Net 30 club form.
           </p>
         </div>
-        <DropdownMenu>
-          <DropdownMenuTrigger
-            disabled={exportBusy}
-            render={
-              <Button variant="outline">
-                {exportBusy ? <Loader2 className="size-4 animate-spin" /> : <Download className="size-4" />}
-                Export
-              </Button>
-            }
-          />
-          <DropdownMenuContent align="end" className="w-64">
-            <DropdownMenuItem disabled={!selected.length} onClick={() => runExport("selected")}>
-              Export {selected.length || ""} selected
-            </DropdownMenuItem>
-            <DropdownMenuItem onClick={() => runExport("all")}>
-              Export all matching filters ({total})
-            </DropdownMenuItem>
-          </DropdownMenuContent>
-        </DropdownMenu>
+        <ExportMenu
+          filename="net30-applications"
+          columns={exportColumns}
+          selected={selected}
+          fetchAll={fetchAllForExport}
+          total={total}
+          noun="application"
+        />
       </div>
 
       <SummaryStatStrip tiles={tiles} loading={summaryLoading} />
@@ -350,6 +344,8 @@ export default function Net30ApplicationsPage() {
         onSelectionChange={setSelected}
         clearSelectionKey={clearKey}
         onRowClick={setDetail}
+        columnFilterDefs={COLUMN_FILTERS}
+        serverColumnFilters={{ value: columnFilterValues, onChange: applyColumnFilters }}
         serverPagination={{
           pageIndex: page,
           pageCount,

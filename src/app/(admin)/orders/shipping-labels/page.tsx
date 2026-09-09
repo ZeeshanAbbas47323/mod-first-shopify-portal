@@ -4,22 +4,20 @@ import * as React from "react";
 import { useRouter } from "next/navigation";
 import { format } from "date-fns";
 import { type ColumnDef } from "@tanstack/react-table";
-import { Download, Loader2, Package, Plus, Search, X } from "lucide-react";
+import { Loader2, Package, Plus, Search, X } from "lucide-react";
 import { toast } from "sonner";
 import type { DateRange } from "react-day-picker";
 
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
-import { DataTable } from "@/components/data-table";
+import { DataTable, type ColumnFilterDef } from "@/components/data-table";
+import { ExportMenu } from "@/components/export-menu";
 import { MultiSelectFilter } from "@/components/multi-select-filter";
 import { SummaryStatStrip, type SummaryTile } from "@/components/summary-stat-strip";
 import { DateRangePicker } from "@/components/date-range-picker";
 import {
   Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle,
 } from "@/components/ui/dialog";
-import {
-  DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger,
-} from "@/components/ui/dropdown-menu";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import {
@@ -27,7 +25,6 @@ import {
 } from "@/components/ui/select";
 import { StatusBadge } from "@/components/status-badge";
 import { apiErrorMessage } from "@/lib/auth-api";
-import { exportRowsToCsv } from "@/lib/utils";
 import {
   createShipmentRate,
   listCouriers,
@@ -49,6 +46,12 @@ const EMPTY_SUMMARY: ShipmentsSummary = {
   delivered: { current: 0, previous: 0, change_percent: null },
   in_transit: { current: 0, previous: 0, change_percent: null },
   issues: { current: 0, previous: 0, change_percent: null },
+};
+
+/** Filter controls rendered under each column header. */
+const COLUMN_FILTERS: Record<string, ColumnFilterDef> = {
+  shipment_number: { type: "text", placeholder: "Search shipments" },
+  status: { type: "select", options: SHIPMENT_STATUSES, placeholder: "Any" },
 };
 
 const exportColumns = [
@@ -144,7 +147,6 @@ export default function ShippingLabelsPage() {
   const [createOpen, setCreateOpen] = React.useState(false);
   const [selected, setSelected] = React.useState<ShipmentRow[]>([]);
   const [clearKey, setClearKey] = React.useState(0);
-  const [exportBusy, setExportBusy] = React.useState(false);
   const [summary, setSummary] = React.useState<ShipmentsSummary>(EMPTY_SUMMARY);
   const [summaryLoading, setSummaryLoading] = React.useState(true);
 
@@ -153,6 +155,25 @@ export default function ShippingLabelsPage() {
   const activeFilters = React.useMemo(
     () => ({ dateRange, status: statuses, search: search || undefined }),
     [dateRange, statuses, search]
+  );
+
+  /**
+   * The header filter row edits the same state as the filter bar above it,
+   * so a pick in one shows up in the other instead of silently competing.
+   */
+  const columnFilterValues = React.useMemo(() => {
+    const values: Record<string, string[]> = {};
+    if (search) values.shipment_number = [search];
+    if (statuses.length) values.status = statuses;
+    return values;
+  }, [search, statuses]);
+
+  const applyColumnFilters = React.useCallback(
+    (next: Record<string, string[]>) => {
+      setSearch(next.shipment_number?.[0] ?? "");
+      setStatuses(next.status ?? []);
+    },
+    []
   );
 
   const load = React.useCallback(() => {
@@ -180,30 +201,13 @@ export default function ShippingLabelsPage() {
     return () => { cancelled = true; };
   }, [activeFilters]);
 
-  const runExport = async (scope: "selected" | "all") => {
-    setExportBusy(true);
-    try {
-      const exportRows =
-        scope === "selected"
-          ? selected
-          : (
+  const fetchAllForExport = async () =>
+    (
               await listShipments({
                 page: 1, limit: EXPORT_CAP, search: activeFilters.search, dateRange: activeFilters.dateRange,
                 filters: activeFilters.status.length ? { status: activeFilters.status } : undefined,
               })
             ).rows;
-      if (!exportRows.length) {
-        toast.error("Nothing to export.");
-        return;
-      }
-      exportRowsToCsv(`shipments-${format(new Date(), "yyyy-MM-dd")}`, exportColumns, exportRows);
-      toast.success(`Exported ${exportRows.length} shipment${exportRows.length === 1 ? "" : "s"}.`);
-    } catch (error) {
-      toast.error(apiErrorMessage(error, "Couldn't export shipments."));
-    } finally {
-      setExportBusy(false);
-    }
-  };
 
   const tiles: SummaryTile[] = [
     { label: "Shipments", value: summary.shipments.current.toLocaleString("en-US"), changePercent: summary.shipments.change_percent },
@@ -218,25 +222,14 @@ export default function ShippingLabelsPage() {
       <div className="flex flex-wrap items-center justify-between gap-3">
         <h1 className="text-xl font-bold">Shipping & Delivery</h1>
         <div className="flex gap-2">
-          <DropdownMenu>
-            <DropdownMenuTrigger
-              disabled={exportBusy}
-              render={
-                <Button variant="outline">
-                  {exportBusy ? <Loader2 className="size-4 animate-spin" /> : <Download className="size-4" />}
-                  Export
-                </Button>
-              }
-            />
-            <DropdownMenuContent align="end" className="w-64">
-              <DropdownMenuItem disabled={!selected.length} onClick={() => runExport("selected")}>
-                Export {selected.length || ""} selected shipment{selected.length === 1 ? "" : "s"}
-              </DropdownMenuItem>
-              <DropdownMenuItem onClick={() => runExport("all")}>
-                Export all shipments matching filters ({total})
-              </DropdownMenuItem>
-            </DropdownMenuContent>
-          </DropdownMenu>
+          <ExportMenu
+            filename="shipments"
+            columns={exportColumns}
+            selected={selected}
+            fetchAll={fetchAllForExport}
+            total={total}
+            noun="shipment"
+          />
           <Button onClick={() => setCreateOpen(true)}>
             <Plus className="size-4" /> Create shipment
           </Button>
@@ -278,10 +271,15 @@ export default function ShippingLabelsPage() {
           <span className="text-sm font-medium">
             {selected.length} shipment{selected.length === 1 ? "" : "s"} selected
           </span>
-          <Button size="sm" variant="outline" disabled={exportBusy} onClick={() => runExport("selected")}>
-            {exportBusy ? <Loader2 className="size-4 animate-spin" /> : <Download className="size-4" />}
-            Export selected
-          </Button>
+          <ExportMenu
+            filename="shipments"
+            columns={exportColumns}
+            selected={selected}
+            fetchAll={fetchAllForExport}
+            total={total}
+            noun="shipment"
+            size="sm"
+          />
           <button
             type="button"
             onClick={() => setClearKey((k) => k + 1)}
@@ -300,6 +298,8 @@ export default function ShippingLabelsPage() {
         onSelectionChange={setSelected}
         clearSelectionKey={clearKey}
         onRowClick={(row) => router.push(`/orders/${row.order_id}`)}
+        columnFilterDefs={COLUMN_FILTERS}
+        serverColumnFilters={{ value: columnFilterValues, onChange: applyColumnFilters }}
         serverPagination={{
           pageIndex: page - 1,
           pageCount: totalPages,

@@ -2,23 +2,20 @@
 
 import * as React from "react";
 import { useRouter } from "next/navigation";
-import { format } from "date-fns";
-import { ChevronsDownUp, ChevronsUpDown, Download, Loader2, Plus, Search } from "lucide-react";
+import { ChevronsDownUp, ChevronsUpDown, Plus, Search } from "lucide-react";
 import { toast } from "sonner";
 
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { MultiSelectFilter } from "@/components/multi-select-filter";
-import {
-  DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger,
-} from "@/components/ui/dropdown-menu";
 import { Skeleton } from "@/components/ui/skeleton";
 import {
   CategoryTree, buildCategoryTree, flattenCategoryTree, type CategoryTreeNode,
 } from "@/components/category-tree";
+import { ExportMenu } from "@/components/export-menu";
+import { moveRow } from "@/lib/sort-order";
 import { apiErrorMessage } from "@/lib/auth-api";
 import { usePermissions } from "@/stores/menu-store";
-import { exportRowsToCsv } from "@/lib/utils";
 import {
   fetchAllProductCategories,
   updateRecordStatus,
@@ -62,7 +59,6 @@ export default function ProductCategoriesPage() {
   const [rows, setRows] = React.useState<ProductCategoryRow[]>([]);
   const [loading, setLoading] = React.useState(true);
   const [refreshKey, setRefreshKey] = React.useState(0);
-  const [exportBusy, setExportBusy] = React.useState(false);
 
   const [search, setSearch] = React.useState("");
   const [statuses, setStatuses] = React.useState<string[]>([]);
@@ -135,6 +131,23 @@ export default function ProductCategoriesPage() {
     });
   };
 
+  // Reorders one row of siblings; a category never moves between branches here.
+  const handleMove = async (
+    node: CategoryTreeNode,
+    siblings: CategoryTreeNode[],
+    direction: "up" | "down"
+  ) => {
+    const index = siblings.findIndex((s) => String(s.id) === String(node.id));
+    if (index < 0) return;
+    try {
+      if (await moveRow("productCategory", siblings, index, direction)) {
+        setRefreshKey((k) => k + 1);
+      }
+    } catch (error) {
+      toast.error(apiErrorMessage(error, "Couldn't reorder the categories."));
+    }
+  };
+
   const handleToggleStatus = async (row: ProductCategoryRow, next: boolean) => {
     try {
       await updateRecordStatus("productCategory", row.id, next);
@@ -145,21 +158,12 @@ export default function ProductCategoriesPage() {
     }
   };
 
-  const runExport = (scope: "selected" | "all") => {
-    setExportBusy(true);
-    try {
-      const exportRows =
-        scope === "selected" ? flat.filter((n) => selected.has(String(n.id))) : flat;
-      if (!exportRows.length) {
-        toast.error("Nothing to export.");
-        return;
-      }
-      exportRowsToCsv(`categories-${format(new Date(), "yyyy-MM-dd")}`, exportColumns, exportRows);
-      toast.success(`Exported ${exportRows.length} categor${exportRows.length === 1 ? "y" : "ies"}.`);
-    } finally {
-      setExportBusy(false);
-    }
-  };
+  // The whole tree is already loaded, so "everything" needs no extra request.
+  const selectedRows = React.useMemo(
+    () => flat.filter((n) => selected.has(String(n.id))),
+    [flat, selected]
+  );
+  const fetchAllForExport = async () => flat;
 
   const allIds = React.useMemo(() => flat.map((n) => String(n.id)), [flat]);
   const allExpanded = expanded.size >= allIds.length && allIds.length > 0;
@@ -174,25 +178,15 @@ export default function ProductCategoriesPage() {
           </p>
         </div>
         <div className="flex gap-2">
-          <DropdownMenu>
-            <DropdownMenuTrigger
-              disabled={exportBusy}
-              render={
-                <Button variant="outline">
-                  {exportBusy ? <Loader2 className="size-4 animate-spin" /> : <Download className="size-4" />}
-                  Export
-                </Button>
-              }
-            />
-            <DropdownMenuContent align="end" className="w-64">
-              <DropdownMenuItem disabled={!selected.size} onClick={() => runExport("selected")}>
-                Export {selected.size || ""} selected
-              </DropdownMenuItem>
-              <DropdownMenuItem onClick={() => runExport("all")}>
-                Export all ({flat.length})
-              </DropdownMenuItem>
-            </DropdownMenuContent>
-          </DropdownMenu>
+          <ExportMenu
+            filename="categories"
+            columns={exportColumns}
+            selected={selectedRows}
+            fetchAll={fetchAllForExport}
+            total={flat.length}
+            noun="category"
+            nounPlural="categories"
+          />
           {permissions.can_create && (
             <Button onClick={() => router.push("/products/categories/new")}>
               <Plus className="size-4" />
@@ -251,6 +245,7 @@ export default function ProductCategoriesPage() {
           onToggleStatus={handleToggleStatus}
           onRowClick={(row) => router.push(`/products/categories/${row.id}`)}
           matchedIds={matchedIds}
+          onMove={permissions.can_edit ? handleMove : undefined}
         />
       )}
     </div>

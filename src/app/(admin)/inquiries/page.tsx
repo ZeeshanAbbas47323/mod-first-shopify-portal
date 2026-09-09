@@ -3,7 +3,7 @@
 import * as React from "react";
 import { type ColumnDef } from "@tanstack/react-table";
 import { format } from "date-fns";
-import { Download, Loader2, Mail, Phone, Search } from "lucide-react";
+import { Loader2, Mail, Phone, Search } from "lucide-react";
 import type { DateRange } from "react-day-picker";
 import { toast } from "sonner";
 
@@ -21,14 +21,11 @@ import {
 } from "@/components/ui/select";
 import { MultiSelectFilter } from "@/components/multi-select-filter";
 import { SummaryStatStrip, type SummaryTile } from "@/components/summary-stat-strip";
-import {
-  DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger,
-} from "@/components/ui/dropdown-menu";
-import { DataTable } from "@/components/data-table";
+import { DataTable, type ColumnFilterDef } from "@/components/data-table";
+import { ExportMenu } from "@/components/export-menu";
 import { DateRangePicker } from "@/components/date-range-picker";
 import { StatusBadge, type BadgeTone } from "@/components/status-badge";
 import { apiErrorMessage } from "@/lib/auth-api";
-import { exportRowsToCsv } from "@/lib/utils";
 import {
   HELP_TOPIC_LABELS,
   INQUIRY_STATUSES,
@@ -45,6 +42,12 @@ const DEFAULT_PAGE_SIZE = 15;
 const EXPORT_CAP = 5000;
 const HELP_TOPICS = Object.keys(HELP_TOPIC_LABELS);
 const EMPTY_SUMMARY: ContactSubmissionsSummary = { total: 0, new: 0, in_progress: 0, resolved: 0 };
+
+/** Filter controls rendered under each column header. */
+const COLUMN_FILTERS: Record<string, ColumnFilterDef> = {
+  help_topic: { type: "select", options: HELP_TOPICS, placeholder: "Any" },
+  status: { type: "select", options: INQUIRY_STATUSES, placeholder: "Any" },
+};
 
 const exportColumns = [
   { key: "name", label: "From", value: (r: ContactSubmissionRow) => `${r.first_name} ${r.last_name}` },
@@ -79,7 +82,6 @@ export default function ContactSubmissionsPage() {
 
   const [selected, setSelected] = React.useState<ContactSubmissionRow[]>([]);
   const [clearKey, setClearKey] = React.useState(0);
-  const [exportBusy, setExportBusy] = React.useState(false);
   const [summary, setSummary] = React.useState<ContactSubmissionsSummary>(EMPTY_SUMMARY);
   const [summaryLoading, setSummaryLoading] = React.useState(true);
 
@@ -109,6 +111,25 @@ export default function ContactSubmissionsPage() {
       help_topic: topics.length ? topics : undefined,
     }),
     [dateRange, debounced, statuses, topics]
+  );
+
+  /**
+   * The header filter row edits the same state as the filter bar above it,
+   * so a pick in one shows up in the other instead of silently competing.
+   */
+  const columnFilterValues = React.useMemo(() => {
+    const values: Record<string, string[]> = {};
+    if (topics.length) values.help_topic = topics;
+    if (statuses.length) values.status = statuses;
+    return values;
+  }, [topics, statuses]);
+
+  const applyColumnFilters = React.useCallback(
+    (next: Record<string, string[]>) => {
+      setTopics(next.help_topic ?? []);
+      setStatuses(next.status ?? []);
+    },
+    []
   );
 
   React.useEffect(() => {
@@ -147,30 +168,13 @@ export default function ContactSubmissionsPage() {
     return () => { cancelled = true; };
   }, [activeFilters]);
 
-  const runExport = async (scope: "selected" | "all") => {
-    setExportBusy(true);
-    try {
-      const exportRows =
-        scope === "selected"
-          ? selected
-          : (
+  const fetchAllForExport = async () =>
+    (
               await listContactSubmissions({
                 page: 1, limit: EXPORT_CAP, dateRange: activeFilters.dateRange,
                 filters: { email: activeFilters.email, status: activeFilters.status, help_topic: activeFilters.help_topic },
               })
             ).rows;
-      if (!exportRows.length) {
-        toast.error("Nothing to export.");
-        return;
-      }
-      exportRowsToCsv(`inquiries-${format(new Date(), "yyyy-MM-dd")}`, exportColumns, exportRows);
-      toast.success(`Exported ${exportRows.length} submission${exportRows.length === 1 ? "" : "s"}.`);
-    } catch (error) {
-      toast.error(apiErrorMessage(error, "Couldn't export submissions."));
-    } finally {
-      setExportBusy(false);
-    }
-  };
 
   const columns = React.useMemo<ColumnDef<ContactSubmissionRow>[]>(
     () => [
@@ -264,25 +268,14 @@ export default function ContactSubmissionsPage() {
             Messages sent through the website contact form.
           </p>
         </div>
-        <DropdownMenu>
-          <DropdownMenuTrigger
-            disabled={exportBusy}
-            render={
-              <Button variant="outline">
-                {exportBusy ? <Loader2 className="size-4 animate-spin" /> : <Download className="size-4" />}
-                Export
-              </Button>
-            }
-          />
-          <DropdownMenuContent align="end" className="w-64">
-            <DropdownMenuItem disabled={!selected.length} onClick={() => runExport("selected")}>
-              Export {selected.length || ""} selected
-            </DropdownMenuItem>
-            <DropdownMenuItem onClick={() => runExport("all")}>
-              Export all matching filters ({total})
-            </DropdownMenuItem>
-          </DropdownMenuContent>
-        </DropdownMenu>
+        <ExportMenu
+          filename="inquiries"
+          columns={exportColumns}
+          selected={selected}
+          fetchAll={fetchAllForExport}
+          total={total}
+          noun="inquirie"
+        />
       </div>
 
       <SummaryStatStrip tiles={tiles} loading={summaryLoading} />
@@ -324,6 +317,8 @@ export default function ContactSubmissionsPage() {
         onSelectionChange={setSelected}
         clearSelectionKey={clearKey}
         onRowClick={setDetail}
+        columnFilterDefs={COLUMN_FILTERS}
+        serverColumnFilters={{ value: columnFilterValues, onChange: applyColumnFilters }}
         serverPagination={{
           pageIndex: page,
           pageCount,

@@ -26,6 +26,7 @@ import { ConfirmDeleteDialog } from "@/components/confirm-delete-dialog";
 import { MediaUpload } from "@/components/media-upload";
 import { StatusBadge, StatusToggle } from "@/components/status-badge";
 import { apiErrorMessage } from "@/lib/auth-api";
+import { moveRow } from "@/lib/sort-order";
 import { cn, imgUrl } from "@/lib/utils";
 import {
   createHomeSection,
@@ -34,7 +35,6 @@ import {
   manageHomeSectionItems,
   updateHomeSection,
   updateRecordStatus,
-  updateSortOrder,
   type HomeSectionItemAction,
   type HomeSectionItemRow,
   type HomeSectionRow,
@@ -104,18 +104,9 @@ export function ThemeSection() {
     }
   };
 
-  // Reordering swaps sort_order with the neighbouring section.
   const move = async (index: number, dir: "up" | "down") => {
-    const target = index + (dir === "up" ? -1 : 1);
-    if (target < 0 || target >= sections.length) return;
-    const a = sections[index];
-    const b = sections[target];
     try {
-      await updateSortOrder("homeSection", [
-        { id: a.id, sort_order: b.sort_order ?? target },
-        { id: b.id, sort_order: a.sort_order ?? index },
-      ]);
-      reload();
+      if (await moveRow("homeSection", sections, index, dir)) reload();
     } catch (error) {
       toast.error(apiErrorMessage(error, "Couldn't reorder sections."));
     }
@@ -127,14 +118,8 @@ export function ThemeSection() {
     index: number,
     dir: "up" | "down"
   ) => {
-    const target = index + (dir === "up" ? -1 : 1);
-    if (target < 0 || target >= items.length) return;
     try {
-      await updateSortOrder("homeSectionItem", [
-        { id: items[index].id, sort_order: items[target].sort_order ?? target },
-        { id: items[target].id, sort_order: items[index].sort_order ?? index },
-      ]);
-      reload();
+      if (await moveRow("homeSectionItem", items, index, dir)) reload();
     } catch (error) {
       toast.error(apiErrorMessage(error, "Couldn't reorder items."));
     }

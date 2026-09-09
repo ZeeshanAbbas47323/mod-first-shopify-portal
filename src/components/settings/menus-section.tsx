@@ -38,6 +38,7 @@ import {
 import { Skeleton } from "@/components/ui/skeleton";
 import { StatusBadge, StatusToggle } from "@/components/status-badge";
 import { apiErrorMessage } from "@/lib/auth-api";
+import { moveRow } from "@/lib/sort-order";
 import { cn } from "@/lib/utils";
 import {
   createMenu,
@@ -45,7 +46,6 @@ import {
   fetchMenuTree,
   updateMenu,
   updateRecordStatus,
-  updateSortOrder,
   MENU_LINK_TYPES,
   type MenuTreeNode,
 } from "@/lib/admin-api";
@@ -388,19 +388,13 @@ export function MenusSection() {
     []
   );
 
-  // Reordering swaps sort_order with the adjacent sibling — never across branches.
+  // Reordering renumbers one row of siblings — never across branches.
   const handleMove = React.useCallback(
     async (node: MenuTreeNode, siblings: MenuTreeNode[], dir: "up" | "down") => {
       const index = siblings.findIndex((s) => String(s.id) === String(node.id));
-      const adjacentIndex = dir === "up" ? index - 1 : index + 1;
-      if (index < 0 || adjacentIndex < 0 || adjacentIndex >= siblings.length) return;
-      const adjacent = siblings[adjacentIndex];
+      if (index < 0) return;
       try {
-        await updateSortOrder("menu", [
-          { id: node.id, sort_order: adjacent.sort_order ?? adjacentIndex },
-          { id: adjacent.id, sort_order: node.sort_order ?? index },
-        ]);
-        setRefreshKey((k) => k + 1);
+        if (await moveRow("menu", siblings, index, dir)) setRefreshKey((k) => k + 1);
       } catch (error) {
         toast.error(apiErrorMessage(error, "Couldn't reorder menus."));
       }

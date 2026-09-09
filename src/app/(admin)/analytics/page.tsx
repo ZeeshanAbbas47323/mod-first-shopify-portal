@@ -34,7 +34,9 @@ import {
   type CustomerReportRow, type ProductPerfRow,
   type FinancialBreakdownRow, type FinancialTotals, type CouponUsageRow,
 } from "@/lib/admin-api";
-import { cn, exportRowsToCsv } from "@/lib/utils";
+import { cn } from "@/lib/utils";
+import { exportRows as writeExport, type ExportFormat } from "@/lib/export";
+import { ExportFormatMenu } from "@/components/export-menu";
 
 // ─── Helpers ─────────────────────────────────────────────────────────────────
 
@@ -122,12 +124,20 @@ function DateControls({
 
 // ─── Export Button ────────────────────────────────────────────────────────────
 
-function ExportButton({ onClick, disabled }: { onClick: () => void; disabled?: boolean }) {
+function ExportButton({
+  onClick,
+  disabled,
+}: {
+  onClick: (fileFormat: ExportFormat) => void;
+  disabled?: boolean;
+}) {
   return (
-    <Button variant="outline" size="sm" className="ml-auto" onClick={onClick} disabled={disabled}>
-      <Download className="size-4" />
-      Export
-    </Button>
+    <ExportFormatMenu
+      onSelect={onClick}
+      disabled={disabled}
+      size="sm"
+      className="ml-auto"
+    />
   );
 }
 
@@ -199,9 +209,9 @@ function SalesTab() {
   const groupRevenue = rows.reduce((s, r) => s + (r.revenue ?? 0), 0);
   const groupUnits = rows.reduce((s, r) => s + (r.units_sold ?? 0), 0);
 
-  const doExport = () => {
+  const doExport = (fileFormat: ExportFormat) => {
     if (isTimeSeries) {
-      exportRowsToCsv(`sales-report-${groupBy}`, [
+      writeExport(fileFormat, `sales-report-${groupBy}`, [
         { key: "period", label: "Period", value: (r: SalesDataRow) => labelKey(r) },
         { key: "orders", label: "Orders", value: (r: SalesDataRow) => r.orders ?? 0 },
         { key: "subtotal", label: "Subtotal", value: (r: SalesDataRow) => r.subtotal ?? 0 },
@@ -211,7 +221,7 @@ function SalesTab() {
         { key: "revenue", label: "Revenue", value: (r: SalesDataRow) => r.revenue ?? 0 },
       ], rows);
     } else {
-      exportRowsToCsv(`sales-report-by-${groupBy}`, [
+      writeExport(fileFormat, `sales-report-by-${groupBy}`, [
         { key: "label", label: groupBy === "product" ? "Product" : "Category", value: (r: SalesDataRow) => labelKey(r) },
         { key: "units_sold", label: "Units Sold", value: (r: SalesDataRow) => r.units_sold ?? 0 },
         { key: "revenue", label: "Revenue", value: (r: SalesDataRow) => r.revenue ?? 0 },
@@ -388,7 +398,7 @@ function OrdersTab() {
   const custName = (c: OrderReportRow["customer"]) =>
     !c ? "Guest" : typeof c === "string" ? c : (c as { full_name?: string; name?: string }).full_name ?? (c as { name?: string }).name ?? "Guest";
 
-  const doExport = () => exportRowsToCsv("orders-report", [
+  const doExport = (fileFormat: ExportFormat) => writeExport(fileFormat, "orders-report", [
     { key: "order_number", label: "Order", value: (r: OrderReportRow) => r.order_number ?? `#${r.id}` },
     { key: "customer", label: "Customer", value: (r: OrderReportRow) => custName(r.customer) },
     { key: "created_at", label: "Date", value: (r: OrderReportRow) => r.created_at ? format(new Date(r.created_at as string), "yyyy-MM-dd") : "" },
@@ -507,7 +517,7 @@ function InventoryTab() {
   const statusTone = (s?: string): "success" | "warning" | "critical" =>
     s === "in_stock" ? "success" : s === "low_stock" ? "warning" : "critical";
 
-  const doExport = () => exportRowsToCsv("inventory-report", [
+  const doExport = (fileFormat: ExportFormat) => writeExport(fileFormat, "inventory-report", [
     { key: "name", label: "Product", value: (r: InventoryReportRow) => r.name ?? r.title ?? "" },
     { key: "sku", label: "SKU", value: (r: InventoryReportRow) => r.sku ?? "" },
     { key: "category", label: "Category", value: (r: InventoryReportRow) => r.category ?? "" },
@@ -609,7 +619,7 @@ function CustomersTab() {
     spent: r.total_spent ?? 0,
   }));
 
-  const doExport = () => exportRowsToCsv("customer-report", [
+  const doExport = (fileFormat: ExportFormat) => writeExport(fileFormat, "customer-report", [
     { key: "name", label: "Customer", value: (r: CustomerReportRow) => r.full_name ?? r.name ?? "" },
     { key: "email", label: "Email", value: (r: CustomerReportRow) => r.email ?? "" },
     { key: "total_orders", label: "Orders", value: (r: CustomerReportRow) => r.total_orders ?? 0 },
@@ -706,7 +716,7 @@ function ProductPerfTab() {
     profit: r.profit ?? 0,
   }));
 
-  const doExport = () => exportRowsToCsv("product-performance-report", [
+  const doExport = (fileFormat: ExportFormat) => writeExport(fileFormat, "product-performance-report", [
     { key: "name", label: "Product", value: (r: ProductPerfRow) => r.name ?? r.title ?? "" },
     { key: "category", label: "Category", value: (r: ProductPerfRow) => r.category ?? "" },
     { key: "units_sold", label: "Units Sold", value: (r: ProductPerfRow) => r.units_sold ?? 0 },
@@ -805,7 +815,7 @@ function FinancialTab() {
 
   const t = totals ?? {};
 
-  const doExport = () => exportRowsToCsv("financial-report-by-payment-method", [
+  const doExport = (fileFormat: ExportFormat) => writeExport(fileFormat, "financial-report-by-payment-method", [
     { key: "method", label: "Method", value: (r: FinancialBreakdownRow) => r.method ?? "" },
     { key: "transactions", label: "Transactions", value: (r: FinancialBreakdownRow) => r.transactions ?? 0 },
     { key: "amount", label: "Amount", value: (r: FinancialBreakdownRow) => r.amount ?? 0 },
@@ -893,7 +903,7 @@ function CouponTab() {
     discount: r.total_discount ?? 0,
   }));
 
-  const doExport = () => exportRowsToCsv("coupon-usage-report", [
+  const doExport = (fileFormat: ExportFormat) => writeExport(fileFormat, "coupon-usage-report", [
     { key: "code", label: "Coupon Code", value: (r: CouponUsageRow) => r.code ?? r.name ?? `#${r.coupon_id ?? r.id}` },
     { key: "times_used", label: "Times Used", value: (r: CouponUsageRow) => r.times_used ?? 0 },
     { key: "total_discount", label: "Total Discount", value: (r: CouponUsageRow) => r.total_discount ?? 0 },
