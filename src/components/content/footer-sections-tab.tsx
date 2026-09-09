@@ -163,7 +163,6 @@ function SectionCard({ section, onSaved }: { section: FooterSectionRow; onSaved:
   const [description, setDescription] = React.useState(section.description ?? "");
   const [imageUrl, setImageUrl] = React.useState<string | null>(section.image_url ?? null);
   const [isActive, setIsActive] = React.useState(section.is_active ?? true);
-  const [sortOrder, setSortOrder] = React.useState(String(section.sort_order ?? 0));
 
   // Links local state
   const [links, setLinks] = React.useState<LocalLink[]>(() =>
@@ -211,7 +210,7 @@ function SectionCard({ section, onSaved }: { section: FooterSectionRow; onSaved:
         description: description || undefined,
         image_url: imageUrl || undefined,
         is_active: isActive,
-        sort_order: parseInt(sortOrder) || 0,
+        sort_order: section.sort_order ?? 0,
       });
 
       // 2. Manage links
@@ -255,7 +254,7 @@ function SectionCard({ section, onSaved }: { section: FooterSectionRow; onSaved:
           onClick={() => setOpen((v) => !v)}
           className="flex w-full cursor-pointer items-center justify-between gap-3 py-1 text-left"
         >
-          <div className="flex items-center gap-3">
+          <div className="flex flex-wrap items-center gap-x-3 gap-y-1">
             <span className="text-sm font-semibold">{section.title || section.section_key || `Section #${section.id}`}</span>
             {section.section_key && (
               <Badge variant="outline" className="font-mono text-xs">{section.section_key}</Badge>
@@ -275,13 +274,9 @@ function SectionCard({ section, onSaved }: { section: FooterSectionRow; onSaved:
           <CardContent className="space-y-5 pt-4">
             {/* Section metadata */}
             <div className="grid gap-4 sm:grid-cols-2">
-              <div className="space-y-1.5">
+              <div className="space-y-1.5 sm:col-span-2">
                 <Label htmlFor={`title-${section.id}`}>Title</Label>
                 <Input id={`title-${section.id}`} value={title} onChange={(e) => setTitle(e.target.value)} placeholder="e.g. Company" />
-              </div>
-              <div className="space-y-1.5">
-                <Label htmlFor={`sort-${section.id}`}>Sort order</Label>
-                <Input id={`sort-${section.id}`} type="number" min="0" value={sortOrder} onChange={(e) => setSortOrder(e.target.value)} />
               </div>
               <div className="space-y-1.5 sm:col-span-2">
                 <Label htmlFor={`desc-${section.id}`}>Description</Label>
@@ -304,18 +299,25 @@ function SectionCard({ section, onSaved }: { section: FooterSectionRow; onSaved:
             </div>
 
             {/* Links */}
-            <div className="space-y-3">
-              <div className="flex items-center justify-between">
-                <p className="text-sm font-medium">Links</p>
+            <div className="rounded-lg border border-border">
+              <div className="flex items-center justify-between gap-3 border-b border-border bg-muted/30 px-3 py-2">
+                <div className="flex items-baseline gap-2">
+                  <p className="text-sm font-medium">Links</p>
+                  <span className="text-xs text-muted-foreground">
+                    {visibleLinks.length || "None"}
+                  </span>
+                </div>
                 <Button type="button" variant="outline" size="sm" onClick={addLink}>
                   <Plus className="size-3.5" /> Add link
                 </Button>
               </div>
 
               {visibleLinks.length === 0 ? (
-                <p className="text-sm text-muted-foreground">No links yet. Add the first one.</p>
+                <p className="px-3 py-8 text-center text-sm text-muted-foreground">
+                  No links yet — add the first one.
+                </p>
               ) : (
-                <div className="space-y-2">
+                <div className="space-y-2 p-3">
                   {visibleLinks.map((link, i) => (
                     <LinkEditor
                       key={link._localId}
@@ -332,7 +334,7 @@ function SectionCard({ section, onSaved }: { section: FooterSectionRow; onSaved:
             </div>
 
             {/* Actions */}
-            <div className="flex justify-between">
+            <div className="flex flex-wrap justify-between gap-2">
               <Button variant="destructive" onClick={() => setConfirmOpen(true)} disabled={deleting}>
                 <Trash2 className="size-4" /> Delete section
               </Button>
