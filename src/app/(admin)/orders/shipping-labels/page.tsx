@@ -4,16 +4,22 @@ import * as React from "react";
 import { useRouter } from "next/navigation";
 import { format } from "date-fns";
 import { type ColumnDef } from "@tanstack/react-table";
-import { Loader2, Package, Plus, Search, X } from "lucide-react";
+import { Download, Loader2, Package, Plus, Search, X } from "lucide-react";
 import { toast } from "sonner";
 import type { DateRange } from "react-day-picker";
 
 import { Button } from "@/components/ui/button";
+import { Checkbox } from "@/components/ui/checkbox";
 import { DataTable } from "@/components/data-table";
+import { MultiSelectFilter } from "@/components/multi-select-filter";
+import { SummaryStatStrip, type SummaryTile } from "@/components/summary-stat-strip";
 import { DateRangePicker } from "@/components/date-range-picker";
 import {
   Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle,
 } from "@/components/ui/dialog";
+import {
+  DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import {
@@ -21,19 +27,61 @@ import {
 } from "@/components/ui/select";
 import { StatusBadge } from "@/components/status-badge";
 import { apiErrorMessage } from "@/lib/auth-api";
+import { exportRowsToCsv } from "@/lib/utils";
 import {
   createShipmentRate,
   listCouriers,
   listOrders,
   listShipments,
+  getShipmentsSummary,
+  SHIPMENT_STATUSES,
   type CourierRow,
   type OrderRow,
   type ShipmentRow,
+  type ShipmentsSummary,
 } from "@/lib/admin-api";
 
 const DEFAULT_PAGE_SIZE = 20;
+const EXPORT_CAP = 5000;
+
+const EMPTY_SUMMARY: ShipmentsSummary = {
+  shipments: { current: 0, previous: 0, change_percent: null },
+  delivered: { current: 0, previous: 0, change_percent: null },
+  in_transit: { current: 0, previous: 0, change_percent: null },
+  issues: { current: 0, previous: 0, change_percent: null },
+};
+
+const exportColumns = [
+  { key: "shipment_number", label: "Shipment", value: (r: ShipmentRow) => r.shipment_number ?? `#${r.id}` },
+  { key: "order_id", label: "Order", value: (r: ShipmentRow) => (r.order_id ? `#${r.order_id}` : "") },
+  { key: "service_name", label: "Service", value: (r: ShipmentRow) => r.service_name ?? "" },
+  { key: "tracking_number", label: "Tracking #", value: (r: ShipmentRow) => r.tracking_number ?? "" },
+  { key: "status", label: "Status", value: (r: ShipmentRow) => r.status ?? "" },
+  { key: "created_at", label: "Created", value: (r: ShipmentRow) => r.created_at ?? "" },
+];
 
 const columns: ColumnDef<ShipmentRow>[] = [
+  {
+    id: "select",
+    header: ({ table }) => (
+      <Checkbox
+        checked={table.getIsAllPageRowsSelected()}
+        indeterminate={table.getIsSomePageRowsSelected() && !table.getIsAllPageRowsSelected()}
+        onCheckedChange={(v) => table.toggleAllPageRowsSelected(!!v)}
+        aria-label="Select all"
+      />
+    ),
+    cell: ({ row }) => (
+      <Checkbox
+        checked={row.getIsSelected()}
+        onCheckedChange={(v) => row.toggleSelected(!!v)}
+        onClick={(e) => e.stopPropagation()}
+        aria-label="Select row"
+      />
+    ),
+    enableSorting: false,
+    enableHiding: false,
+  },
   {
     accessorKey: "shipment_number",
     header: "Shipment",
@@ -91,34 +139,113 @@ export default function ShippingLabelsPage() {
   const [loading, setLoading] = React.useState(false);
   const [search, setSearch] = React.useState("");
   const [searchInput, setSearchInput] = React.useState("");
+  const [statuses, setStatuses] = React.useState<string[]>([]);
   const [dateRange, setDateRange] = React.useState<DateRange | undefined>();
   const [createOpen, setCreateOpen] = React.useState(false);
+  const [selected, setSelected] = React.useState<ShipmentRow[]>([]);
+  const [clearKey, setClearKey] = React.useState(0);
+  const [exportBusy, setExportBusy] = React.useState(false);
+  const [summary, setSummary] = React.useState<ShipmentsSummary>(EMPTY_SUMMARY);
+  const [summaryLoading, setSummaryLoading] = React.useState(true);
 
-  React.useEffect(() => { setPage(1); }, [search, dateRange]);
+  React.useEffect(() => { setPage(1); }, [search, dateRange, statuses]);
+
+  const activeFilters = React.useMemo(
+    () => ({ dateRange, status: statuses, search: search || undefined }),
+    [dateRange, statuses, search]
+  );
 
   const load = React.useCallback(() => {
     setLoading(true);
-    listShipments({ page, limit: pageSize, search: search || undefined, dateRange })
+    listShipments({
+      page, limit: pageSize, search: activeFilters.search, dateRange: activeFilters.dateRange,
+      filters: activeFilters.status.length ? { status: activeFilters.status } : undefined,
+    })
       .then(({ rows: r, total: t, totalPages: tp }) => {
         setRows(r); setTotal(t); setTotalPages(tp);
       })
       .catch((e) => toast.error(apiErrorMessage(e, "Couldn't load shipments.")))
       .finally(() => setLoading(false));
-  }, [page, pageSize, search, dateRange]);
+  }, [page, pageSize, activeFilters]);
 
   React.useEffect(() => { load(); }, [load]);
+
+  React.useEffect(() => {
+    let cancelled = false;
+    setSummaryLoading(true);
+    getShipmentsSummary(activeFilters)
+      .then((s) => !cancelled && setSummary(s))
+      .catch(() => !cancelled && setSummary(EMPTY_SUMMARY))
+      .finally(() => !cancelled && setSummaryLoading(false));
+    return () => { cancelled = true; };
+  }, [activeFilters]);
+
+  const runExport = async (scope: "selected" | "all") => {
+    setExportBusy(true);
+    try {
+      const exportRows =
+        scope === "selected"
+          ? selected
+          : (
+              await listShipments({
+                page: 1, limit: EXPORT_CAP, search: activeFilters.search, dateRange: activeFilters.dateRange,
+                filters: activeFilters.status.length ? { status: activeFilters.status } : undefined,
+              })
+            ).rows;
+      if (!exportRows.length) {
+        toast.error("Nothing to export.");
+        return;
+      }
+      exportRowsToCsv(`shipments-${format(new Date(), "yyyy-MM-dd")}`, exportColumns, exportRows);
+      toast.success(`Exported ${exportRows.length} shipment${exportRows.length === 1 ? "" : "s"}.`);
+    } catch (error) {
+      toast.error(apiErrorMessage(error, "Couldn't export shipments."));
+    } finally {
+      setExportBusy(false);
+    }
+  };
+
+  const tiles: SummaryTile[] = [
+    { label: "Shipments", value: summary.shipments.current.toLocaleString("en-US"), changePercent: summary.shipments.change_percent },
+    { label: "Delivered", value: summary.delivered.current.toLocaleString("en-US"), changePercent: summary.delivered.change_percent },
+    { label: "In transit", value: summary.in_transit.current.toLocaleString("en-US"), changePercent: summary.in_transit.change_percent },
+    { label: "Issues", value: summary.issues.current.toLocaleString("en-US"), changePercent: summary.issues.change_percent },
+  ];
 
   return (
     <div className="flex flex-col gap-4">
       {/* Header */}
       <div className="flex flex-wrap items-center justify-between gap-3">
         <h1 className="text-xl font-bold">Shipping & Delivery</h1>
-        <Button onClick={() => setCreateOpen(true)}>
-          <Plus className="size-4" /> Create shipment
-        </Button>
+        <div className="flex gap-2">
+          <DropdownMenu>
+            <DropdownMenuTrigger
+              disabled={exportBusy}
+              render={
+                <Button variant="outline">
+                  {exportBusy ? <Loader2 className="size-4 animate-spin" /> : <Download className="size-4" />}
+                  Export
+                </Button>
+              }
+            />
+            <DropdownMenuContent align="end" className="w-64">
+              <DropdownMenuItem disabled={!selected.length} onClick={() => runExport("selected")}>
+                Export {selected.length || ""} selected shipment{selected.length === 1 ? "" : "s"}
+              </DropdownMenuItem>
+              <DropdownMenuItem onClick={() => runExport("all")}>
+                Export all shipments matching filters ({total})
+              </DropdownMenuItem>
+            </DropdownMenuContent>
+          </DropdownMenu>
+          <Button onClick={() => setCreateOpen(true)}>
+            <Plus className="size-4" /> Create shipment
+          </Button>
+        </div>
       </div>
 
-      {/* Search + date range */}
+      <SummaryStatStrip tiles={tiles} loading={summaryLoading} />
+
+      {/* Search + filters + date range */}
       <div className="flex flex-wrap items-center gap-2">
         <div className="relative">
           <Search className="absolute left-2.5 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" />
@@ -142,14 +269,36 @@ export default function ShippingLabelsPage() {
         <Button size="sm" variant="outline" onClick={() => setSearch(searchInput)}>
           Go
         </Button>
+        <MultiSelectFilter label="Status" options={SHIPMENT_STATUSES} value={statuses} onChange={setStatuses} />
         <DateRangePicker value={dateRange} onChange={setDateRange} />
       </div>
+
+      {selected.length > 0 && (
+        <div className="flex flex-wrap items-center gap-3 rounded-xl border border-border bg-card px-3 py-2">
+          <span className="text-sm font-medium">
+            {selected.length} shipment{selected.length === 1 ? "" : "s"} selected
+          </span>
+          <Button size="sm" variant="outline" disabled={exportBusy} onClick={() => runExport("selected")}>
+            {exportBusy ? <Loader2 className="size-4 animate-spin" /> : <Download className="size-4" />}
+            Export selected
+          </Button>
+          <button
+            type="button"
+            onClick={() => setClearKey((k) => k + 1)}
+            className="text-xs text-muted-foreground hover:text-foreground"
+          >
+            Clear selection
+          </button>
+        </div>
+      )}
 
       {/* Table */}
       <DataTable
         columns={columns}
         data={rows}
         loading={loading}
+        onSelectionChange={setSelected}
+        clearSelectionKey={clearKey}
         onRowClick={(row) => router.push(`/orders/${row.order_id}`)}
         serverPagination={{
           pageIndex: page - 1,

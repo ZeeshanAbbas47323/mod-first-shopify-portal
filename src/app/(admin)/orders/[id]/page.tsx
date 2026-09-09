@@ -259,7 +259,7 @@ export default function OrderDetailPage() {
   const discount = n(order.discount_amount) ?? 0;
   const shippingFee = n(order.shipping_fee) ?? 0;
   const tax = n(order.tax_amount) ?? 0;
-  const total = n(order.total_amount) ?? n(order.total) ?? 0;
+  const total = n(order.total_amount) ?? 0;
   const paidAmount = n(order.paid_amount) ?? 0;
   const activityLogs = order.activityLogs ?? [];
   const paymentLogs = order.paymentLogs ?? [];
@@ -349,7 +349,7 @@ export default function OrderDetailPage() {
                   const qty = item.quantity ?? 1;
                   const lineTotal = n(item.total_price) ?? unitPrice * qty;
                   const title = item.product_name ?? item.product?.title ?? "Untitled product";
-                  const img = item.image ?? item.product?.images?.[0]?.url;
+                  const img = item.product?.images?.[0]?.image_url;
 
                   return (
                     <div key={String(item.id)} className="flex items-center gap-4 px-6 py-3">

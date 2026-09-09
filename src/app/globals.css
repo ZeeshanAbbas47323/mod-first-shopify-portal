@@ -132,5 +132,9 @@
   }
   html {
     @apply font-sans;
+    /* Every size in this app is rem-based (text, padding, gaps, icons), so
+       scaling the root shrinks the whole UI uniformly — closer to Shopify
+       Polaris's denser admin scale — without touching every component. */
+    font-size: 87.5%;
   }
 }

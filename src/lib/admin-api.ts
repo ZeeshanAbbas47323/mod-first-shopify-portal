@@ -133,6 +133,7 @@ export const PAYMENT_STATUSES = ["pending", "paid", "failed", "refunded"] as con
 export type PaymentStatus = (typeof PAYMENT_STATUSES)[number];
 
 export const DELIVERY_TYPES = ["home_delivery", "store_pickup"] as const;
+export const ORDER_CHANNELS = ["online_store", "point_of_sale"] as const;
 
 export interface OrderCustomer {
   id?: number | string;
@@ -143,31 +144,44 @@ export interface OrderCustomer {
 
 export interface OrderRow {
   id: number | string;
+  user_id?: number | string;
   order_number?: string;
   status?: string;
   payment_status?: string;
   delivery_type?: string;
-  total?: number | string;
+  channel?: string;
+  /** Real Prisma field name — the list used to look for `total`, which doesn't exist. */
+  total_amount?: number | string;
   subtotal?: number | string;
   discount?: number | string;
   tax?: number | string;
   shipping?: number | string;
-  items_count?: number;
+  items?: OrderItem[];
   customer?: OrderCustomer | string | null;
+  full_name?: string;
   email?: string;
+  estimated_delivery_date?: string | null;
+  pickupLoc?: { id?: number | string; name?: string; address?: string; city?: string } | null;
+  shippingAddr?: { city?: string | null; state?: string | null; country?: string | null } | null;
   /** When the order was placed — preferred over created_at for display. */
   order_date?: string;
   created_at?: string;
   [k: string]: unknown;
 }
 
+/** A single value (exact match) or several (match-any) — the backend's `enumFilter` accepts both. */
+type OneOrMany = string | string[];
+
+const hasValue = (v?: OneOrMany) => (Array.isArray(v) ? v.length > 0 : !!v);
+
 export interface ListOrdersParams {
   page: number;
   limit: number;
   dateRange?: DateRange;
-  status?: string;
-  payment_status?: string;
-  delivery_type?: string;
+  status?: OneOrMany;
+  payment_status?: OneOrMany;
+  delivery_type?: OneOrMany;
+  channel?: OneOrMany;
   order_number?: string;
   email?: string;
   /** Free-text search across order number, customer name, email and phone. */
@@ -181,9 +195,10 @@ export async function listOrders(params: ListOrdersParams): Promise<ListResult<O
   if (params.dateRange?.from) body.startDate = format(params.dateRange.from, "yyyy-MM-dd");
   if (params.dateRange?.to) body.endDate = format(params.dateRange.to, "yyyy-MM-dd");
   const filters: Json = {};
-  if (params.status) filters.status = params.status;
-  if (params.payment_status) filters.payment_status = params.payment_status;
-  if (params.delivery_type) filters.delivery_type = params.delivery_type;
+  if (hasValue(params.status)) filters.status = params.status;
+  if (hasValue(params.payment_status)) filters.payment_status = params.payment_status;
+  if (hasValue(params.delivery_type)) filters.delivery_type = params.delivery_type;
+  if (hasValue(params.channel)) filters.channel = params.channel;
   // A free-text box has to cover order number, name, email and phone, so it
   // goes to the endpoint's `search` rather than an exact-match column filter.
   if (params.search) body.search = params.search;
@@ -193,6 +208,55 @@ export async function listOrders(params: ListOrdersParams): Promise<ListResult<O
   if (Object.keys(filters).length) body.filters = filters;
   const { data } = await api.post("orders/list", body);
   return parseList<OrderRow>(data, params.limit);
+}
+
+// ─── Order summary (stat strip) ────────────────────────────────────────────────
+
+export interface OrderSummaryMetric {
+  current: number;
+  previous: number;
+  change_percent: number | null;
+}
+
+export interface OrderSummaryTrendPoint {
+  date: string;
+  count: number;
+}
+
+export interface OrdersSummary {
+  orders: OrderSummaryMetric;
+  items_ordered: OrderSummaryMetric;
+  orders_fulfilled: OrderSummaryMetric;
+  sales_reversals: OrderSummaryMetric;
+  trend: OrderSummaryTrendPoint[];
+}
+
+const EMPTY_ORDER_METRIC: OrderSummaryMetric = { current: 0, previous: 0, change_percent: null };
+
+export async function getOrdersSummary(
+  params: Omit<ListOrdersParams, "page" | "limit">
+): Promise<OrdersSummary> {
+  const body: Json = {};
+  if (params.dateRange?.from) body.startDate = format(params.dateRange.from, "yyyy-MM-dd");
+  if (params.dateRange?.to) body.endDate = format(params.dateRange.to, "yyyy-MM-dd");
+  const filters: Json = {};
+  if (hasValue(params.status)) filters.status = params.status;
+  if (hasValue(params.payment_status)) filters.payment_status = params.payment_status;
+  if (hasValue(params.delivery_type)) filters.delivery_type = params.delivery_type;
+  if (hasValue(params.channel)) filters.channel = params.channel;
+  if (params.search) body.search = params.search;
+  Object.assign(filters, params.filters ?? {});
+  if (Object.keys(filters).length) body.filters = filters;
+
+  const { data } = await api.post("orders/summary", body);
+  const p = dashParse<Json>(data) ?? {};
+  return {
+    orders: p.orders ?? EMPTY_ORDER_METRIC,
+    items_ordered: p.items_ordered ?? EMPTY_ORDER_METRIC,
+    orders_fulfilled: p.orders_fulfilled ?? EMPTY_ORDER_METRIC,
+    sales_reversals: p.sales_reversals ?? EMPTY_ORDER_METRIC,
+    trend: Array.isArray(p.trend) ? p.trend : [],
+  };
 }
 
 /** Artwork attached to an order line. */
@@ -225,7 +289,8 @@ export interface OrderItem {
   product?: {
     id?: number | string;
     title?: string;
-    images?: { url?: string }[];
+    /** Real field name on ProductImage. Order lines carry just the one primary/first shot. */
+    images?: { image_url?: string }[];
     [k: string]: unknown;
   };
   [k: string]: unknown;
@@ -378,7 +443,7 @@ export interface OrderDetail extends OrderRow {
   billingAddr?: OrderAddress | null;
   shipping_address_id?: number | null;
   billing_address_id?: number | null;
-  pickupLoc?: unknown;
+  pickupLoc?: { id?: number | string; name?: string; address?: string; city?: string; phone?: string } | null;
   pickup_location_id?: number | null;
   activityLogs?: ActivityLog[];
   paymentLogs?: PaymentLog[];
@@ -450,6 +515,12 @@ export async function printOrderRaw(params: {
 export async function listUsers(params: ListParams): Promise<ListResult<UserRow>> {
   const { data } = await api.post("users/list", buildBody(params));
   return parseList<UserRow>(data, params.limit);
+}
+
+/** Single-user lookup — `users/list` has no `id` filter, this is the real way to fetch one. */
+export async function getUserById(id: number | string): Promise<UserRow | null> {
+  const { data } = await api.get(`users/get/${id}`);
+  return (data?.payload ?? data?.data ?? data ?? null) as UserRow | null;
 }
 
 export async function listBranches(
@@ -1706,6 +1777,36 @@ export async function getShipmentById(id: number | string): Promise<ShipmentRow>
 export async function trackShipment(id: number | string): Promise<Json> {
   const { data } = await api.get(`shippings/${id}/track`);
   return (data?.payload ?? data?.data ?? data) as Json;
+}
+
+export interface ShipmentsSummary {
+  shipments: DashboardMetric;
+  delivered: DashboardMetric;
+  in_transit: DashboardMetric;
+  issues: DashboardMetric;
+}
+
+export async function getShipmentsSummary(params: {
+  dateRange?: DateRange;
+  status?: OneOrMany;
+  search?: string;
+}): Promise<ShipmentsSummary> {
+  const body: Json = {};
+  if (params.dateRange?.from) body.startDate = format(params.dateRange.from, "yyyy-MM-dd");
+  if (params.dateRange?.to) body.endDate = format(params.dateRange.to, "yyyy-MM-dd");
+  if (params.search) body.search = params.search;
+  const filters: Json = {};
+  if (hasValue(params.status)) filters.status = params.status;
+  if (Object.keys(filters).length) body.filters = filters;
+
+  const { data } = await api.post("shippings/summary", body);
+  const p = dashParse<Json>(data) ?? {};
+  return {
+    shipments: p.shipments ?? emptyMetric,
+    delivered: p.delivered ?? emptyMetric,
+    in_transit: p.in_transit ?? emptyMetric,
+    issues: p.issues ?? emptyMetric,
+  };
 }
 
 export async function voidShipment(id: number | string): Promise<string> {
@@ -3328,7 +3429,13 @@ export interface DraftOrderItem {
   height?: number | null;
   is_tax_applied?: boolean;
   design_upload_ids?: (number | string)[];
-  product?: { id?: number | string; name?: string; title?: string; featured_image?: string | null; images?: Json[] } | null;
+  product?: {
+    id?: number | string;
+    name?: string;
+    title?: string;
+    featured_image?: string | null;
+    images?: { image_url?: string }[];
+  } | null;
   variant?: { id?: number | string; sku?: string | null; price?: number | string | null } | null;
   [k: string]: unknown;
 }
@@ -3346,9 +3453,11 @@ export interface DraftOrderRow {
   full_name?: string | null;
   shipping_address_id?: number | null;
   billing_address_id?: number | null;
-  shippingAddress?: OrderAddress | null;
+  /** Real include key is `shippingAddr` — matches the Order model's own relation name. */
+  shippingAddr?: { city?: string | null; state?: string | null; country?: string | null } | null;
   pickup_location_id?: number | null;
-  pickupLocation?: { id?: number | string; name?: string } | null;
+  /** Real include key is `pickupLoc` — matches the Order model's own relation name. */
+  pickupLoc?: { id?: number | string; name?: string; address?: string; city?: string } | null;
   coupon_code?: string | null;
   manual_discount_type?: "percentage" | "fixed_amount" | null;
   manual_discount_value?: number | string | null;
@@ -3439,6 +3548,39 @@ export async function updateDraftOrder(
 export async function deleteDraftOrder(id: number | string): Promise<string> {
   const { data } = await api.delete(`draft-orders/${id}`);
   return (data?.message as string) ?? "Draft deleted.";
+}
+
+export interface DraftOrdersSummary {
+  drafts: DashboardMetric;
+  open_value: DashboardMetric;
+  invoice_sent: DashboardMetric;
+  completed: DashboardMetric;
+}
+
+
+export async function getDraftOrdersSummary(params: {
+  dateRange?: DateRange;
+  status?: OneOrMany;
+  channel?: OneOrMany;
+  search?: string;
+}): Promise<DraftOrdersSummary> {
+  const body: Json = {};
+  if (params.dateRange?.from) body.startDate = format(params.dateRange.from, "yyyy-MM-dd");
+  if (params.dateRange?.to) body.endDate = format(params.dateRange.to, "yyyy-MM-dd");
+  if (params.search) body.search = params.search;
+  const filters: Json = {};
+  if (hasValue(params.status)) filters.status = params.status;
+  if (hasValue(params.channel)) filters.channel = params.channel;
+  if (Object.keys(filters).length) body.filters = filters;
+
+  const { data } = await api.post("draft-orders/summary", body);
+  const p = dashParse<Json>(data) ?? {};
+  return {
+    drafts: p.drafts ?? emptyMetric,
+    open_value: p.open_value ?? emptyMetric,
+    invoice_sent: p.invoice_sent ?? emptyMetric,
+    completed: p.completed ?? emptyMetric,
+  };
 }
 
 export const DRAFT_PAYMENT_OPTIONS = [
@@ -3675,6 +3817,7 @@ export interface AbandonedCartRow {
   last_activity_at?: string | null;
   last_order_at?: string | null;
   items?: Json[];
+  [k: string]: unknown;
 }
 
 export async function listAbandonedCarts(
@@ -3682,4 +3825,28 @@ export async function listAbandonedCarts(
 ): Promise<ListResult<AbandonedCartRow>> {
   const { data } = await api.post("cart-items/abandoned", buildBody(params));
   return parseList<AbandonedCartRow>(data, params.limit);
+}
+
+export interface AbandonedCartsSummary {
+  abandoned_carts: number;
+  recoverable_value: number;
+  items_abandoned: number;
+  average_cart_value: number;
+}
+
+/** A snapshot, not a trend — an abandoned cart has no meaningful "vs last period". */
+export async function getAbandonedCartsSummary(
+  dateRange?: DateRange
+): Promise<AbandonedCartsSummary> {
+  const body: Json = {};
+  if (dateRange?.from) body.startDate = format(dateRange.from, "yyyy-MM-dd");
+  if (dateRange?.to) body.endDate = format(dateRange.to, "yyyy-MM-dd");
+  const { data } = await api.post("cart-items/abandoned/summary", body);
+  const p = dashParse<Json>(data) ?? {};
+  return {
+    abandoned_carts: Number(p.abandoned_carts ?? 0),
+    recoverable_value: Number(p.recoverable_value ?? 0),
+    items_abandoned: Number(p.items_abandoned ?? 0),
+    average_cart_value: Number(p.average_cart_value ?? 0),
+  };
 }

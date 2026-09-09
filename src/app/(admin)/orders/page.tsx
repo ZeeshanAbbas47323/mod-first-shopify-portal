@@ -10,10 +10,14 @@ import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import {
-  Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
-} from "@/components/ui/select";
 import { DataTable } from "@/components/data-table";
+import { MultiSelectFilter } from "@/components/multi-select-filter";
+import { SummaryStatStrip, type SummaryTile } from "@/components/summary-stat-strip";
+import {
+  CustomerPreviewPopover,
+  FulfillmentPreviewPopover,
+  pickupOrDeliveryBlurb,
+} from "@/components/orders/order-popovers";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -23,30 +27,49 @@ import {
 import { DateRangePicker } from "@/components/date-range-picker";
 import { StatusBadge } from "@/components/status-badge";
 import { apiErrorMessage } from "@/lib/auth-api";
+import { exportRowsToCsv } from "@/lib/utils";
 import {
-  listOrders, bulkUpdateOrderStatus,
-  ORDER_STATUSES, PAYMENT_STATUSES, DELIVERY_TYPES,
-  type OrderRow,
+  listOrders, getOrdersSummary, bulkUpdateOrderStatus,
+  ORDER_STATUSES, PAYMENT_STATUSES, DELIVERY_TYPES, ORDER_CHANNELS,
+  type OrderRow, type OrdersSummary,
 } from "@/lib/admin-api";
 import type { DateRange } from "react-day-picker";
 
 const DEFAULT_PAGE_SIZE = 20;
+const EXPORT_CAP = 5000;
 
-const fmt$ = (n?: number | null) =>
+const fmt$ = (n?: number | string | null) =>
   n != null ? `$${Number(n).toLocaleString("en-US", { minimumFractionDigits: 2 })}` : "—";
 
-const custName = (c: OrderRow["customer"]) => {
-  if (!c) return "Guest";
-  if (typeof c === "string") return c;
-  return (c as { full_name?: string }).full_name ?? "Guest";
-};
+const humanize = (s: string) => s.replace(/_/g, " ").replace(/\b\w/g, (c) => c.toUpperCase());
 
-const custEmail = (row: OrderRow) => {
-  if (row.email) return row.email;
-  const c = row.customer;
-  if (c && typeof c === "object") return (c as { email?: string }).email ?? "";
-  return "";
-};
+const orderCustomerPreview = (order: OrderRow) => ({
+  user_id: order.user_id,
+  name:
+    (typeof order.customer === "object" && order.customer?.full_name) ||
+    order.full_name ||
+    "Guest",
+  email:
+    order.email ??
+    (typeof order.customer === "object" ? order.customer?.email : undefined),
+  city: order.shippingAddr?.city,
+  country: order.shippingAddr?.country,
+});
+
+const orderFulfillmentPreview = (order: OrderRow) => ({
+  items: (order.items ?? []).map((item) => ({
+    id: item.id,
+    name: item.product_name ?? item.product?.title ?? "Product",
+    variant: item.variant_name,
+    quantity: item.quantity ?? 1,
+    image: item.product?.images?.[0]?.image_url,
+  })),
+  deliveryBlurb: pickupOrDeliveryBlurb({
+    delivery_type: order.delivery_type,
+    pickupLocationName: order.pickupLoc?.name,
+    estimatedDeliveryDate: order.estimated_delivery_date,
+  }),
+});
 
 const columns: ColumnDef<OrderRow>[] = [
   {
@@ -100,17 +123,30 @@ const columns: ColumnDef<OrderRow>[] = [
     id: "customer",
     header: "Customer",
     cell: ({ row }) => (
-      <div>
-        <p className="font-medium">{custName(row.original)}</p>
-        <p className="text-xs text-muted-foreground">{custEmail(row.original)}</p>
+      <div onClick={(e) => e.stopPropagation()}>
+        <CustomerPreviewPopover customer={orderCustomerPreview(row.original)} />
+        <p className="text-xs text-muted-foreground">
+          {row.original.email ??
+            (typeof row.original.customer === "object" ? row.original.customer?.email : "")}
+        </p>
       </div>
     ),
   },
   {
-    accessorKey: "total",
+    accessorKey: "channel",
+    header: "Channel",
+    cell: ({ row }) => {
+      const v = row.getValue<string>("channel");
+      return <span className="text-sm text-muted-foreground">{v ? humanize(v) : "—"}</span>;
+    },
+  },
+  {
+    // Real Prisma field is total_amount — "total" doesn't exist on the row,
+    // which is why this column used to render "—" for every order.
+    accessorKey: "total_amount",
     header: () => <div className="text-right">Total</div>,
     cell: ({ row }) => (
-      <div className="text-right font-medium">{fmt$(row.getValue("total"))}</div>
+      <div className="text-right font-medium">{fmt$(row.getValue("total_amount"))}</div>
     ),
   },
   {
@@ -132,12 +168,11 @@ const columns: ColumnDef<OrderRow>[] = [
     },
   },
   {
-    accessorKey: "items_count",
+    // Real field is the `items` array — "items_count" doesn't exist, so this
+    // used to render "—" too. Now also doubles as the fulfillment preview.
+    id: "items",
     header: "Items",
-    cell: ({ row }) => {
-      const n = row.getValue<number>("items_count");
-      return n != null ? `${n} item${n !== 1 ? "s" : ""}` : "—";
-    },
+    cell: ({ row }) => <FulfillmentPreviewPopover {...orderFulfillmentPreview(row.original)} />,
   },
 ];
 
@@ -160,6 +195,26 @@ const TABS = [
   { value: "cancelled", label: "Cancelled" },
 ];
 
+const EMPTY_SUMMARY: OrdersSummary = {
+  orders: { current: 0, previous: 0, change_percent: null },
+  items_ordered: { current: 0, previous: 0, change_percent: null },
+  orders_fulfilled: { current: 0, previous: 0, change_percent: null },
+  sales_reversals: { current: 0, previous: 0, change_percent: null },
+  trend: [],
+};
+
+const exportColumns = [
+  { key: "order_number", label: "Order", value: (r: OrderRow) => r.order_number ?? `#${r.id}` },
+  { key: "date", label: "Date", value: (r: OrderRow) => r.order_date ?? r.created_at ?? "" },
+  { key: "customer", label: "Customer", value: (r: OrderRow) => r.full_name ?? "" },
+  { key: "email", label: "Email", value: (r: OrderRow) => r.email ?? "" },
+  { key: "channel", label: "Channel", value: (r: OrderRow) => (r.channel ? humanize(r.channel) : "") },
+  { key: "total", label: "Total", value: (r: OrderRow) => r.total_amount ?? "" },
+  { key: "payment_status", label: "Payment status", value: (r: OrderRow) => r.payment_status ?? "" },
+  { key: "status", label: "Status", value: (r: OrderRow) => r.status ?? "" },
+  { key: "delivery_type", label: "Delivery", value: (r: OrderRow) => r.delivery_type ?? "" },
+  { key: "items", label: "Items", value: (r: OrderRow) => r.items?.length ?? "" },
+];
 
 export default function OrdersPage() {
   const router = useRouter();
@@ -169,43 +224,63 @@ export default function OrdersPage() {
   const [selected, setSelected] = React.useState<OrderRow[]>([]);
   const [clearKey, setClearKey] = React.useState(0);
   const [bulkBusy, setBulkBusy] = React.useState(false);
+  const [exportBusy, setExportBusy] = React.useState(false);
   const [rows, setRows] = React.useState<OrderRow[]>([]);
   const [total, setTotal] = React.useState(0);
   const [totalPages, setTotalPages] = React.useState(1);
   const [loading, setLoading] = React.useState(false);
+  const [summary, setSummary] = React.useState<OrdersSummary>(EMPTY_SUMMARY);
+  const [summaryLoading, setSummaryLoading] = React.useState(true);
 
   // Filters
   const [dateRange, setDateRange] = React.useState<DateRange>({
     from: subDays(new Date(), 29),
     to: new Date(),
   });
-  const [payStatus, setPayStatus] = React.useState("all");
-  const [deliveryType, setDeliveryType] = React.useState("all");
+  const [payStatuses, setPayStatuses] = React.useState<string[]>([]);
+  const [deliveryTypes, setDeliveryTypes] = React.useState<string[]>([]);
+  const [channels, setChannels] = React.useState<string[]>([]);
   const [search, setSearch] = React.useState("");
   const [searchInput, setSearchInput] = React.useState("");
 
   // Reset page when filters/tab change
-  React.useEffect(() => { setPage(1); }, [tab, dateRange, payStatus, deliveryType, search]);
+  React.useEffect(() => {
+    setPage(1);
+  }, [tab, dateRange, payStatuses, deliveryTypes, channels, search]);
+
+  const activeFilters = React.useMemo(
+    () => ({
+      dateRange,
+      status: TAB_STATUS[tab],
+      payment_status: payStatuses,
+      delivery_type: deliveryTypes,
+      channel: channels,
+      search: search || undefined,
+    }),
+    [dateRange, tab, payStatuses, deliveryTypes, channels, search]
+  );
 
   const load = React.useCallback(() => {
     setLoading(true);
-    listOrders({
-      page,
-      limit: pageSize,
-      dateRange,
-      status: TAB_STATUS[tab],
-      payment_status: payStatus === "all" ? undefined : payStatus,
-      delivery_type: deliveryType === "all" ? undefined : deliveryType,
-      search: search || undefined,
-    })
+    listOrders({ page, limit: pageSize, ...activeFilters })
       .then(({ rows: r, total: t, totalPages: tp }) => {
         setRows(r); setTotal(t); setTotalPages(tp);
       })
       .catch((e) => toast.error(apiErrorMessage(e, "Couldn't load orders.")))
       .finally(() => setLoading(false));
-  }, [page, pageSize, tab, dateRange, payStatus, deliveryType, search]);
+  }, [page, pageSize, activeFilters]);
 
   React.useEffect(() => { load(); }, [load]);
+
+  React.useEffect(() => {
+    let cancelled = false;
+    setSummaryLoading(true);
+    getOrdersSummary(activeFilters)
+      .then((s) => !cancelled && setSummary(s))
+      .catch(() => !cancelled && setSummary(EMPTY_SUMMARY))
+      .finally(() => !cancelled && setSummaryLoading(false));
+    return () => { cancelled = true; };
+  }, [activeFilters]);
 
   // Illegal transitions come back in `failed`, so report both halves.
   const runBulkStatus = async (status: string) => {
@@ -234,17 +309,83 @@ export default function OrdersPage() {
     }
   };
 
+  const runExport = async (scope: "selected" | "all") => {
+    setExportBusy(true);
+    try {
+      const exportRows =
+        scope === "selected"
+          ? selected
+          : (await listOrders({ page: 1, limit: EXPORT_CAP, ...activeFilters })).rows;
+      if (!exportRows.length) {
+        toast.error("Nothing to export.");
+        return;
+      }
+      exportRowsToCsv(`orders-${format(new Date(), "yyyy-MM-dd")}`, exportColumns, exportRows);
+      toast.success(`Exported ${exportRows.length} order${exportRows.length === 1 ? "" : "s"}.`);
+    } catch (error) {
+      toast.error(apiErrorMessage(error, "Couldn't export orders."));
+    } finally {
+      setExportBusy(false);
+    }
+  };
+
+  const tiles: SummaryTile[] = [
+    {
+      label: "Orders",
+      value: summary.orders.current.toLocaleString("en-US"),
+      changePercent: summary.orders.change_percent,
+      sparkline: summary.trend.map((t) => t.count),
+    },
+    {
+      label: "Items ordered",
+      value: summary.items_ordered.current.toLocaleString("en-US"),
+      changePercent: summary.items_ordered.change_percent,
+    },
+    {
+      label: "Sales reversals",
+      value: fmt$(summary.sales_reversals.current),
+      changePercent: summary.sales_reversals.change_percent,
+    },
+    {
+      label: "Orders fulfilled",
+      value: summary.orders_fulfilled.current.toLocaleString("en-US"),
+      changePercent: summary.orders_fulfilled.change_percent,
+    },
+  ];
+
   return (
     <div className="flex flex-col gap-4">
       {/* Header */}
       <div className="flex flex-wrap items-center justify-between gap-3">
         <h1 className="text-xl font-bold">Orders</h1>
         <div className="flex gap-2">
-          <Button variant="outline">
-            <Download className="size-4" /> Export
-          </Button>
+          <DropdownMenu>
+            <DropdownMenuTrigger
+              disabled={exportBusy}
+              render={
+                <Button variant="outline">
+                  {exportBusy ? <Loader2 className="size-4 animate-spin" /> : <Download className="size-4" />}
+                  Export
+                </Button>
+              }
+            />
+            <DropdownMenuContent align="end" className="w-64">
+              <DropdownMenuItem
+                disabled={!selected.length}
+                onClick={() => runExport("selected")}
+              >
+                Export {selected.length || ""} selected order{selected.length === 1 ? "" : "s"}
+              </DropdownMenuItem>
+              <DropdownMenuItem onClick={() => runExport("all")}>
+                Export all orders matching filters ({total})
+              </DropdownMenuItem>
+            </DropdownMenuContent>
+          </DropdownMenu>
         </div>
       </div>
+
+      {/* Summary stat strip */}
+      <SummaryStatStrip tiles={tiles} loading={summaryLoading} />
 
       {/* Status tabs */}
       <Tabs value={tab} onValueChange={(v) => v && setTab(v)}>
@@ -269,43 +410,41 @@ export default function OrdersPage() {
           onChange={(r) => r && setDateRange(r)}
         />
 
-        {/* Payment status */}
-        <Select value={payStatus} onValueChange={(v) => setPayStatus(v ?? "all")}>
-          <SelectTrigger className="h-9 w-40 bg-card">
-            <SelectValue placeholder="Payment status" />
-          </SelectTrigger>
-          <SelectContent>
-            <SelectItem value="all">All payments</SelectItem>
-            {PAYMENT_STATUSES.map((s) => (
-              <SelectItem key={s} value={s}>{s.replace(/_/g, " ").replace(/\b\w/g, c => c.toUpperCase())}</SelectItem>
-            ))}
-          </SelectContent>
-        </Select>
+        {/* Payment status — multi-select */}
+        <MultiSelectFilter
+          label="Payment status"
+          options={PAYMENT_STATUSES}
+          value={payStatuses}
+          onChange={setPayStatuses}
+        />
 
-        {/* Delivery type */}
-        <Select value={deliveryType} onValueChange={(v) => setDeliveryType(v ?? "all")}>
-          <SelectTrigger className="h-9 w-44 bg-card">
-            <SelectValue placeholder="Delivery type" />
-          </SelectTrigger>
-          <SelectContent>
-            <SelectItem value="all">All delivery types</SelectItem>
-            {DELIVERY_TYPES.map((d) => (
-              <SelectItem key={d} value={d}>{d.replace(/_/g, " ").replace(/\b\w/g, c => c.toUpperCase())}</SelectItem>
-            ))}
-          </SelectContent>
-        </Select>
+        {/* Delivery type — multi-select */}
+        <MultiSelectFilter
+          label="Delivery type"
+          options={DELIVERY_TYPES}
+          value={deliveryTypes}
+          onChange={setDeliveryTypes}
+        />
 
-        {/* Order number search */}
+        {/* Channel — multi-select */}
+        <MultiSelectFilter
+          label="Channel"
+          options={ORDER_CHANNELS}
+          value={channels}
+          onChange={setChannels}
+        />
+
+        {/* Order/customer search */}
         <div className="flex items-center gap-1">
           <div className="relative">
             <Search className="absolute left-2.5 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" />
             <input
               type="text"
-              placeholder="Search order #"
+              placeholder="Search orders or customers"
               value={searchInput}
               onChange={(e) => setSearchInput(e.target.value)}
               onKeyDown={(e) => e.key === "Enter" && setSearch(searchInput)}
-              className="h-9 rounded-lg border border-input bg-card pl-8 pr-8 text-sm focus:outline-none focus:ring-2 focus:ring-ring w-44"
+              className="h-9 rounded-lg border border-input bg-card pl-8 pr-8 text-sm focus:outline-none focus:ring-2 focus:ring-ring w-56"
             />
             {searchInput && (
               <button onClick={() => { setSearchInput(""); setSearch(""); }} className="absolute right-2 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground">
@@ -346,6 +485,15 @@ export default function OrdersPage() {
               ))}
             </DropdownMenuContent>
           </DropdownMenu>
+          <Button
+            size="sm"
+            variant="outline"
+            disabled={exportBusy}
+            onClick={() => runExport("selected")}
+          >
+            {exportBusy ? <Loader2 className="size-4 animate-spin" /> : <Download className="size-4" />}
+            Export selected
+          </Button>
           <button
             type="button"
             onClick={() => setClearKey((k) => k + 1)}

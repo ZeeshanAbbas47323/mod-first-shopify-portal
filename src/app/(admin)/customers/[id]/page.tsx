@@ -21,10 +21,10 @@ import { StatusBadge } from "@/components/status-badge";
 import { apiErrorMessage } from "@/lib/auth-api";
 import { cn, imgUrl } from "@/lib/utils";
 import {
+  getUserById,
   listAddresses,
   listCartItems,
   listOrders,
-  listUsers,
   listWishlists,
   type AddressRow,
   type CartItemRow,
@@ -60,9 +60,8 @@ export default function CustomerDetailPage() {
     let cancelled = false;
     setLoading(true);
 
-    // The user list is the only place a single admin user can be looked up.
-    listUsers({ page: 1, limit: 1, filters: { id: Number(id) } })
-      .then((res) => !cancelled && setCustomer(res.rows[0] ?? null))
+    getUserById(id)
+      .then((res) => !cancelled && setCustomer(res))
       .catch((e) => {
         if (cancelled) return;
         toast.error(apiErrorMessage(e, "Couldn't load the customer."));
