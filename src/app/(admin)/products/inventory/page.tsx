@@ -3,22 +3,20 @@
 import * as React from "react";
 import { type ColumnDef } from "@tanstack/react-table";
 import { format } from "date-fns";
-import { AlertTriangle, ArrowDown, ArrowUp, PackageX, RefreshCw, Search } from "lucide-react";
+import { AlertTriangle, ArrowDown, ArrowUp, Download, Loader2, PackageX, RefreshCw, Search } from "lucide-react";
 import { toast } from "sonner";
 
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Skeleton } from "@/components/ui/skeleton";
-import {
-  Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
-} from "@/components/ui/select";
+import { MultiSelectFilter } from "@/components/multi-select-filter";
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { DataTable } from "@/components/data-table";
 import { StatusBadge, type BadgeTone } from "@/components/status-badge";
 import { StockDialog } from "@/components/products/stock-dialog";
 import { apiErrorMessage } from "@/lib/auth-api";
-import { cn } from "@/lib/utils";
+import { cn, exportRowsToCsv } from "@/lib/utils";
 import {
   fetchAllProductCategories,
   getInventoryReport,
@@ -122,7 +120,7 @@ export default function InventoryPage() {
   const [summary, setSummary] = React.useState<InventoryReportSummary>({});
   const [loading, setLoading] = React.useState(true);
   const [categories, setCategories] = React.useState<ProductCategoryRow[]>([]);
-  const [categoryId, setCategoryId] = React.useState("all");
+  const [categoryIds, setCategoryIds] = React.useState<string[]>([]);
   const [lowOnly, setLowOnly] = React.useState(false);
   const [threshold, setThreshold] = React.useState(DEFAULT_THRESHOLD);
   const [thresholdInput, setThresholdInput] = React.useState(String(DEFAULT_THRESHOLD));
@@ -150,7 +148,7 @@ export default function InventoryPage() {
     let cancelled = false;
     setLoading(true);
     getInventoryReport({
-      category_id: categoryId === "all" ? undefined : Number(categoryId),
+      category_id: categoryIds.length ? categoryIds.map(Number) : undefined,
       low_stock_only: lowOnly || undefined,
       threshold,
     })
@@ -169,7 +167,7 @@ export default function InventoryPage() {
     return () => {
       cancelled = true;
     };
-  }, [categoryId, lowOnly, threshold, refreshKey]);
+  }, [categoryIds, lowOnly, threshold, refreshKey]);
 
   React.useEffect(() => {
     if (tab !== "activity") return;
@@ -409,13 +407,59 @@ export default function InventoryPage() {
     setThreshold(n);
   };
 
-  const categoryItems = React.useMemo<Record<string, string>>(
-    () => ({
-      all: "All categories",
-      ...Object.fromEntries(categories.map((c) => [String(c.id), c.name])),
-    }),
+  const categoryOptions = React.useMemo(
+    () => categories.map((c) => ({ value: String(c.id), label: c.name })),
     [categories]
   );
+
+  const [exportBusy, setExportBusy] = React.useState(false);
+  const runExport = () => {
+    setExportBusy(true);
+    try {
+      if (tab === "stock") {
+        if (!visibleRows.length) {
+          toast.error("Nothing to export.");
+          return;
+        }
+        exportRowsToCsv(
+          `inventory-stock-${format(new Date(), "yyyy-MM-dd")}`,
+          [
+            { key: "name", label: "Product", value: (r: InventoryReportRow) => r.name ?? r.title ?? "" },
+            { key: "sku", label: "SKU", value: (r: InventoryReportRow) => r.sku ?? "" },
+            { key: "category", label: "Category", value: (r: InventoryReportRow) => r.category ?? "" },
+            { key: "quantity", label: "On hand", value: (r: InventoryReportRow) => r.quantity ?? "" },
+            { key: "status", label: "Status", value: (r: InventoryReportRow) => STATUS_META[stockStatus(r, threshold)].label },
+            { key: "cost_price", label: "Cost", value: (r: InventoryReportRow) => r.cost_price ?? "" },
+            { key: "stock_value", label: "Stock value", value: (r: InventoryReportRow) => r.stock_value ?? "" },
+          ],
+          visibleRows
+        );
+        toast.success(`Exported ${visibleRows.length} row${visibleRows.length === 1 ? "" : "s"}.`);
+      } else {
+        if (!logs.length) {
+          toast.error("Nothing to export on this page — switch pages or export stock levels instead.");
+          return;
+        }
+        exportRowsToCsv(
+          `inventory-activity-${format(new Date(), "yyyy-MM-dd")}`,
+          [
+            { key: "created_at", label: "When", value: (r: InventoryLogRow) => r.created_at ?? "" },
+            { key: "product_id", label: "Product", value: (r: InventoryLogRow) => r.product_id ?? "" },
+            { key: "reason", label: "Reason", value: (r: InventoryLogRow) => (r.reason ? REASON_LABELS[r.reason] ?? r.reason : "") },
+            { key: "quantity_change", label: "Change", value: (r: InventoryLogRow) => r.quantity_change ?? "" },
+            { key: "quantity_before", label: "Before", value: (r: InventoryLogRow) => r.quantity_before ?? "" },
+            { key: "quantity_after", label: "After", value: (r: InventoryLogRow) => r.quantity_after ?? "" },
+            { key: "performed_by", label: "By", value: (r: InventoryLogRow) => r.performer?.full_name ?? r.performed_by ?? "" },
+            { key: "notes", label: "Notes", value: (r: InventoryLogRow) => r.notes ?? "" },
+          ],
+          logs
+        );
+        toast.success(`Exported ${logs.length} log entr${logs.length === 1 ? "y" : "ies"} (this page only).`);
+      }
+    } finally {
+      setExportBusy(false);
+    }
+  };
 
   return (
     <div className="flex flex-col gap-4">
@@ -428,6 +472,10 @@ export default function InventoryPage() {
           </p>
         </div>
         <div className="flex items-center gap-2">
+          <Button variant="outline" onClick={runExport} disabled={exportBusy}>
+            {exportBusy ? <Loader2 className="size-4 animate-spin" /> : <Download className="size-4" />}
+            Export
+          </Button>
           <Button
             variant="outline"
             onClick={() => setRefreshKey((k) => k + 1)}
@@ -482,23 +530,12 @@ export default function InventoryPage() {
               />
             </div>
 
-            <Select
-              items={categoryItems}
-              value={categoryId}
-              onValueChange={(v) => setCategoryId(v as string)}
-            >
-              <SelectTrigger className="min-w-40 bg-card">
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent className="max-h-72">
-                <SelectItem value="all">All categories</SelectItem>
-                {categories.map((c) => (
-                  <SelectItem key={c.id} value={String(c.id)}>
-                    {c.name}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
+            <MultiSelectFilter
+              label="Category"
+              options={categoryOptions}
+              value={categoryIds}
+              onChange={setCategoryIds}
+            />
 
             <label className="flex cursor-pointer items-center gap-2 rounded-lg border border-input bg-card px-3 py-2 text-sm">
               <input

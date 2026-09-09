@@ -75,7 +75,11 @@ const columns: ColumnDef<AbandonedCartRow>[] = [
     cell: ({ row }) => {
       const u = row.original.user;
       return (
-        <div className="min-w-0">
+        // Bounded like every other identity cell in the app — without a
+        // max-width, a long email was free to dictate this column's
+        // natural width, starving the numeric columns and making the row
+        // read as lopsided.
+        <div className="min-w-0 max-w-64">
           <p className="truncate font-medium">
             {u?.full_name?.trim() || `Customer #${row.original.user_id}`}
           </p>
@@ -97,13 +101,15 @@ const columns: ColumnDef<AbandonedCartRow>[] = [
   },
   {
     accessorKey: "item_count",
-    header: "Lines",
-    cell: ({ row }) => row.original.item_count,
+    header: () => <div className="text-right">Lines</div>,
+    size: 90,
+    cell: ({ row }) => <div className="text-right tabular-nums">{row.original.item_count}</div>,
   },
   {
     accessorKey: "total_quantity",
-    header: "Items",
-    cell: ({ row }) => row.original.total_quantity,
+    header: () => <div className="text-right">Items</div>,
+    size: 90,
+    cell: ({ row }) => <div className="text-right tabular-nums">{row.original.total_quantity}</div>,
   },
   {
     accessorKey: "cart_value",

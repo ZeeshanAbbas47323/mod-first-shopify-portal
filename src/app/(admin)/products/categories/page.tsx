@@ -2,144 +2,138 @@
 
 import * as React from "react";
 import { useRouter } from "next/navigation";
-import { type ColumnDef } from "@tanstack/react-table";
 import { format } from "date-fns";
-import { LayoutGrid, Plus, Search } from "lucide-react";
+import { ChevronsDownUp, ChevronsUpDown, Download, Loader2, Plus, Search } from "lucide-react";
 import { toast } from "sonner";
 
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { DataTable } from "@/components/data-table";
-import { StatusToggle } from "@/components/status-badge";
+import { MultiSelectFilter } from "@/components/multi-select-filter";
+import {
+  DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
+import { Skeleton } from "@/components/ui/skeleton";
+import {
+  CategoryTree, buildCategoryTree, flattenCategoryTree, type CategoryTreeNode,
+} from "@/components/category-tree";
 import { apiErrorMessage } from "@/lib/auth-api";
 import { usePermissions } from "@/stores/menu-store";
-import { listProductCategories, updateRecordStatus, type ProductCategoryRow } from "@/lib/admin-api";
-import { imgUrl } from "@/lib/utils";
+import { exportRowsToCsv } from "@/lib/utils";
+import {
+  fetchAllProductCategories,
+  updateRecordStatus,
+  type ProductCategoryRow,
+} from "@/lib/admin-api";
 
-const DEFAULT_PAGE_SIZE = 20;
+const STATUS_OPTIONS = ["active", "inactive"] as const;
 
-const imgSrc = (row: ProductCategoryRow) =>
-  imgUrl(row.image_url ?? row.image ?? row.banner ?? row.icon ?? null) || null;
+const exportColumns = [
+  { key: "path", label: "Category path", value: (r: CategoryTreeNode) => r.path.join(" › ") },
+  { key: "slug", label: "Slug", value: (r: CategoryTreeNode) => r.slug },
+  {
+    key: "parent",
+    label: "Parent",
+    value: (r: CategoryTreeNode) => (r.path.length > 1 ? r.path[r.path.length - 2] : ""),
+  },
+  { key: "products_count", label: "Products", value: (r: CategoryTreeNode) => r.products_count ?? 0 },
+  { key: "status", label: "Status", value: (r: CategoryTreeNode) => (r.is_active !== false ? "Active" : "Inactive") },
+  { key: "created_at", label: "Created", value: (r: CategoryTreeNode) => r.created_at ?? "" },
+];
 
-function getColumns(
-  onToggleStatus: (row: ProductCategoryRow, next: boolean) => Promise<void>
-): ColumnDef<ProductCategoryRow>[] {
-  return [
-  {
-    accessorKey: "name",
-    header: "Category",
-    cell: ({ row }) => {
-      const r = row.original;
-      const src = imgSrc(r);
-      return (
-        <div className="flex items-center gap-3 min-w-0">
-          {src ? (
-            // eslint-disable-next-line @next/next/no-img-element
-            <img
-              src={src}
-              alt={r.name}
-              className="size-10 shrink-0 rounded-lg border border-border object-cover"
-            />
-          ) : (
-            <span className="flex size-10 shrink-0 items-center justify-center rounded-lg border border-border bg-muted">
-              <LayoutGrid className="size-4 text-muted-foreground" />
-            </span>
-          )}
-          <div className="min-w-0">
-            <p className="truncate font-medium">{r.name}</p>
-            <p className="truncate font-mono text-xs text-muted-foreground">/{r.slug}</p>
-          </div>
-        </div>
-      );
-    },
-  },
-  {
-    accessorKey: "parent",
-    header: "Parent",
-    cell: ({ row }) => row.original.parent?.name ?? "—",
-  },
-  {
-    accessorKey: "description",
-    header: "Description",
-    cell: ({ row }) => (
-      <span className="block max-w-56 truncate text-sm text-muted-foreground">
-        {row.original.description ?? "—"}
-      </span>
-    ),
-  },
-  {
-    accessorKey: "products_count",
-    header: "Products",
-    cell: ({ row }) => {
-      const n = row.original.products_count;
-      return n != null ? <span className="text-sm">{n}</span> : "—";
-    },
-  },
-  {
-    accessorKey: "is_active",
-    header: "Status",
-    cell: ({ row }) => (
-      <StatusToggle
-        isActive={row.original.is_active !== false}
-        onToggle={(next) => onToggleStatus(row.original, next)}
-      />
-    ),
-  },
-  {
-    accessorKey: "created_at",
-    header: "Created",
-    cell: ({ row }) => {
-      const d = row.original.created_at;
-      if (!d) return "—";
-      const date = new Date(d);
-      return isNaN(date.getTime()) ? "—" : format(date, "MMM d, yyyy");
-    },
-  },
-  ];
+/** A node's own id plus every ancestor's, walking up via `parent_id`. */
+function ancestorChainIds(
+  node: CategoryTreeNode,
+  byId: Map<string, CategoryTreeNode>
+): string[] {
+  const ids: string[] = [];
+  let currentId: string | undefined = String(node.id);
+  while (currentId) {
+    ids.push(currentId);
+    const current: CategoryTreeNode | undefined = byId.get(currentId);
+    currentId = current?.parent_id != null ? String(current.parent_id) : undefined;
+  }
+  return ids;
 }
 
 export default function ProductCategoriesPage() {
   const permissions = usePermissions("/products/categories");
   const router = useRouter();
+
   const [rows, setRows] = React.useState<ProductCategoryRow[]>([]);
   const [loading, setLoading] = React.useState(true);
-  const [page, setPage] = React.useState(0);
-  const [pageSize, setPageSize] = React.useState<number>(DEFAULT_PAGE_SIZE);
-  const [pageCount, setPageCount] = React.useState(1);
-  const [total, setTotal] = React.useState(0);
-  const [search, setSearch] = React.useState("");
-  const [debounced, setDebounced] = React.useState("");
   const [refreshKey, setRefreshKey] = React.useState(0);
+  const [exportBusy, setExportBusy] = React.useState(false);
 
-  React.useEffect(() => {
-    const t = setTimeout(() => setDebounced(search), 400);
-    return () => clearTimeout(t);
-  }, [search]);
-
-  React.useEffect(() => { setPage(0); }, [debounced]);
+  const [search, setSearch] = React.useState("");
+  const [statuses, setStatuses] = React.useState<string[]>([]);
+  const [expanded, setExpanded] = React.useState<Set<string>>(new Set());
+  const [selected, setSelected] = React.useState<Set<string>>(new Set());
 
   React.useEffect(() => {
     let cancelled = false;
     setLoading(true);
-    listProductCategories({
-      page: page + 1,
-      limit: pageSize,
-      filters: { name: debounced ? { contains: debounced } : undefined },
-    })
-      .then((res) => {
+    fetchAllProductCategories()
+      .then((r) => {
         if (cancelled) return;
-        setRows(res.rows);
-        setTotal(res.total);
-        setPageCount(res.totalPages);
+        setRows(r);
+        // Everything expanded by default — the whole point of the tree is to
+        // see the hierarchy at a glance, not to go hunting for it.
+        setExpanded(new Set(r.map((c) => String(c.id))));
       })
       .catch((err) => {
         if (cancelled) return;
         setRows([]);
         toast.error(apiErrorMessage(err, "Couldn't load categories."));
       })
-      .finally(() => { if (!cancelled) setLoading(false); });
-    return () => { cancelled = true; };
-  }, [page, pageSize, debounced, refreshKey]);
+      .finally(() => !cancelled && setLoading(false));
+    return () => {
+      cancelled = true;
+    };
+  }, [refreshKey]);
+
+  const tree = React.useMemo(() => buildCategoryTree(rows), [rows]);
+  const flat = React.useMemo(() => flattenCategoryTree(tree), [tree]);
+  const byId = React.useMemo(
+    () => new Map(flat.map((n) => [String(n.id), n])),
+    [flat]
+  );
+
+  const term = search.trim().toLowerCase();
+
+  const matchedIds = React.useMemo(() => {
+    if (!term && !statuses.length) return undefined;
+    const set = new Set<string>();
+    flat.forEach((n) => {
+      const textMatch =
+        !term || n.name.toLowerCase().includes(term) || n.slug.toLowerCase().includes(term);
+      const isActive = n.is_active !== false;
+      const statusOk = !statuses.length || statuses.includes(isActive ? "active" : "inactive");
+      if (textMatch && statusOk) {
+        // Keep the whole ancestor chain visible so a matched leaf's path
+        // still reads as a path, not a floating orphan row.
+        ancestorChainIds(n, byId).forEach((id) => set.add(id));
+      }
+    });
+    return set;
+  }, [flat, byId, term, statuses]);
+
+  const toggleExpand = (id: string) => {
+    setExpanded((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
+  };
+
+  const toggleSelect = (id: string) => {
+    setSelected((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
+  };
 
   const handleToggleStatus = async (row: ProductCategoryRow, next: boolean) => {
     try {
@@ -151,21 +145,64 @@ export default function ProductCategoriesPage() {
     }
   };
 
-  const columns = React.useMemo(() => getColumns(handleToggleStatus), []);
+  const runExport = (scope: "selected" | "all") => {
+    setExportBusy(true);
+    try {
+      const exportRows =
+        scope === "selected" ? flat.filter((n) => selected.has(String(n.id))) : flat;
+      if (!exportRows.length) {
+        toast.error("Nothing to export.");
+        return;
+      }
+      exportRowsToCsv(`categories-${format(new Date(), "yyyy-MM-dd")}`, exportColumns, exportRows);
+      toast.success(`Exported ${exportRows.length} categor${exportRows.length === 1 ? "y" : "ies"}.`);
+    } finally {
+      setExportBusy(false);
+    }
+  };
+
+  const allIds = React.useMemo(() => flat.map((n) => String(n.id)), [flat]);
+  const allExpanded = expanded.size >= allIds.length && allIds.length > 0;
 
   return (
     <div className="flex flex-col gap-4">
       <div className="flex flex-wrap items-center justify-between gap-3">
-        <h1 className="text-xl font-bold">Product Categories</h1>
-        {permissions.can_create && (
-          <Button onClick={() => router.push("/products/categories/new")}>
-            <Plus className="size-4" />
-            Add category
-          </Button>
-        )}
+        <div>
+          <h1 className="text-xl font-bold">Product Categories</h1>
+          <p className="text-sm text-muted-foreground">
+            The full tree, parent to child — {flat.length} categor{flat.length === 1 ? "y" : "ies"}.
+          </p>
+        </div>
+        <div className="flex gap-2">
+          <DropdownMenu>
+            <DropdownMenuTrigger
+              disabled={exportBusy}
+              render={
+                <Button variant="outline">
+                  {exportBusy ? <Loader2 className="size-4 animate-spin" /> : <Download className="size-4" />}
+                  Export
+                </Button>
+              }
+            />
+            <DropdownMenuContent align="end" className="w-64">
+              <DropdownMenuItem disabled={!selected.size} onClick={() => runExport("selected")}>
+                Export {selected.size || ""} selected
+              </DropdownMenuItem>
+              <DropdownMenuItem onClick={() => runExport("all")}>
+                Export all ({flat.length})
+              </DropdownMenuItem>
+            </DropdownMenuContent>
+          </DropdownMenu>
+          {permissions.can_create && (
+            <Button onClick={() => router.push("/products/categories/new")}>
+              <Plus className="size-4" />
+              Add category
+            </Button>
+          )}
+        </div>
       </div>
 
-      <div className="flex items-center gap-2">
+      <div className="flex flex-wrap items-center gap-2">
         <div className="relative min-w-44 flex-1 sm:max-w-64">
           <Search className="absolute top-1/2 left-2.5 size-4 -translate-y-1/2 text-muted-foreground" />
           <Input
@@ -175,22 +212,47 @@ export default function ProductCategoriesPage() {
             className="bg-card pl-8"
           />
         </div>
+        <MultiSelectFilter label="Status" options={STATUS_OPTIONS} value={statuses} onChange={setStatuses} />
+        <Button
+          variant="outline"
+          size="sm"
+          onClick={() => setExpanded(allExpanded ? new Set() : new Set(allIds))}
+        >
+          {allExpanded ? <ChevronsDownUp className="size-4" /> : <ChevronsUpDown className="size-4" />}
+          {allExpanded ? "Collapse all" : "Expand all"}
+        </Button>
+        {selected.size > 0 && (
+          <span className="text-xs text-muted-foreground">
+            {selected.size} selected
+            <button
+              type="button"
+              onClick={() => setSelected(new Set())}
+              className="ml-2 underline underline-offset-2 hover:text-foreground"
+            >
+              clear
+            </button>
+          </span>
+        )}
       </div>
 
-      <DataTable
-        columns={columns}
-        data={rows}
-        loading={loading}
-        onRowClick={(row) => router.push(`/products/categories/${row.id}`)}
-        serverPagination={{
-          pageIndex: page,
-          pageCount,
-          total,
-          onPageChange: setPage,
-          pageSize,
-          onPageSizeChange: setPageSize,
-        }}
-      />
+      {loading ? (
+        <div className="flex flex-col gap-2 rounded-lg bg-card p-4 ring-1 ring-black/8">
+          {Array.from({ length: 6 }).map((_, i) => (
+            <Skeleton key={i} className="h-9 w-full" />
+          ))}
+        </div>
+      ) : (
+        <CategoryTree
+          nodes={tree}
+          expanded={expanded}
+          onToggleExpand={toggleExpand}
+          selected={selected}
+          onToggleSelect={toggleSelect}
+          onToggleStatus={handleToggleStatus}
+          onRowClick={(row) => router.push(`/products/categories/${row.id}`)}
+          matchedIds={matchedIds}
+        />
+      )}
     </div>
   );
 }

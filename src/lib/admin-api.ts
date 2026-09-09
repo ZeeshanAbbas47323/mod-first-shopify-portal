@@ -970,6 +970,7 @@ export interface ProductRow {
   featured_image?: string | null;
   is_active?: boolean;
   created_at?: string;
+  [k: string]: unknown;
 }
 
 export interface ProductDetailRow extends ProductRow {
@@ -1512,7 +1513,7 @@ export interface InventoryReportSummary {
 }
 export interface InventoryReport { rows: InventoryReportRow[]; summary?: InventoryReportSummary }
 export async function getInventoryReport(body?: {
-  category_id?: number; low_stock_only?: boolean; threshold?: number;
+  category_id?: number | number[]; low_stock_only?: boolean; threshold?: number;
 }): Promise<InventoryReport> {
   const { data } = await api.post("reports/inventory", body ?? {});
   const p: Json = data?.payload ?? data?.data ?? data ?? {};

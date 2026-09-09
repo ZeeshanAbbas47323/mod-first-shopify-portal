@@ -8,6 +8,7 @@ import type { DateRange } from "react-day-picker";
 import { toast } from "sonner";
 
 import { Button } from "@/components/ui/button";
+import { Checkbox } from "@/components/ui/checkbox";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
@@ -15,6 +16,10 @@ import {
   Dialog, DialogContent, DialogDescription,
   DialogFooter, DialogHeader, DialogTitle,
 } from "@/components/ui/dialog";
+import { MultiSelectFilter } from "@/components/multi-select-filter";
+import {
+  DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
 import {
   Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
 } from "@/components/ui/select";
@@ -22,7 +27,7 @@ import { DataTable } from "@/components/data-table";
 import { DateRangePicker } from "@/components/date-range-picker";
 import { StatusBadge, type BadgeTone } from "@/components/status-badge";
 import { apiErrorMessage } from "@/lib/auth-api";
-import { fileUrl, imgUrl } from "@/lib/utils";
+import { exportRowsToCsv, fileUrl, imgUrl } from "@/lib/utils";
 import {
   listDesignUploads,
   updateDesignUpload,
@@ -31,6 +36,7 @@ import {
 import { PRINT_METHODS } from "@/lib/pos-api";
 
 const DEFAULT_PAGE_SIZE = 20;
+const EXPORT_CAP = 5000;
 
 const DESIGN_STATUSES = ["pending", "approved", "rejected"] as const;
 
@@ -46,21 +52,21 @@ const STATUS_TONES: Record<string, BadgeTone> = {
   rejected: "critical",
 };
 
-const STATUS_FILTER_ITEMS: Record<string, string> = {
-  all: "All statuses",
-  ...STATUS_LABELS,
-};
-
-const METHOD_FILTER_ITEMS: Record<string, string> = {
-  all: "All methods",
-  ...Object.fromEntries(
-    PRINT_METHODS.map((m) => [m, m.replace(/_/g, " ").toUpperCase()])
-  ),
-};
-
 const isImage = (row: DesignUploadRow) =>
   /\.(png|jpe?g|webp|gif|svg)$/i.test(row.file_url ?? "") ||
   (row.file_type ?? "").startsWith("image/");
+
+const designCustomerName = (row: DesignUploadRow) =>
+  row.user?.full_name ?? row.user?.name ?? (row.user_id != null ? `User #${row.user_id}` : "—");
+
+const exportColumns = [
+  { key: "file_name", label: "Artwork", value: (r: DesignUploadRow) => r.file_name ?? `Design #${r.id}` },
+  { key: "customer", label: "Customer", value: (r: DesignUploadRow) => designCustomerName(r) },
+  { key: "order_id", label: "Order", value: (r: DesignUploadRow) => (r.order_id != null ? `#${r.order_id}` : "") },
+  { key: "print_method", label: "Method", value: (r: DesignUploadRow) => r.print_method ?? "" },
+  { key: "status", label: "Status", value: (r: DesignUploadRow) => (r.status ? STATUS_LABELS[r.status] ?? r.status : "") },
+  { key: "created_at", label: "Uploaded", value: (r: DesignUploadRow) => r.created_at ?? "" },
+];
 
 export default function DesignUploadsPage() {
   const [rows, setRows] = React.useState<DesignUploadRow[]>([]);
@@ -70,10 +76,14 @@ export default function DesignUploadsPage() {
   const [pageCount, setPageCount] = React.useState(1);
   const [total, setTotal] = React.useState(0);
 
+  const [selected, setSelected] = React.useState<DesignUploadRow[]>([]);
+  const [clearKey, setClearKey] = React.useState(0);
+  const [exportBusy, setExportBusy] = React.useState(false);
+
   const [orderId, setOrderId] = React.useState("");
   const [debounced, setDebounced] = React.useState("");
-  const [status, setStatus] = React.useState("all");
-  const [method, setMethod] = React.useState("all");
+  const [statuses, setStatuses] = React.useState<string[]>([]);
+  const [methods, setMethods] = React.useState<string[]>([]);
   const [dateRange, setDateRange] = React.useState<DateRange | undefined>();
   const [refreshKey, setRefreshKey] = React.useState(0);
 
@@ -86,7 +96,17 @@ export default function DesignUploadsPage() {
 
   React.useEffect(() => {
     setPage(0);
-  }, [debounced, status, method, dateRange]);
+  }, [debounced, statuses, methods, dateRange]);
+
+  const activeFilters = React.useMemo(
+    () => ({
+      dateRange,
+      order_id: debounced ? Number(debounced) : undefined,
+      status: statuses.length ? statuses : undefined,
+      print_method: methods.length ? methods : undefined,
+    }),
+    [dateRange, debounced, statuses, methods]
+  );
 
   React.useEffect(() => {
     let cancelled = false;
@@ -94,13 +114,13 @@ export default function DesignUploadsPage() {
     listDesignUploads({
       page: page + 1,
       limit: pageSize,
-      dateRange,
+      dateRange: activeFilters.dateRange,
       // order_id resolves through the OrderItemDesign join, so it's a
       // top-level input rather than a column filter.
-      order_id: debounced ? Number(debounced) : undefined,
+      order_id: activeFilters.order_id,
       filters: {
-        status: status === "all" ? undefined : status,
-        print_method: method === "all" ? undefined : method,
+        status: activeFilters.status,
+        print_method: activeFilters.print_method,
       },
     })
       .then((res) => {
@@ -118,10 +138,58 @@ export default function DesignUploadsPage() {
     return () => {
       cancelled = true;
     };
-  }, [page, pageSize, debounced, status, method, dateRange, refreshKey]);
+  }, [page, pageSize, activeFilters, refreshKey]);
+
+  const runExport = async (scope: "selected" | "all") => {
+    setExportBusy(true);
+    try {
+      const exportRows =
+        scope === "selected"
+          ? selected
+          : (
+              await listDesignUploads({
+                page: 1, limit: EXPORT_CAP,
+                dateRange: activeFilters.dateRange,
+                order_id: activeFilters.order_id,
+                filters: { status: activeFilters.status, print_method: activeFilters.print_method },
+              })
+            ).rows;
+      if (!exportRows.length) {
+        toast.error("Nothing to export.");
+        return;
+      }
+      exportRowsToCsv(`design-uploads-${format(new Date(), "yyyy-MM-dd")}`, exportColumns, exportRows);
+      toast.success(`Exported ${exportRows.length} design${exportRows.length === 1 ? "" : "s"}.`);
+    } catch (error) {
+      toast.error(apiErrorMessage(error, "Couldn't export design uploads."));
+    } finally {
+      setExportBusy(false);
+    }
+  };
 
   const columns = React.useMemo<ColumnDef<DesignUploadRow>[]>(
     () => [
+      {
+        id: "select",
+        header: ({ table }) => (
+          <Checkbox
+            checked={table.getIsAllPageRowsSelected()}
+            indeterminate={table.getIsSomePageRowsSelected() && !table.getIsAllPageRowsSelected()}
+            onCheckedChange={(v) => table.toggleAllPageRowsSelected(!!v)}
+            aria-label="Select all"
+          />
+        ),
+        cell: ({ row }) => (
+          <Checkbox
+            checked={row.getIsSelected()}
+            onCheckedChange={(v) => row.toggleSelected(!!v)}
+            onClick={(e) => e.stopPropagation()}
+            aria-label="Select row"
+          />
+        ),
+        enableSorting: false,
+        enableHiding: false,
+      },
       {
         accessorKey: "file_name",
         header: "Artwork",
@@ -205,11 +273,32 @@ export default function DesignUploadsPage() {
 
   return (
     <div className="flex flex-col gap-4">
-      <div>
-        <h1 className="text-xl font-bold">Design uploads</h1>
-        <p className="text-sm text-muted-foreground">
-          Artwork customers sent in — review it before it goes to production.
-        </p>
+      <div className="flex flex-wrap items-center justify-between gap-3">
+        <div>
+          <h1 className="text-xl font-bold">Design uploads</h1>
+          <p className="text-sm text-muted-foreground">
+            Artwork customers sent in — review it before it goes to production.
+          </p>
+        </div>
+        <DropdownMenu>
+          <DropdownMenuTrigger
+            disabled={exportBusy}
+            render={
+              <Button variant="outline">
+                {exportBusy ? <Loader2 className="size-4 animate-spin" /> : <Download className="size-4" />}
+                Export
+              </Button>
+            }
+          />
+          <DropdownMenuContent align="end" className="w-64">
+            <DropdownMenuItem disabled={!selected.length} onClick={() => runExport("selected")}>
+              Export {selected.length || ""} selected design{selected.length === 1 ? "" : "s"}
+            </DropdownMenuItem>
+            <DropdownMenuItem onClick={() => runExport("all")}>
+              Export all matching filters ({total})
+            </DropdownMenuItem>
+          </DropdownMenuContent>
+        </DropdownMenu>
       </div>
 
       <div className="flex flex-wrap items-center gap-2">
@@ -223,37 +312,36 @@ export default function DesignUploadsPage() {
             className="bg-card pl-8"
           />
         </div>
-        <Select items={METHOD_FILTER_ITEMS} value={method} onValueChange={(v) => setMethod(v as string)}>
-          <SelectTrigger className="min-w-36 bg-card">
-            <SelectValue />
-          </SelectTrigger>
-          <SelectContent>
-            {Object.entries(METHOD_FILTER_ITEMS).map(([v, label]) => (
-              <SelectItem key={v} value={v}>
-                {label}
-              </SelectItem>
-            ))}
-          </SelectContent>
-        </Select>
-        <Select items={STATUS_FILTER_ITEMS} value={status} onValueChange={(v) => setStatus(v as string)}>
-          <SelectTrigger className="min-w-36 bg-card">
-            <SelectValue />
-          </SelectTrigger>
-          <SelectContent>
-            {Object.entries(STATUS_FILTER_ITEMS).map(([v, label]) => (
-              <SelectItem key={v} value={v}>
-                {label}
-              </SelectItem>
-            ))}
-          </SelectContent>
-        </Select>
+        <MultiSelectFilter label="Method" options={PRINT_METHODS} value={methods} onChange={setMethods} />
+        <MultiSelectFilter label="Status" options={DESIGN_STATUSES} value={statuses} onChange={setStatuses} />
         <DateRangePicker value={dateRange} onChange={setDateRange} />
       </div>
+
+      {selected.length > 0 && (
+        <div className="flex flex-wrap items-center gap-3 rounded-xl border border-border bg-card px-3 py-2">
+          <span className="text-sm font-medium">
+            {selected.length} design{selected.length === 1 ? "" : "s"} selected
+          </span>
+          <Button size="sm" variant="outline" disabled={exportBusy} onClick={() => runExport("selected")}>
+            {exportBusy ? <Loader2 className="size-4 animate-spin" /> : <Download className="size-4" />}
+            Export selected
+          </Button>
+          <button
+            type="button"
+            onClick={() => setClearKey((k) => k + 1)}
+            className="text-xs text-muted-foreground hover:text-foreground"
+          >
+            Clear selection
+          </button>
+        </div>
+      )}
 
       <DataTable
         columns={columns}
         data={rows}
         loading={loading}
+        onSelectionChange={setSelected}
+        clearSelectionKey={clearKey}
         onRowClick={setDetail}
         serverPagination={{
           pageIndex: page,

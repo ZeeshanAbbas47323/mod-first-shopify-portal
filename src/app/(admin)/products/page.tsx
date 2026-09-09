@@ -4,19 +4,17 @@ import * as React from "react";
 import { useRouter } from "next/navigation";
 import { type ColumnDef } from "@tanstack/react-table";
 import { format } from "date-fns";
-import { Boxes, Package, Plus, Search } from "lucide-react";
+import { Boxes, Download, Loader2, Package, Plus, Search } from "lucide-react";
 import { toast } from "sonner";
 import type { DateRange } from "react-day-picker";
 
 import { Button } from "@/components/ui/button";
+import { Checkbox } from "@/components/ui/checkbox";
 import { Input } from "@/components/ui/input";
+import { MultiSelectFilter } from "@/components/multi-select-filter";
 import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select";
+  DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
 import { DataTable } from "@/components/data-table";
 import { DateRangePicker } from "@/components/date-range-picker";
 import { StatusBadge } from "@/components/status-badge";
@@ -24,9 +22,11 @@ import { apiErrorMessage } from "@/lib/auth-api";
 import { usePermissions } from "@/stores/menu-store";
 import { StockDialog } from "@/components/products/stock-dialog";
 import { listProducts, type ProductRow } from "@/lib/admin-api";
-import { cn, imgUrl } from "@/lib/utils";
+import { cn, exportRowsToCsv, imgUrl } from "@/lib/utils";
 
 const DEFAULT_PAGE_SIZE = 20;
+const EXPORT_CAP = 5000;
+const PRODUCT_STATUSES = ["active", "draft", "archived"] as const;
 
 /**
  * Column id → the sort key `products/list` understands. The endpoint takes an
@@ -41,20 +41,62 @@ const PRODUCT_SORT_MAP = {
 /** Quantity at or below this is flagged amber in the inventory column. */
 const LOW_STOCK = 5;
 
-const STATUS_ITEMS: Record<string, string> = {
-  all: "All statuses",
-  active: "Active",
-  draft: "Draft",
-  archived: "Archived",
-};
-
 const statusTone = (s?: string) =>
   s === "active" ? "success" : s === "archived" ? "neutral" : "warning";
 
 const currency = (n?: number | null) =>
   n != null ? `$${n.toFixed(2)}` : "—";
 
+const catName = (row: ProductRow) => {
+  const cat = row.category;
+  if (!cat) return "";
+  if (typeof cat === "object") return (cat as { name?: string }).name ?? "";
+  return String(cat);
+};
+
+const vendorName = (row: ProductRow) => {
+  const v = row.vendor;
+  if (!v) return "";
+  if (typeof v === "object") {
+    const o = v as { vendor_name?: string; name?: string };
+    return o.vendor_name ?? o.name ?? "";
+  }
+  return String(v);
+};
+
+const exportColumns = [
+  { key: "title", label: "Product", value: (r: ProductRow) => r.title },
+  { key: "slug", label: "Slug", value: (r: ProductRow) => r.slug ?? "" },
+  { key: "status", label: "Status", value: (r: ProductRow) => r.status ?? "" },
+  { key: "quantity", label: "Inventory", value: (r: ProductRow) => r.quantity ?? "" },
+  { key: "category", label: "Category", value: (r: ProductRow) => catName(r) },
+  { key: "vendor", label: "Vendor", value: (r: ProductRow) => vendorName(r) },
+  { key: "price", label: "Price", value: (r: ProductRow) => r.price ?? "" },
+  { key: "created_at", label: "Added", value: (r: ProductRow) => r.created_at ?? "" },
+];
+
 const columns: ColumnDef<ProductRow>[] = [
+  {
+    id: "select",
+    header: ({ table }) => (
+      <Checkbox
+        checked={table.getIsAllPageRowsSelected()}
+        indeterminate={table.getIsSomePageRowsSelected() && !table.getIsAllPageRowsSelected()}
+        onCheckedChange={(v) => table.toggleAllPageRowsSelected(!!v)}
+        aria-label="Select all"
+      />
+    ),
+    cell: ({ row }) => (
+      <Checkbox
+        checked={row.getIsSelected()}
+        onCheckedChange={(v) => row.toggleSelected(!!v)}
+        onClick={(e) => e.stopPropagation()}
+        aria-label="Select row"
+      />
+    ),
+    enableSorting: false,
+    enableHiding: false,
+  },
   {
     accessorKey: "title",
     header: "Product",
@@ -205,13 +247,16 @@ export default function ProductsPage() {
   const [page, setPage] = React.useState(0);
   const [pageCount, setPageCount] = React.useState(1);
   const [total, setTotal] = React.useState(0);
+  const [selected, setSelected] = React.useState<ProductRow[]>([]);
+  const [clearKey, setClearKey] = React.useState(0);
+  const [exportBusy, setExportBusy] = React.useState(false);
 
   const [pageSize, setPageSize] = React.useState<number>(DEFAULT_PAGE_SIZE);
   const [sortBy, setSortBy] = React.useState<string | undefined>();
   const [order, setOrder] = React.useState<"asc" | "desc">("desc");
 
   const [search, setSearch] = React.useState("");
-  const [status, setStatus] = React.useState("all");
+  const [statuses, setStatuses] = React.useState<string[]>([]);
   const [dateRange, setDateRange] = React.useState<DateRange | undefined>();
   const [refreshKey] = React.useState(0);
 
@@ -223,7 +268,16 @@ export default function ProductsPage() {
 
   React.useEffect(() => {
     setPage(0);
-  }, [debounced, status, dateRange, pageSize, sortBy, order]);
+  }, [debounced, statuses, dateRange, pageSize, sortBy, order]);
+
+  const activeFilters = React.useMemo(
+    () => ({
+      dateRange,
+      search: debounced || undefined,
+      status: statuses.length ? statuses : undefined,
+    }),
+    [dateRange, debounced, statuses]
+  );
 
   React.useEffect(() => {
     let cancelled = false;
@@ -231,13 +285,11 @@ export default function ProductsPage() {
     listProducts({
       page: page + 1,
       limit: pageSize,
-      dateRange,
-      search: debounced || undefined,
+      dateRange: activeFilters.dateRange,
+      search: activeFilters.search,
       sortBy,
       order,
-      filters: {
-        status: status === "all" ? undefined : status,
-      },
+      filters: { status: activeFilters.status },
     })
       .then((res) => {
         if (cancelled) return;
@@ -254,18 +306,65 @@ export default function ProductsPage() {
     return () => {
       cancelled = true;
     };
-  }, [page, pageSize, sortBy, order, debounced, status, dateRange, refreshKey]);
+  }, [page, pageSize, sortBy, order, activeFilters, refreshKey]);
+
+  const runExport = async (scope: "selected" | "all") => {
+    setExportBusy(true);
+    try {
+      const exportRows =
+        scope === "selected"
+          ? selected
+          : (
+              await listProducts({
+                page: 1, limit: EXPORT_CAP,
+                dateRange: activeFilters.dateRange, search: activeFilters.search,
+                filters: { status: activeFilters.status },
+              })
+            ).rows;
+      if (!exportRows.length) {
+        toast.error("Nothing to export.");
+        return;
+      }
+      exportRowsToCsv(`products-${format(new Date(), "yyyy-MM-dd")}`, exportColumns, exportRows);
+      toast.success(`Exported ${exportRows.length} product${exportRows.length === 1 ? "" : "s"}.`);
+    } catch (error) {
+      toast.error(apiErrorMessage(error, "Couldn't export products."));
+    } finally {
+      setExportBusy(false);
+    }
+  };
 
   return (
     <div className="flex flex-col gap-4">
       <div className="flex flex-wrap items-center justify-between gap-3">
         <h1 className="text-xl font-bold">Products</h1>
-        {permissions.can_create && (
-          <Button onClick={() => router.push("/products/new")}>
-            <Plus className="size-4" />
-            Add product
-          </Button>
-        )}
+        <div className="flex gap-2">
+          <DropdownMenu>
+            <DropdownMenuTrigger
+              disabled={exportBusy}
+              render={
+                <Button variant="outline">
+                  {exportBusy ? <Loader2 className="size-4 animate-spin" /> : <Download className="size-4" />}
+                  Export
+                </Button>
+              }
+            />
+            <DropdownMenuContent align="end" className="w-64">
+              <DropdownMenuItem disabled={!selected.length} onClick={() => runExport("selected")}>
+                Export {selected.length || ""} selected product{selected.length === 1 ? "" : "s"}
+              </DropdownMenuItem>
+              <DropdownMenuItem onClick={() => runExport("all")}>
+                Export all products matching filters ({total})
+              </DropdownMenuItem>
+            </DropdownMenuContent>
+          </DropdownMenu>
+          {permissions.can_create && (
+            <Button onClick={() => router.push("/products/new")}>
+              <Plus className="size-4" />
+              Add product
+            </Button>
+          )}
+        </div>
       </div>
 
       <div className="flex flex-wrap items-center gap-2">
@@ -278,29 +377,35 @@ export default function ProductsPage() {
             className="bg-card pl-8"
           />
         </div>
-        <Select
-          items={STATUS_ITEMS}
-          value={status}
-          onValueChange={(v) => setStatus(v as string)}
-        >
-          <SelectTrigger className="min-w-36 bg-card">
-            <SelectValue />
-          </SelectTrigger>
-          <SelectContent>
-            {Object.entries(STATUS_ITEMS).map(([v, label]) => (
-              <SelectItem key={v} value={v}>
-                {label}
-              </SelectItem>
-            ))}
-          </SelectContent>
-        </Select>
+        <MultiSelectFilter label="Status" options={PRODUCT_STATUSES} value={statuses} onChange={setStatuses} />
         <DateRangePicker value={dateRange} onChange={setDateRange} />
       </div>
+
+      {selected.length > 0 && (
+        <div className="flex flex-wrap items-center gap-3 rounded-xl border border-border bg-card px-3 py-2">
+          <span className="text-sm font-medium">
+            {selected.length} product{selected.length === 1 ? "" : "s"} selected
+          </span>
+          <Button size="sm" variant="outline" disabled={exportBusy} onClick={() => runExport("selected")}>
+            {exportBusy ? <Loader2 className="size-4 animate-spin" /> : <Download className="size-4" />}
+            Export selected
+          </Button>
+          <button
+            type="button"
+            onClick={() => setClearKey((k) => k + 1)}
+            className="text-xs text-muted-foreground hover:text-foreground"
+          >
+            Clear selection
+          </button>
+        </div>
+      )}
 
       <DataTable
         columns={columnsWithStock}
         data={rows}
         loading={loading}
+        onSelectionChange={setSelected}
+        clearSelectionKey={clearKey}
         onRowClick={(row) => router.push(`/products/${row.id}`)}
         serverPagination={{
           pageIndex: page,
