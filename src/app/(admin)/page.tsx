@@ -29,21 +29,10 @@ import {
   getDashboardOverview, getRevenueTrend, getCustomerGrowthTrend,
   getOrderStatusBreakdown, getOrderChannelBreakdown, getPaymentMethodBreakdown,
   getTopProducts, getRecentOrders, getLowStockAlerts, getPendingActions,
-  type DashboardPeriod, type DashboardBody, type DashboardOverview, type OverviewMetric, type TrendPoint,
+  type DashboardPeriod, type DashboardBody, type DashboardOverview, type TrendPoint,
   type BreakdownItem, type TopProduct, type RecentOrder,
   type LowStockItem, type PendingActions,
 } from "@/lib/admin-api";
-
-// ─── Type helpers ─────────────────────────────────────────────────────────────
-const metricVal = (m?: OverviewMetric | unknown): number | undefined =>
-  m != null && typeof m === "object" && "value" in (m as object)
-    ? (m as OverviewMetric).value
-    : typeof m === "number" ? m : undefined;
-
-const metricPct = (m?: OverviewMetric | unknown): number | undefined =>
-  m != null && typeof m === "object" && "change_pct" in (m as object)
-    ? ((m as OverviewMetric).change_pct ?? undefined)
-    : undefined;
 
 // ─── Palette ──────────────────────────────────────────────────────────────────
 
@@ -117,10 +106,8 @@ function KpiCard({
 
 // ─── Donut Chart ──────────────────────────────────────────────────────────────
 
-const bVal = (d: BreakdownItem) => Number(d.count ?? (d as Record<string,unknown>).value ?? 0);
-
 function DonutChart({ data, title, loading }: { data: BreakdownItem[]; title: string; loading: boolean }) {
-  const total = data.reduce((s, d) => s + bVal(d), 0);
+  const total = data.reduce((s, d) => s + d.count, 0);
   return (
     <Card className="shadow-none flex-1 min-w-0">
       <CardHeader className="pb-2 pt-4 px-4">
@@ -133,33 +120,29 @@ function DonutChart({ data, title, loading }: { data: BreakdownItem[]; title: st
           <div className="flex items-center gap-3">
             <ResponsiveContainer width={100} height={100}>
               <PieChart>
-                <Pie data={data} dataKey={data[0]?.count != null ? "count" : "value"} cx="50%" cy="50%" innerRadius={30} outerRadius={46} strokeWidth={0}>
+                <Pie data={data} dataKey="count" cx="50%" cy="50%" innerRadius={30} outerRadius={46} strokeWidth={0}>
                   {data.map((_, i) => <Cell key={i} fill={PIE_COLORS[i % PIE_COLORS.length]} />)}
                 </Pie>
                 <Tooltip content={({ active, payload }) => {
                   if (!active || !payload?.length) return null;
                   const d = payload[0].payload as BreakdownItem;
-                  const v = bVal(d);
                   return (
                     <div className="rounded-lg border border-border bg-popover px-2.5 py-1.5 shadow-md text-xs">
-                      <p className="font-medium">{d.label ?? d.name ?? d.status}</p>
-                      <p className="text-muted-foreground">{fmtN(v)} ({total ? `${((v / total) * 100).toFixed(0)}%` : "—"})</p>
+                      <p className="font-medium">{d.label}</p>
+                      <p className="text-muted-foreground">{fmtN(d.count)} ({total ? `${((d.count / total) * 100).toFixed(0)}%` : "—"})</p>
                     </div>
                   );
                 }} />
               </PieChart>
             </ResponsiveContainer>
             <ul className="flex-1 space-y-1 min-w-0">
-              {data.slice(0, 5).map((d, i) => {
-                const v = bVal(d);
-                return (
-                  <li key={i} className="flex items-center gap-1.5 text-xs">
-                    <span className="size-2 shrink-0 rounded-full" style={{ background: PIE_COLORS[i % PIE_COLORS.length] }} />
-                    <span className="truncate text-muted-foreground">{d.label ?? d.name ?? d.status}</span>
-                    <span className="ml-auto font-medium">{total ? `${((v / total) * 100).toFixed(0)}%` : "—"}</span>
-                  </li>
-                );
-              })}
+              {data.slice(0, 5).map((d, i) => (
+                <li key={i} className="flex items-center gap-1.5 text-xs">
+                  <span className="size-2 shrink-0 rounded-full" style={{ background: PIE_COLORS[i % PIE_COLORS.length] }} />
+                  <span className="truncate text-muted-foreground">{d.label}</span>
+                  <span className="ml-auto font-medium">{total ? `${((d.count / total) * 100).toFixed(0)}%` : "—"}</span>
+                </li>
+              ))}
             </ul>
           </div>
         )}
@@ -177,6 +160,19 @@ function greeting() {
   return "Good evening";
 }
 
+// ─── Empty defaults ───────────────────────────────────────────────────────────
+
+const EMPTY_METRIC = { current: 0, previous: 0, change_percent: null };
+const EMPTY_OVERVIEW: DashboardOverview = {
+  revenue: EMPTY_METRIC, orders: EMPTY_METRIC, new_customers: EMPTY_METRIC,
+  avg_order_value: 0, pending_orders: 0, low_stock_alerts: 0,
+  total_active_customers: 0, total_active_products: 0,
+};
+const EMPTY_PENDING: PendingActions = {
+  pending_reviews: 0, pending_refunds: 0, design_review_orders: 0,
+  booked_orders: 0, unresolved_customer_messages: 0, locked_accounts: 0,
+};
+
 // ═══════════════════════════════════════════════════════════════════════════════
 // PAGE
 // ═══════════════════════════════════════════════════════════════════════════════
@@ -187,7 +183,7 @@ export default function HomePage() {
   const [customRange, setCustomRange] = React.useState<DateRange | undefined>();
 
   // KPIs
-  const [overview, setOverview] = React.useState<DashboardOverview>({});
+  const [overview, setOverview] = React.useState<DashboardOverview>(EMPTY_OVERVIEW);
   const [kpiLoading, setKpiLoading] = React.useState(true);
 
   // Charts
@@ -202,7 +198,7 @@ export default function HomePage() {
   // Widgets
   const [recentOrders, setRecentOrders] = React.useState<RecentOrder[]>([]);
   const [lowStock, setLowStock] = React.useState<LowStockItem[]>([]);
-  const [pending, setPending] = React.useState<PendingActions>({});
+  const [pending, setPending] = React.useState<PendingActions>(EMPTY_PENDING);
   const [widgetsLoading, setWidgetsLoading] = React.useState(true);
 
   React.useEffect(() => {
@@ -223,7 +219,7 @@ export default function HomePage() {
       .then((ov) => { if (!cancelled) { setOverview(ov); setKpiLoading(false); } })
       .catch((e) => {
         if (!cancelled) {
-          setOverview({});
+          setOverview(EMPTY_OVERVIEW);
           toast.error(apiErrorMessage(e, "Couldn't load the overview."));
           setKpiLoading(false);
         }
@@ -272,22 +268,16 @@ export default function HomePage() {
   }, []);
 
   // Pending actions banner count
-  const pendingOrders = (pending.booked_orders ?? (pending as Record<string,unknown>).pending_orders ?? 0) as number;
-  const lowStockCount = (overview.low_stock_count ?? (pending as Record<string,unknown>).low_stock_products ?? 0) as number;
-  const pendingReviews = (pending.pending_reviews ?? 0) as number;
+  const pendingOrders = pending.booked_orders;
+  const lowStockCount = overview.low_stock_alerts;
+  const pendingReviews = pending.pending_reviews;
   const pendingCount = pendingOrders + lowStockCount + pendingReviews;
 
-  const revData = revTrend.map((p) => ({
-    date: String(p.date ?? p.label ?? (p as Record<string,unknown>).period ?? ""),
-    value: Number(p.value ?? p.revenue ?? 0),
-  }));
-  const custData = custTrend.map((p) => ({
-    date: String(p.date ?? p.label ?? (p as Record<string,unknown>).period ?? ""),
-    value: Number(p.value ?? p.customers ?? 0),
-  }));
+  const revData = revTrend.map((p) => ({ date: p.period, value: p.revenue ?? 0 }));
+  const custData = custTrend.map((p) => ({ date: p.period, value: p.signups ?? 0 }));
   const topProdData = topProducts.slice(0, 8).map((p) => ({
-    name: String(p.name ?? p.title ?? "Product").slice(0, 20),
-    revenue: Number(p.revenue ?? 0),
+    name: p.name.slice(0, 20),
+    revenue: p.revenue,
   }));
 
   const ov = overview;
@@ -360,26 +350,25 @@ export default function HomePage() {
         <CardContent className="grid grid-cols-2 p-0 lg:grid-cols-4 lg:divide-x divide-y lg:divide-y-0">
           <KpiCard
             label="Total revenue" icon={<TrendingUp className="size-3.5" />}
-            value={fmt$(metricVal(ov.revenue))}
-            delta={metricPct(ov.revenue)}
+            value={fmt$(ov.revenue.current)}
+            delta={ov.revenue.change_percent}
             loading={kpiLoading}
           />
           <KpiCard
             label="Total orders" icon={<ShoppingCart className="size-3.5" />}
-            value={fmtN(metricVal(ov.orders))}
-            delta={metricPct(ov.orders)}
+            value={fmtN(ov.orders.current)}
+            delta={ov.orders.change_percent}
             loading={kpiLoading}
           />
           <KpiCard
             label="New customers" icon={<Users className="size-3.5" />}
-            value={fmtN(metricVal(ov.new_customers))}
-            delta={metricPct(ov.new_customers)}
+            value={fmtN(ov.new_customers.current)}
+            delta={ov.new_customers.change_percent}
             loading={kpiLoading}
           />
           <KpiCard
             label="Avg order value" icon={<TrendingUp className="size-3.5" />}
-            value={fmt$(metricVal(ov.aov))}
-            delta={metricPct(ov.aov)}
+            value={fmt$(ov.avg_order_value)}
             loading={kpiLoading}
           />
         </CardContent>
@@ -496,15 +485,7 @@ export default function HomePage() {
             ) : (
               <ul className="divide-y">
                 {recentOrders.map((order, i) => {
-                  const custName =
-                    typeof order.customer === "string"
-                      ? order.customer
-                      : (order.customer as { full_name?: string; name?: string } | undefined)?.full_name
-                      ?? (order.customer as { name?: string } | undefined)?.name
-                      ?? "Guest";
-                  const dateStr = order.created_at
-                    ? format(new Date(order.created_at), "MMM d")
-                    : String((order as Record<string,unknown>).date ?? "");
+                  const dateStr = order.date ? format(new Date(order.date), "MMM d") : "";
                   return (
                     <li key={order.id ?? i}>
                       <Link
@@ -513,7 +494,7 @@ export default function HomePage() {
                       >
                         <div className="min-w-0 flex-1">
                           <p className="truncate text-sm font-medium">
-                            {order.order_number ?? `#${order.id}`} · {custName}
+                            {order.order_number} · {order.customer_name}
                           </p>
                           <p className="truncate text-xs text-muted-foreground">{dateStr}</p>
                         </div>
@@ -549,14 +530,16 @@ export default function HomePage() {
             ) : (
               <ul className="divide-y">
                 {lowStock.map((item, i) => (
-                  <li key={item.id ?? i} className="flex items-center gap-3 px-4 py-3">
+                  <li key={item.inventory_id ?? i} className="flex items-center gap-3 px-4 py-3">
                     <div className="min-w-0 flex-1">
-                      <p className="truncate text-sm font-medium">{item.name ?? item.title}</p>
+                      <p className="truncate text-sm font-medium">
+                        {item.name}{item.variant ? ` · ${item.variant}` : ""}
+                      </p>
                       {item.sku && <p className="text-xs text-muted-foreground font-mono">{item.sku}</p>}
                     </div>
                     <span className={cn(
                       "shrink-0 text-sm font-semibold",
-                      (item.quantity ?? 0) === 0 ? "text-destructive" : "text-amber-600",
+                      item.quantity === 0 ? "text-destructive" : "text-amber-600",
                     )}>
                       {fmtN(item.quantity)} left
                     </span>

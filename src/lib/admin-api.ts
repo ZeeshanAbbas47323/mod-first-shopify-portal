@@ -1097,6 +1097,7 @@ export interface ProductCategoryRow {
   image_url?: string | null;
   banner?: string | null;
   icon?: string | null;
+  sort_order?: number;
   is_active?: boolean;
   products_count?: number;
   created_at?: string;
@@ -1157,6 +1158,9 @@ export const updateReview = (id: number | string, body: Json) =>
   updateRecord(`reviews/${id}`, body, "Review updated.");
 
 // ─── Dashboard ────────────────────────────────────────────────────────────────
+// Field names below are kept identical to `dashboardService.ts`'s real payload
+// shape (verified against the backend, not guessed) so this layer is a plain
+// pass-through/rename, never a source of drift between the two sides.
 
 export const DASHBOARD_PERIODS = [
   "today",
@@ -1175,250 +1179,186 @@ export interface DashboardBody {
   startDate?: string;
   endDate?: string;
   branch_id?: number;
-  limit?: number;
-  threshold?: number;
 }
 
-export interface OverviewMetric {
-  value: number;
-  change_pct?: number | null;
-  change_direction?: "up" | "down" | "neutral" | null;
+/** A headline KPI: this period's value vs. the immediately preceding period of equal length. */
+export interface DashboardMetric {
+  current: number;
+  previous: number;
+  change_percent: number | null;
 }
 
 export interface DashboardOverview {
-  revenue?: OverviewMetric;
-  orders?: OverviewMetric;
-  new_customers?: OverviewMetric;
-  aov?: OverviewMetric; // average order value
-  pending_orders?: number;
-  low_stock_count?: number;
-  active_customers?: number;
-  active_products?: number;
-  [key: string]: unknown;
+  revenue: DashboardMetric;
+  orders: DashboardMetric;
+  new_customers: DashboardMetric;
+  avg_order_value: number;
+  pending_orders: number;
+  low_stock_alerts: number;
+  total_active_customers: number;
+  total_active_products: number;
 }
 
 export interface TrendPoint {
-  date?: string;
-  label?: string;
+  period: string;
   revenue?: number;
   orders?: number;
-  customers?: number;
-  count?: number;
-  [key: string]: unknown;
+  signups?: number;
 }
 
+/** One slice of an order-status / sales-channel / payment-method donut. */
 export interface BreakdownItem {
-  label?: string;
-  name?: string;
-  status?: string;
-  channel?: string;
-  method?: string;
-  count?: number;
-  orders?: number;
+  label: string;
+  count: number;
   revenue?: number;
-  percentage?: number;
-  [key: string]: unknown;
+  amount?: number;
 }
 
 export interface TopProduct {
-  id?: number | string;
-  name?: string;
-  title?: string;
-  units_sold?: number;
-  quantity_sold?: number;
-  revenue?: number;
-  image?: string | null;
-  [key: string]: unknown;
+  product_id: number | string;
+  name: string;
+  units_sold: number;
+  revenue: number;
 }
 
 export interface RecentOrder {
   id: number | string;
-  order_number?: string;
-  customer?: string | { full_name?: string; name?: string } | null;
-  total?: number;
-  status?: string;
-  payment_status?: string;
-  created_at?: string;
-  items_count?: number;
-  [key: string]: unknown;
+  order_number: string;
+  customer_name: string;
+  email?: string | null;
+  status?: string | null;
+  payment_status?: string | null;
+  channel?: string | null;
+  total: number;
+  date?: string | null;
 }
 
 export interface LowStockItem {
-  id: number | string;
-  name?: string;
-  title?: string;
+  inventory_id: number | string;
+  product_id: number | string;
+  name: string;
   sku?: string | null;
-  quantity?: number;
-  threshold?: number;
-  image?: string | null;
-  [key: string]: unknown;
+  variant?: string | null;
+  quantity: number;
 }
 
 export interface PendingActions {
-  pending_reviews?: number;
-  pending_refunds?: number;
-  design_review_orders?: number;
-  booked_orders?: number;
-  unresolved_messages?: number;
-  locked_users?: number;
-  [key: string]: unknown;
+  pending_reviews: number;
+  pending_refunds: number;
+  design_review_orders: number;
+  booked_orders: number;
+  unresolved_customer_messages: number;
+  locked_accounts: number;
 }
 
 function dashParse<T>(data: Json): T {
   return (data?.payload ?? data?.data ?? data) as T;
 }
 
-/** Containers the overview numbers may be nested inside. */
-const OVERVIEW_CONTAINERS = [
-  "summary", "overview", "metrics", "stats", "statistics", "totals", "kpis", "cards",
-];
+const emptyMetric: DashboardMetric = { current: 0, previous: 0, change_percent: null };
 
-/** Value keys used when a metric arrives as an object rather than a number. */
-const METRIC_VALUE_KEYS = ["value", "total", "amount", "count", "current"];
-const METRIC_CHANGE_KEYS = [
-  "change_pct", "changePct", "change_percentage", "changePercentage",
-  "percent_change", "percentChange", "growth_pct", "growth", "change",
-];
-
-/** Coerce whatever shape a metric arrives in into { value, change_pct }. */
-function toMetric(raw: unknown): OverviewMetric | undefined {
-  if (raw == null) return undefined;
-  if (typeof raw === "number") return { value: raw };
-  if (typeof raw === "string") {
-    const n = Number(raw.replace(/[^0-9.-]/g, ""));
-    return isNaN(n) ? undefined : { value: n };
-  }
-  if (typeof raw !== "object") return undefined;
-
-  const obj = raw as Json;
-  const valueKey = METRIC_VALUE_KEYS.find((k) => typeof obj[k] === "number" || typeof obj[k] === "string");
-  if (!valueKey) return undefined;
-  const value = Number(String(obj[valueKey]).replace(/[^0-9.-]/g, ""));
-  if (isNaN(value)) return undefined;
-
-  const changeKey = METRIC_CHANGE_KEYS.find((k) => obj[k] != null);
-  const change = changeKey != null ? Number(obj[changeKey]) : undefined;
-
-  return {
-    value,
-    change_pct: change != null && !isNaN(change) ? change : undefined,
-    change_direction: (obj.change_direction ?? obj.direction ?? null) as OverviewMetric["change_direction"],
-  };
-}
-
-/**
- * Find a metric by any of its known aliases, at the top level or inside one of
- * the usual container objects. Key naming varies between endpoints, so the
- * dashboard resolves values by alias instead of assuming one exact shape.
- */
-function findMetric(payload: Json, aliases: string[]): OverviewMetric | undefined {
-  const sources: Json[] = [
-    payload,
-    ...OVERVIEW_CONTAINERS.map((k) => payload?.[k]).filter(
-      (v): v is Json => !!v && typeof v === "object" && !Array.isArray(v)
-    ),
-  ];
-  for (const source of sources) {
-    for (const alias of aliases) {
-      const metric = toMetric(source?.[alias]);
-      if (metric) return metric;
-    }
-  }
-  return undefined;
-}
-
-const OVERVIEW_ALIASES = {
-  revenue: ["revenue", "total_revenue", "totalRevenue", "revenue_total", "sales", "total_sales", "totalSales", "gross_revenue", "net_revenue", "grand_total"],
-  orders: ["orders", "total_orders", "totalOrders", "order_count", "orders_count", "ordersCount", "total_order"],
-  new_customers: ["new_customers", "newCustomers", "new_customer_count", "customers", "total_customers", "totalCustomers", "customers_count", "new_users", "new_user_count"],
-  aov: ["aov", "average_order_value", "averageOrderValue", "avg_order_value", "avgOrderValue", "average_order", "avg_order"],
-  pending_orders: ["pending_orders", "pendingOrders", "pending_order_count"],
-  low_stock_count: ["low_stock_count", "lowStockCount", "low_stock", "low_stock_products", "lowStockProducts"],
-  active_customers: ["active_customers", "activeCustomers", "total_customers"],
-  active_products: ["active_products", "activeProducts", "total_products", "totalProducts", "products"],
-} as const;
-
-/**
- * Store overview KPIs. The raw payload is preserved so nothing is lost, with
- * the four headline metrics normalized onto stable keys for the dashboard.
- */
+/** Store overview KPIs: revenue, orders, new customers, AOV + a few live counters. */
 export async function getDashboardOverview(body: DashboardBody = {}): Promise<DashboardOverview> {
   const { data } = await api.post("dashboard/overview", body);
-  const payload = dashParse<Json>(data) ?? {};
-
-  const resolved: DashboardOverview = { ...payload };
-  let found = 0;
-
-  const headline = ["revenue", "orders", "new_customers", "aov"];
-  (Object.keys(OVERVIEW_ALIASES) as (keyof typeof OVERVIEW_ALIASES)[]).forEach((key) => {
-    const metric = findMetric(payload, [...OVERVIEW_ALIASES[key]]);
-    if (!metric) return;
-    found += 1;
-    // Counters stay plain numbers; the headline metrics keep their change_pct.
-    (resolved as Json)[key] = headline.includes(key) ? metric : metric.value;
-  });
-
-  if (!found && Object.keys(payload).length) {
-    console.warn(
-      "[dashboard/overview] no known metrics in payload — keys were:",
-      Object.keys(payload)
-    );
-  }
-
-  return resolved;
+  const p = dashParse<Json>(data) ?? {};
+  return {
+    revenue: p.revenue ?? emptyMetric,
+    orders: p.orders ?? emptyMetric,
+    new_customers: p.new_customers ?? emptyMetric,
+    avg_order_value: Number(p.avg_order_value ?? 0),
+    pending_orders: Number(p.pending_orders ?? 0),
+    low_stock_alerts: Number(p.low_stock_alerts ?? 0),
+    total_active_customers: Number(p.total_active_customers ?? 0),
+    total_active_products: Number(p.total_active_products ?? 0),
+  };
 }
 
 export async function getRevenueTrend(body: DashboardBody = {}): Promise<TrendPoint[]> {
   const { data } = await api.post("dashboard/revenue-trend", body);
-  const p = dashParse<Json>(data);
-  return (Array.isArray(p) ? p : p?.trend ?? p?.data ?? p?.rows ?? []) as TrendPoint[];
+  return dashParse<TrendPoint[]>(data) ?? [];
 }
 
 export async function getCustomerGrowthTrend(body: DashboardBody = {}): Promise<TrendPoint[]> {
   const { data } = await api.post("dashboard/customer-growth-trend", body);
-  const p = dashParse<Json>(data);
-  return (Array.isArray(p) ? p : p?.trend ?? p?.data ?? p?.rows ?? []) as TrendPoint[];
+  return dashParse<TrendPoint[]>(data) ?? [];
+}
+
+function normalizeBreakdown(rows: Json[], labelKey: string): BreakdownItem[] {
+  return rows.map((r) => ({
+    label: String(r[labelKey] ?? "Unknown"),
+    count: Number(r.count ?? 0),
+    revenue: r.revenue != null ? Number(r.revenue) : undefined,
+    amount: r.amount != null ? Number(r.amount) : undefined,
+  }));
 }
 
 export async function getOrderStatusBreakdown(body: DashboardBody = {}): Promise<BreakdownItem[]> {
   const { data } = await api.post("dashboard/order-status-breakdown", body);
-  const p = dashParse<Json>(data);
-  return (Array.isArray(p) ? p : p?.breakdown ?? p?.data ?? p?.rows ?? []) as BreakdownItem[];
+  return normalizeBreakdown(dashParse<Json[]>(data) ?? [], "status");
 }
 
 export async function getOrderChannelBreakdown(body: DashboardBody = {}): Promise<BreakdownItem[]> {
   const { data } = await api.post("dashboard/order-channel-breakdown", body);
-  const p = dashParse<Json>(data);
-  return (Array.isArray(p) ? p : p?.breakdown ?? p?.data ?? p?.rows ?? []) as BreakdownItem[];
+  return normalizeBreakdown(dashParse<Json[]>(data) ?? [], "channel");
 }
 
 export async function getPaymentMethodBreakdown(body: DashboardBody = {}): Promise<BreakdownItem[]> {
   const { data } = await api.post("dashboard/payment-method-breakdown", body);
-  const p = dashParse<Json>(data);
-  return (Array.isArray(p) ? p : p?.breakdown ?? p?.data ?? p?.rows ?? []) as BreakdownItem[];
+  return normalizeBreakdown(dashParse<Json[]>(data) ?? [], "payment_method");
 }
 
-export async function getTopProducts(body: DashboardBody = {}): Promise<TopProduct[]> {
+export async function getTopProducts(body: DashboardBody & { limit?: number } = {}): Promise<TopProduct[]> {
   const { data } = await api.post("dashboard/top-products", body);
-  const p = dashParse<Json>(data);
-  return (Array.isArray(p) ? p : p?.products ?? p?.data ?? p?.rows ?? []) as TopProduct[];
+  const rows = dashParse<Json[]>(data) ?? [];
+  return rows.map((r) => ({
+    product_id: r.product_id,
+    name: String(r.product_name ?? "Product"),
+    units_sold: Number(r.units_sold ?? 0),
+    revenue: Number(r.revenue ?? 0),
+  }));
 }
 
 export async function getRecentOrders(limit = 10): Promise<RecentOrder[]> {
   const { data } = await api.post("dashboard/recent-orders", { limit });
-  const p = dashParse<Json>(data);
-  return (Array.isArray(p) ? p : p?.orders ?? p?.data ?? p?.rows ?? []) as RecentOrder[];
+  const rows = dashParse<Json[]>(data) ?? [];
+  return rows.map((r) => ({
+    id: r.id,
+    order_number: r.order_number ?? `#${r.id}`,
+    customer_name: r.full_name ?? "Guest",
+    email: r.email ?? null,
+    status: r.status ?? null,
+    payment_status: r.payment_status ?? null,
+    channel: r.channel ?? null,
+    total: Number(r.total_amount ?? 0),
+    date: r.order_date ?? null,
+  }));
 }
 
-export async function getLowStockAlerts(limit = 10, threshold = 10): Promise<LowStockItem[]> {
+/** threshold defaults to 5 to match the "low stock" definition used by the overview counter. */
+export async function getLowStockAlerts(limit = 10, threshold = 5): Promise<LowStockItem[]> {
   const { data } = await api.post("dashboard/low-stock-alerts", { limit, threshold });
-  const p = dashParse<Json>(data);
-  return (Array.isArray(p) ? p : p?.products ?? p?.items ?? p?.data ?? p?.rows ?? []) as LowStockItem[];
+  const rows = dashParse<Json[]>(data) ?? [];
+  return rows.map((r) => ({
+    inventory_id: r.inventory_id,
+    product_id: r.product_id,
+    name: r.product_name ?? "Unknown product",
+    sku: r.sku ?? null,
+    variant: r.variant ?? null,
+    quantity: Number(r.quantity ?? 0),
+  }));
 }
 
 export async function getPendingActions(): Promise<PendingActions> {
   const { data } = await api.get("dashboard/pending-actions");
-  return dashParse<PendingActions>(data);
+  const p = dashParse<Json>(data) ?? {};
+  return {
+    pending_reviews: Number(p.pending_reviews ?? 0),
+    pending_refunds: Number(p.pending_refunds ?? 0),
+    design_review_orders: Number(p.design_review_orders ?? 0),
+    booked_orders: Number(p.booked_orders_awaiting_acceptance ?? 0),
+    unresolved_customer_messages: Number(p.unresolved_customer_messages ?? 0),
+    locked_accounts: Number(p.locked_accounts ?? 0),
+  };
 }
 
 // ─── Reports ──────────────────────────────────────────────────────────────────

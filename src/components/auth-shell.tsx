@@ -39,9 +39,6 @@ export function AuthShell({ title, subtitle, children }: AuthShellProps) {
             {children}
           </CardContent>
         </Card>
-        <p className="mt-6 text-center text-xs text-muted-foreground">
-          Help · Privacy · Terms
-        </p>
       </div>
     </div>
   );

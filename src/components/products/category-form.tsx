@@ -44,6 +44,7 @@ const schema = z.object({
   slug: z.string().min(1, "Slug is required").regex(/^[a-z0-9-]+$/, "Lowercase letters, numbers, dashes only"),
   description: z.string().optional(),
   parent_id: z.string().optional(),
+  sort_order: z.number().int().min(0, "Must be 0 or more"),
   is_active: z.boolean(),
 });
 type FormValues = z.infer<typeof schema>;
@@ -154,6 +155,7 @@ export function CategoryForm({ category }: { category?: ProductCategoryRow }) {
       slug: category?.slug ?? "",
       description: category?.description ?? "",
       parent_id: category?.parent_id ? String(category.parent_id) : "",
+      sort_order: category?.sort_order ?? 0,
       is_active: category?.is_active ?? true,
     },
   });
@@ -184,6 +186,7 @@ export function CategoryForm({ category }: { category?: ProductCategoryRow }) {
         slug: values.slug,
         description: values.description || undefined,
         parent_id: values.parent_id ? Number(values.parent_id) : null,
+        sort_order: values.sort_order,
         is_active: values.is_active,
         image_url: image ?? undefined,
       };
@@ -375,6 +378,24 @@ export function CategoryForm({ category }: { category?: ProductCategoryRow }) {
                   />
                   <p className="text-xs text-muted-foreground">
                     Leave empty for a top-level category.
+                  </p>
+                </div>
+
+                <div className="space-y-1.5">
+                  <Label htmlFor="cat-sort-order">Sort order</Label>
+                  <Input
+                    id="cat-sort-order"
+                    type="number"
+                    min={0}
+                    step={1}
+                    aria-invalid={!!errors.sort_order}
+                    {...register("sort_order", { valueAsNumber: true })}
+                  />
+                  {errors.sort_order && (
+                    <p className="text-sm text-destructive">{errors.sort_order.message}</p>
+                  )}
+                  <p className="text-xs text-muted-foreground">
+                    Lower numbers show first. Categories with the same parent are ordered by this, then by name.
                   </p>
                 </div>
               </CardContent>
