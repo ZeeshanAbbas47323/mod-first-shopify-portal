@@ -60,7 +60,6 @@ const REASON_TONES: Record<string, BadgeTone> = {
   DAMAGED: "critical",
 };
 
-/** The report may not label status, so derive it from the quantity. */
 function stockStatus(row: InventoryReportRow, threshold: number) {
   if (row.status) return row.status;
   const qty = Number(row.quantity ?? 0);
@@ -74,7 +73,6 @@ const STATUS_META: Record<string, { label: string; tone: BadgeTone }> = {
   out_of_stock: { label: "Out of stock", tone: "critical" },
 };
 
-// ─── Summary cards ────────────────────────────────────────────────────────────
 
 function SummaryCard({
   label,
@@ -112,12 +110,10 @@ function SummaryCard({
   );
 }
 
-// ─── Page ─────────────────────────────────────────────────────────────────────
 
 export default function InventoryPage() {
   const [tab, setTab] = React.useState<"stock" | "activity">("stock");
 
-  // Stock levels
   const [rows, setRows] = React.useState<InventoryReportRow[]>([]);
   const [summary, setSummary] = React.useState<InventoryReportSummary>({});
   const [loading, setLoading] = React.useState(true);
@@ -129,10 +125,8 @@ export default function InventoryPage() {
   const [search, setSearch] = React.useState("");
   const [refreshKey, setRefreshKey] = React.useState(0);
 
-  // Adjust dialog
   const [stockTarget, setStockTarget] = React.useState<InventoryReportRow | null>(null);
 
-  // Activity log
   const [logs, setLogs] = React.useState<InventoryLogRow[]>([]);
   const [logsLoading, setLogsLoading] = React.useState(false);
   const [logPage, setLogPage] = React.useState(0);
@@ -201,7 +195,6 @@ export default function InventoryPage() {
     );
   }, [rows, search]);
 
-  // The report may omit the summary — derive the headline numbers from the rows.
   const stats = React.useMemo(() => {
     const derived = rows.reduce(
       (acc, r) => {
@@ -467,7 +460,7 @@ export default function InventoryPage() {
 
   return (
     <div className="flex flex-col gap-4">
-      {/* Header */}
+      {}
       <div className="flex flex-wrap items-center justify-between gap-3">
         <div>
           <h1 className="text-lg font-semibold">Inventory</h1>
@@ -494,7 +487,7 @@ export default function InventoryPage() {
         </div>
       </div>
 
-      {/* Summary */}
+      {}
       <Card className="py-0 shadow-none">
         <CardContent className="grid grid-cols-2 divide-y p-0 lg:grid-cols-5 lg:divide-x lg:divide-y-0">
           <SummaryCard label="SKUs tracked" value={fmtN(stats.skus)} loading={loading} />
@@ -519,7 +512,7 @@ export default function InventoryPage() {
 
       {tab === "stock" ? (
         <>
-          {/* Filters */}
+          {}
           <div className="flex flex-wrap items-center gap-2">
             <div className="relative min-w-44 flex-1 sm:max-w-56">
               <Search className="absolute top-1/2 left-2.5 size-4 -translate-y-1/2 text-muted-foreground" />
@@ -591,7 +584,6 @@ export default function InventoryPage() {
           onOpenChange={(next) => {
             if (!next) {
               setStockTarget(null);
-              // Pull fresh quantities after an adjustment.
               setRefreshKey((k) => k + 1);
             }
           }}

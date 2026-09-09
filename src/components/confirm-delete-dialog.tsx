@@ -22,7 +22,6 @@ interface ConfirmDeleteDialogProps {
   onConfirm: () => void | Promise<void>;
 }
 
-/** Shopify-style destructive confirmation modal. */
 export function ConfirmDeleteDialog({
   open,
   onOpenChange,

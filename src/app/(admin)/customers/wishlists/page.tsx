@@ -35,7 +35,6 @@ const productName = (row: WishlistRow) =>
 const customerName = (row: WishlistRow) =>
   row.user?.full_name ?? row.user?.name ?? (row.user_id != null ? `User #${row.user_id}` : "—");
 
-/** Filter controls rendered under each column header. */
 const COLUMN_FILTERS: Record<string, ColumnFilterDef> = {
   product_id: { type: "text", placeholder: "Product ID" },
   is_active: { type: "select", options: STATUS_OPTIONS, placeholder: "Any" },
@@ -79,16 +78,11 @@ export default function WishlistsPage() {
     () => ({
       dateRange,
       product_id: debouncedProduct ? Number(debouncedProduct) : undefined,
-      // Both picked (or neither) means no opinion; one pick narrows it.
       is_active: statuses.length === 1 ? statuses[0] === "active" : undefined,
     }),
     [dateRange, debouncedProduct, statuses]
   );
 
-  /**
-   * The header filter row edits the same state as the filter bar above it,
-   * so a pick in one shows up in the other instead of silently competing.
-   */
   const columnFilterValues = React.useMemo(() => {
     const values: Record<string, string[]> = {};
     if (productId) values.product_id = [productId];
@@ -138,7 +132,6 @@ export default function WishlistsPage() {
               })
             ).rows;
 
-  // Most-saved products on the current page — a quick demand signal.
   const topProducts = React.useMemo(() => {
     const counts = new Map<string, { name: string; count: number }>();
     rows.forEach((r) => {

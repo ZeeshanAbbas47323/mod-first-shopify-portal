@@ -34,7 +34,6 @@ const EXPORT_CAP = 5000;
 const STATUS_OPTIONS = ["active", "inactive"] as const;
 const EMPTY_SUMMARY: ContentPagesSummary = { total_pages: 0, published: 0, draft: 0, missing_seo: 0 };
 
-/** Plain-text excerpt of the stored HTML, for the table preview. */
 const excerpt = (html?: string) =>
   (html ?? "")
     .replace(/<[^>]*>/g, " ")
@@ -42,7 +41,6 @@ const excerpt = (html?: string) =>
     .replace(/\s+/g, " ")
     .trim();
 
-/** Filter controls rendered under each column header. */
 const COLUMN_FILTERS: Record<string, ColumnFilterDef> = {
   title: { type: "text", placeholder: "Search titles" },
   content_type: { type: "select", options: CONTENT_TYPES, placeholder: "Any" },
@@ -184,10 +182,6 @@ export default function ContentPagesPage() {
     [dateRange, debounced, contentTypes, statuses]
   );
 
-  /**
-   * The header filter row edits the same state as the filter bar above it,
-   * so a pick in one shows up in the other instead of silently competing.
-   */
   const columnFilterValues = React.useMemo(() => {
     const values: Record<string, string[]> = {};
     if (search) values.title = [search];

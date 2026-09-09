@@ -11,17 +11,9 @@ export interface SummaryTile {
   label: string;
   value: string;
   changePercent?: number | null;
-  /** Optional per-tile sparkline, e.g. daily counts for the active date range. */
   sparkline?: number[];
 }
 
-/**
- * The Shopify-style stat strip above a list — a row of KPI tiles, each with
- * its current value, the vs-previous-period delta, and an optional
- * sparkline. Shared by any list page that gets a summary endpoint (orders
- * today; drafts/shipping-labels/abandoned-checkouts can reuse this as those
- * get their own summary data).
- */
 export function SummaryStatStrip({
   tiles,
   loading,

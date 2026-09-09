@@ -38,7 +38,6 @@ import { cn } from "@/lib/utils";
 import { exportRows as writeExport, type ExportFormat } from "@/lib/export";
 import { ExportFormatMenu } from "@/components/export-menu";
 
-// ─── Helpers ─────────────────────────────────────────────────────────────────
 
 const CHART_BLUE = "#005bd3";
 const CHART_COLORS = ["#005bd3","#1a9ba1","#8456cd","#b98900","#29845a","#e51c00","#637381"];
@@ -60,7 +59,6 @@ function Skeleton({ className }: { className?: string }) {
   return <div className={cn("animate-pulse rounded-md bg-muted", className)} />;
 }
 
-// ─── Summary Card ─────────────────────────────────────────────────────────────
 
 function SummaryCard({
   label, value, icon, tone = "default",
@@ -85,7 +83,6 @@ function SummaryCard({
   );
 }
 
-// ─── Shared Chart Tooltip ─────────────────────────────────────────────────────
 
 function ChartTip({ active, payload, label, currency = false }: {
   active?: boolean; payload?: { value?: number; color?: string }[];
@@ -104,7 +101,6 @@ function ChartTip({ active, payload, label, currency = false }: {
   );
 }
 
-// ─── Date Controls ────────────────────────────────────────────────────────────
 
 function DateControls({
   range, onRange, children,
@@ -122,7 +118,6 @@ function DateControls({
   );
 }
 
-// ─── Export Button ────────────────────────────────────────────────────────────
 
 function ExportButton({
   onClick,
@@ -141,7 +136,6 @@ function ExportButton({
   );
 }
 
-// ─── Empty State ──────────────────────────────────────────────────────────────
 
 function Empty({ text = "No data for the selected period" }: { text?: string }) {
   return (
@@ -151,7 +145,6 @@ function Empty({ text = "No data for the selected period" }: { text?: string }) 
   );
 }
 
-// ─── Tab wrapper ──────────────────────────────────────────────────────────────
 
 function TabBar({ tabs, active, onChange }: {
   tabs: { value: string; label: string }[];
@@ -178,9 +171,6 @@ function TabBar({ tabs, active, onChange }: {
   );
 }
 
-// ═══════════════════════════════════════════════════════════════════════════════
-// 1. SALES REPORT
-// ═══════════════════════════════════════════════════════════════════════════════
 
 function SalesTab() {
   const [range, setRange] = React.useState<DateRange>(defaultRange);
@@ -204,8 +194,6 @@ function SalesTab() {
   const labelKey = (r: SalesDataRow) => r.label ?? r.date ?? r.period ?? "";
   const chartData = rows.map((r) => ({ label: labelKey(r), revenue: r.revenue ?? 0, orders: r.orders ?? 0 }));
 
-  // groupBy=product/category doesn't return orders/discount/tax totals — derive
-  // what's actually available locally instead of showing empty summary cards.
   const groupRevenue = rows.reduce((s, r) => s + (r.revenue ?? 0), 0);
   const groupUnits = rows.reduce((s, r) => s + (r.units_sold ?? 0), 0);
 
@@ -357,9 +345,6 @@ function SalesTab() {
   );
 }
 
-// ═══════════════════════════════════════════════════════════════════════════════
-// 2. ORDERS REPORT
-// ═══════════════════════════════════════════════════════════════════════════════
 
 const ORDER_STATUSES_LIST = ["booked","accepted","design_review","preparing","label_create","shipped","ready_for_pickup","completed","cancelled"];
 const PAYMENT_STATUSES_LIST = ["pending","paid","partially_paid","refunded","failed"];
@@ -493,9 +478,6 @@ function OrdersTab() {
   );
 }
 
-// ═══════════════════════════════════════════════════════════════════════════════
-// 3. INVENTORY REPORT
-// ═══════════════════════════════════════════════════════════════════════════════
 
 function InventoryTab() {
   const [lowStockOnly, setLowStockOnly] = React.useState(false);
@@ -595,9 +577,6 @@ function InventoryTab() {
   );
 }
 
-// ═══════════════════════════════════════════════════════════════════════════════
-// 4. CUSTOMERS REPORT
-// ═══════════════════════════════════════════════════════════════════════════════
 
 function CustomersTab() {
   const [range, setRange] = React.useState<DateRange>(defaultRange);
@@ -689,9 +668,6 @@ function CustomersTab() {
   );
 }
 
-// ═══════════════════════════════════════════════════════════════════════════════
-// 5. PRODUCT PERFORMANCE
-// ═══════════════════════════════════════════════════════════════════════════════
 
 function ProductPerfTab() {
   const [range, setRange] = React.useState<DateRange>(defaultRange);
@@ -792,9 +768,6 @@ function ProductPerfTab() {
   );
 }
 
-// ═══════════════════════════════════════════════════════════════════════════════
-// 6. FINANCIAL REPORT
-// ═══════════════════════════════════════════════════════════════════════════════
 
 function FinancialTab() {
   const [range, setRange] = React.useState<DateRange>(defaultRange);
@@ -875,9 +848,6 @@ function FinancialTab() {
   );
 }
 
-// ═══════════════════════════════════════════════════════════════════════════════
-// 7. COUPON USAGE
-// ═══════════════════════════════════════════════════════════════════════════════
 
 function CouponTab() {
   const [range, setRange] = React.useState<DateRange>({ from: undefined, to: undefined });
@@ -965,12 +935,6 @@ function CouponTab() {
     </div>
   );
 }
-
-// ═══════════════════════════════════════════════════════════════════════════════
-// ROOT PAGE
-// ═══════════════════════════════════════════════════════════════════════════════
-
-// ─── Duration report ──────────────────────────────────────────────────────────
 
 function DurationTab() {
   const [range, setRange] = React.useState<DateRange>(defaultRange());

@@ -53,12 +53,6 @@ import {
   TableRow,
 } from "@/components/ui/table";
 
-/**
- * "fulfillmentStatus" → "Fulfillment status", "order_number" → "Order number".
- * Column ids come from `accessorKey`, which is a raw API field name — some
- * camelCase, some snake_case — so both need splitting or the picker showed
- * "Order_number" verbatim.
- */
 function humanizeColumnId(id: string) {
   const spaced = id
     .replace(/([a-z])([A-Z])/g, "$1 $2")
@@ -70,11 +64,6 @@ function humanizeColumnId(id: string) {
 
 export const PAGE_SIZE_OPTIONS = [10, 20, 50, 100] as const;
 
-/**
- * Per-column filter descriptors, keyed by column id. A column absent from the
- * map gets no filter control, which keeps the row from sprouting inputs under
- * checkbox and action columns.
- */
 export type ColumnFilterDef =
   | { type: "text"; placeholder?: string }
   | {
@@ -84,15 +73,10 @@ export type ColumnFilterDef =
     };
 
 export interface ServerColumnFilters {
-  /** Active filters, column id → selected values (text filters hold one). */
   value: Record<string, string[]>;
   onChange: (next: Record<string, string[]>) => void;
 }
 
-/**
- * Handles both control types with one function: a select passes an array and
- * wants an exact match, a text box passes a string and wants "contains".
- */
 const columnFilter: FilterFn<unknown> = (row, columnId, filterValue) => {
   if (filterValue == null || filterValue === "") return true;
   const raw = row.getValue(columnId);
@@ -104,11 +88,6 @@ const columnFilter: FilterFn<unknown> = (row, columnId, filterValue) => {
   return cell.includes(String(filterValue).toLowerCase());
 };
 
-/**
- * Typing straight into a server-filtered table would fire a request per
- * keystroke, so the text box keeps its own value and reports upward once the
- * user pauses.
- */
 function TextColumnFilter({
   value,
   placeholder,
@@ -120,7 +99,6 @@ function TextColumnFilter({
 }) {
   const [draft, setDraft] = React.useState(value);
 
-  // Re-sync when the filter is cleared from outside (Clear filters button).
   React.useEffect(() => setDraft(value), [value]);
 
   React.useEffect(() => {
@@ -146,25 +124,13 @@ interface ServerPagination {
   pageCount: number;
   total: number;
   onPageChange: (pageIndex: number) => void;
-  /** Rows per page. Pass with onPageSizeChange to show the length selector. */
   pageSize?: number;
   onPageSizeChange?: (pageSize: number) => void;
 }
 
-/**
- * Server-side sorting. Without this the table can only reorder the rows of the
- * page it happens to be holding, which reads as a broken sort on any list with
- * more than one page.
- */
 interface ServerSort {
-  /** Current backend sort key, or undefined while the list is unsorted. */
   sortBy?: string;
   order?: "asc" | "desc";
-  /**
-   * Column id → backend sort key. Columns absent from this map can't sort.
-   * Some endpoints (products) take an enum that already encodes the direction
-   * — those columns map to a `{ asc, desc }` pair instead of one key.
-   */
   columnMap: Record<string, string | { asc: string; desc: string }>;
   onSortChange: (sortBy: string | undefined, order: "asc" | "desc") => void;
 }
@@ -184,17 +150,11 @@ interface DataTableProps<TData, TValue> {
   searchPlaceholder?: string;
   onRowClick?: (row: TData) => void;
   toolbar?: React.ReactNode;
-  /** Pass when rows are fetched from an API page by page. */
   serverPagination?: ServerPagination;
-  /** Pass to sort on the server instead of within the loaded page. */
   serverSort?: ServerSort;
-  /** Renders a filter control under each named column's header. */
   columnFilterDefs?: Record<string, ColumnFilterDef>;
-  /** Pass to filter on the server instead of within the loaded page. */
   serverColumnFilters?: ServerColumnFilters;
-  /** Receives the currently selected rows, for bulk actions in the toolbar. */
   onSelectionChange?: (rows: TData[]) => void;
-  /** Bump this to clear the selection after a bulk action completes. */
   clearSelectionKey?: number;
   loading?: boolean;
 }
@@ -219,11 +179,8 @@ export function DataTable<TData, TValue>({
   const [columnVisibility, setColumnVisibility] = React.useState<VisibilityState>({});
   const [rowSelection, setRowSelection] = React.useState({});
 
-  // Client-side page size, used only when the caller isn't paging on the server.
   const [clientPageSize, setClientPageSize] = React.useState<number>(10);
 
-  // With server sorting the backend has already ordered the rows, so re-sorting
-  // them here would only shuffle the current page.
   const sortingState: SortingState = serverSort
     ? serverSort.sortBy
       ? [
@@ -256,7 +213,7 @@ export function DataTable<TData, TValue>({
     }
     const order = first.desc ? "desc" : "asc";
     const key = sortKeyFor(serverSort.columnMap[first.id], order);
-    if (!key) return; // Column isn't sortable on the server — ignore the click.
+    if (!key) return; 
     serverSort.onSortChange(key, order);
   };
 
@@ -325,7 +282,6 @@ export function DataTable<TData, TValue>({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [serverColumnFilters, columnFilterDefs]);
 
-  // Keep the client-side table in step with the length selector.
   React.useEffect(() => {
     if (!serverPagination) table.setPageSize(clientPageSize);
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -339,7 +295,6 @@ export function DataTable<TData, TValue>({
   const selectedRows = table.getFilteredSelectedRowModel().rows;
   const selectedCount = selectedRows.length;
 
-  // Hand the selected originals up so the page can act on them.
   React.useEffect(() => {
     onSelectionChange?.(selectedRows.map((r) => r.original));
     // eslint-disable-next-line react-hooks/exhaustive-deps

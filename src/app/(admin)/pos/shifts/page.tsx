@@ -54,7 +54,6 @@ const fmtWhen = (v?: string | null) => {
   return isNaN(d.getTime()) ? "—" : format(d, "MMM d, yyyy · h:mm a");
 };
 
-/** Difference between counted and expected cash, when the shift is closed. */
 const cashDiff = (s: ShiftRow): number | null => {
   if (s.cash_difference != null) return Number(s.cash_difference);
   if (s.counted_cash == null) return null;
@@ -65,7 +64,6 @@ const cashDiff = (s: ShiftRow): number | null => {
   return Number(s.counted_cash) - expected;
 };
 
-/** Filter controls rendered under each column header. */
 const COLUMN_FILTERS: Record<string, ColumnFilterDef> = {
   shift_code: { type: "text", placeholder: "Search shifts" },
   status: { type: "select", options: SHIFT_STATUSES, placeholder: "Any" },
@@ -90,10 +88,6 @@ export default function PosShiftsPage() {
 
   const [detail, setDetail] = React.useState<ShiftRow | null>(null);
 
-  /**
-   * The header filter row edits the same state as the toolbar above it, so
-   * a pick in one shows up in the other instead of silently competing.
-   */
   const columnFilterValues = React.useMemo(() => {
     const values: Record<string, string[]> = {};
     if (search) values.shift_code = [search];
@@ -104,7 +98,6 @@ export default function PosShiftsPage() {
   const applyColumnFilters = React.useCallback(
     (next: Record<string, string[]>) => {
       setSearch(next.shift_code?.[0] ?? "");
-      // Picking every option says nothing, same as picking none.
       const picked = next.status ?? [];
       setStatus(picked.length === 1 ? picked[0] : "all");
     },

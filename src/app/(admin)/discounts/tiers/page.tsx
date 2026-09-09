@@ -41,7 +41,6 @@ const EXPORT_CAP = 5000;
 const STATUS_OPTIONS = ["active", "inactive"] as const;
 const EMPTY_SUMMARY: DiscountTiersSummary = { total_tiers: 0, active: 0, inactive: 0 };
 
-/** Filter controls rendered under each column header. */
 const COLUMN_FILTERS: Record<string, ColumnFilterDef> = {
   name: { type: "text", placeholder: "Search names" },
   discount_type: { type: "select", options: DISCOUNT_TIER_TYPES, placeholder: "Any" },
@@ -56,7 +55,6 @@ const exportColumns = [
   { key: "created_at", label: "Created", value: (r: DiscountTierRow) => r.created_at ?? "" },
 ];
 
-/** Tier value reads as 10% or $10.00 depending on the type. */
 const formatValue = (row: DiscountTierRow) => {
   const n = Number(row.discount_value ?? 0);
   if (isNaN(n)) return "—";
@@ -107,10 +105,6 @@ export default function DiscountTiersPage() {
     [dateRange, debounced, types, statuses]
   );
 
-  /**
-   * The header filter row edits the same state as the filter bar above it,
-   * so a pick in one shows up in the other instead of silently competing.
-   */
   const columnFilterValues = React.useMemo(() => {
     const values: Record<string, string[]> = {};
     if (search) values.name = [search];
@@ -172,8 +166,6 @@ export default function DiscountTiersPage() {
               })
             ).rows;
 
-  // There is no common/update-status table for tiers, so the toggle updates
-  // the record itself.
   const handleToggle = React.useCallback(
     async (row: DiscountTierRow, next: boolean) => {
       try {
@@ -362,7 +354,6 @@ export default function DiscountTiersPage() {
   );
 }
 
-// ─── Dialog ───────────────────────────────────────────────────────────────────
 
 function TierDialog({
   editing,

@@ -56,10 +56,6 @@ const SHIFT_TONES: Record<string, BadgeTone> = {
   ended: "neutral",
 };
 
-/**
- * Show a print-service response in a tab. `target` must be opened
- * synchronously inside the click handler, otherwise the browser blocks it.
- */
 export async function openPrintOutput(
   result: Blob | Record<string, unknown>,
   target: PrintWindow
@@ -235,7 +231,6 @@ function Metric({ label, value }: { label: string; value: string }) {
   );
 }
 
-// ─── Open ─────────────────────────────────────────────────────────────────────
 
 function OpenShiftDialog({
   open,
@@ -363,7 +358,6 @@ function OpenShiftDialog({
   );
 }
 
-// ─── Close ────────────────────────────────────────────────────────────────────
 
 function CloseShiftDialog({
   shift,
@@ -387,7 +381,6 @@ function CloseShiftDialog({
     }
   }, [open]);
 
-  // Expected drawer = opening float + cash taken during the shift.
   const expected =
     shift.expected_cash != null
       ? Number(shift.expected_cash)

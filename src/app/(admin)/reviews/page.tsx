@@ -67,7 +67,6 @@ const exportColumns = [
   { key: "created_at", label: "Date", value: (r: ReviewRow) => r.created_at ?? "" },
 ];
 
-/** Filter controls rendered under each column header. */
 const COLUMN_FILTERS: Record<string, ColumnFilterDef> = {
   title: { type: "text", placeholder: "Search titles" },
   status: { type: "select", options: REVIEW_STATUSES, placeholder: "Any" },
@@ -242,10 +241,6 @@ export default function ReviewsPage() {
     [dateRange, debounced, statuses]
   );
 
-  /**
-   * The header filter row edits the same state as the filter bar above it,
-   * so a pick in one shows up in the other instead of silently competing.
-   */
   const columnFilterValues = React.useMemo(() => {
     const values: Record<string, string[]> = {};
     if (search) values.title = [search];
@@ -312,7 +307,6 @@ export default function ReviewsPage() {
       const full = await getReviewById(row.id);
       setEditing(full);
     } catch {
-      // fall back to the row data already shown
     }
   };
 

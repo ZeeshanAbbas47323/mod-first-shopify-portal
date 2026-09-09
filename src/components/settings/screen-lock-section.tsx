@@ -34,11 +34,6 @@ import {
 
 const AUTO_LOCK_OPTIONS = [1, 5, 10, 15, 30, 60, 120];
 
-/**
- * Only staff who sign in at a terminal have a screen-lock PIN. The list API
- * takes a single role per request, so the roles are fetched in parallel and
- * merged.
- */
 const PIN_ROLES = ["pos_user", "super_admin", "admin"] as const;
 
 async function listPinUsers(search: string): Promise<UserRow[]> {
@@ -61,7 +56,6 @@ async function listPinUsers(search: string): Promise<UserRow[]> {
 }
 const PIN_RE = /^\d{4,6}$/;
 
-/** Digits only, capped at 6 — every PIN field shares this. */
 const onlyDigits = (v: string) => v.replace(/\D/g, "").slice(0, 6);
 
 function PinInput({
@@ -151,7 +145,7 @@ export function ScreenLockSection() {
 
   return (
     <div className="flex flex-col gap-4">
-      {/* Status */}
+      {}
       <Card className="shadow-none">
         <CardHeader className="flex-row items-center gap-2 pb-3">
           <LockKeyhole className="size-4 text-muted-foreground" />
@@ -200,7 +194,7 @@ export function ScreenLockSection() {
         </CardContent>
       </Card>
 
-      {/* Auto-lock */}
+      {}
       <Card className="shadow-none">
         <CardHeader className="flex-row items-center gap-2 pb-3">
           <Timer className="size-4 text-muted-foreground" />
@@ -241,7 +235,7 @@ export function ScreenLockSection() {
         </CardContent>
       </Card>
 
-      {/* Admin reset */}
+      {}
       <Card className="shadow-none">
         <CardHeader className="flex-row items-center gap-2 pb-3">
           <ShieldCheck className="size-4 text-muted-foreground" />
@@ -267,7 +261,6 @@ export function ScreenLockSection() {
   );
 }
 
-// ─── Set ──────────────────────────────────────────────────────────────────────
 
 function SetPinDialog({
   open,
@@ -335,7 +328,6 @@ function SetPinDialog({
   );
 }
 
-// ─── Change ───────────────────────────────────────────────────────────────────
 
 function ChangePinDialog({
   open,
@@ -416,7 +408,6 @@ function ChangePinDialog({
   );
 }
 
-// ─── Disable ──────────────────────────────────────────────────────────────────
 
 function DisablePinDialog({
   open,
@@ -478,7 +469,6 @@ function DisablePinDialog({
   );
 }
 
-// ─── Verify ───────────────────────────────────────────────────────────────────
 
 function VerifyPinDialog({
   open,
@@ -542,7 +532,6 @@ function VerifyPinDialog({
   );
 }
 
-// ─── Admin reset ──────────────────────────────────────────────────────────────
 
 function ResetPinDialog({
   open,
@@ -559,7 +548,6 @@ function ResetPinDialog({
   const [confirm, setConfirm] = React.useState("");
   const [saving, setSaving] = React.useState(false);
 
-  // Preload a first page of users so the picker is never an empty dead end.
   React.useEffect(() => {
     if (!open) return;
     setSearch("");
@@ -585,7 +573,6 @@ function ResetPinDialog({
     return () => clearTimeout(t);
   }, [search, open]);
 
-  // Spell out what is still missing rather than leaving the button dead.
   const problem = !user
     ? "Select a user first."
     : !PIN_RE.test(pin)

@@ -35,7 +35,6 @@ import {
 
 const DEFAULT_PAGE_SIZE = 15;
 
-/** Filter controls rendered under each column header. */
 const COLUMN_FILTERS: Record<string, ColumnFilterDef> = {
   status: { type: "select", options: [{ value: "online", label: "Online" }, { value: "offline", label: "Offline" }], placeholder: "Any" },
 };
@@ -76,7 +75,6 @@ export default function TerminalsPage() {
   );
 }
 
-// ─── Readers ──────────────────────────────────────────────────────────────────
 
 function ReadersTab({ branches }: { branches: BranchRow[] }) {
   const permissions = usePermissions("/pos/terminals");
@@ -88,10 +86,6 @@ function ReadersTab({ branches }: { branches: BranchRow[] }) {
   const [total, setTotal] = React.useState(0);
   const [status, setStatus] = React.useState("all");
 
-  /**
-   * The header filter row edits the same state as the toolbar above it, so
-   * a pick in one shows up in the other instead of silently competing.
-   */
   const columnFilterValues = React.useMemo(() => {
     const values: Record<string, string[]> = {};
     if (status !== "all") values.status = [status];
@@ -100,7 +94,6 @@ function ReadersTab({ branches }: { branches: BranchRow[] }) {
 
   const applyColumnFilters = React.useCallback(
     (next: Record<string, string[]>) => {
-      // Picking every option says nothing, same as picking none.
       const picked = next.status ?? [];
       setStatus(picked.length === 1 ? picked[0] : "all");
     },
@@ -413,7 +406,6 @@ function RegisterReaderDialog({
   );
 }
 
-// ─── Locations ────────────────────────────────────────────────────────────────
 
 function LocationsTab({ branches }: { branches: BranchRow[] }) {
   const [rows, setRows] = React.useState<TerminalLocationRow[]>([]);

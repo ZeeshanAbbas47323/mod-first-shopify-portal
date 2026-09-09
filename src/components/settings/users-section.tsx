@@ -68,7 +68,6 @@ import {
 const DEFAULT_PAGE_SIZE = 10;
 const EXPORT_CAP = 5000;
 
-// Staff accounts only — the "customer" role belongs to the storefront Customers page.
 const STAFF_ROLES = USER_ROLES.filter((r) => r !== "customer");
 
 const STATUS_ITEMS = { all: "All statuses", active: "Active", inactive: "Inactive" };
@@ -207,7 +206,6 @@ function getColumns(
   ];
 }
 
-/** Filter controls rendered under each column header. */
 const COLUMN_FILTERS: Record<string, ColumnFilterDef> = {
   full_name: { type: "text", placeholder: "Search staff" },
   status: { type: "select", options: [{ value: "active", label: "Active" }, { value: "inactive", label: "Inactive" }], placeholder: "Any" },
@@ -231,7 +229,6 @@ export function UsersSection() {
   const [summary, setSummary] = React.useState<{ total: number; new: number; locked: number } | null>(null);
   const [exportBusy, setExportBusy] = React.useState(false);
 
-  // Debounce the text search
   const [debouncedSearch, setDebouncedSearch] = React.useState("");
   React.useEffect(() => {
     const t = setTimeout(() => setDebouncedSearch(search), 400);
@@ -245,17 +242,12 @@ export function UsersSection() {
   const buildFilters = React.useCallback(
     () => ({
       full_name: debouncedSearch ? { contains: debouncedSearch } : undefined,
-      // Staff only — customers have their own page.
       role: roles.length ? { in: roles } : { nin: "customer" },
       is_active: status === "all" ? undefined : status === "active",
     }),
     [debouncedSearch, roles, status]
   );
 
-  /**
-   * The header filter row edits the same state as the toolbar above it, so
-   * a pick in one shows up in the other instead of silently competing.
-   */
   const columnFilterValues = React.useMemo(() => {
     const values: Record<string, string[]> = {};
     if (search) values.full_name = [search];
@@ -426,7 +418,7 @@ export function UsersSection() {
         },
         branchName
       ),
-     
+
     [branchName]
   );
 
@@ -593,7 +585,6 @@ function UserDialog({
     },
   });
 
-  // Tiers are how a standing customer discount gets attached to a user.
   const [tiers, setTiers] = React.useState<DiscountTierRow[]>([]);
   React.useEffect(() => {
     if (!open) return;
@@ -624,7 +615,6 @@ function UserDialog({
     try {
       let message: string;
       if (editing) {
-        // Update API accepts full_name, phone, role, is_active (email is not updatable)
         message = await updateUser(editing.id, {
           full_name: values.full_name,
           phone: values.phone,
@@ -856,9 +846,6 @@ function UserDialog({
     </Dialog>
   );
 }
-
-
-// ─── Assign to branch ─────────────────────────────────────────────────────────
 
 function AssignBranchDialog({
   user,

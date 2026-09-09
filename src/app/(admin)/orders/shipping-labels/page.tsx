@@ -48,7 +48,6 @@ const EMPTY_SUMMARY: ShipmentsSummary = {
   issues: { current: 0, previous: 0, change_percent: null },
 };
 
-/** Filter controls rendered under each column header. */
 const COLUMN_FILTERS: Record<string, ColumnFilterDef> = {
   shipment_number: { type: "text", placeholder: "Search shipments" },
   status: { type: "select", options: SHIPMENT_STATUSES, placeholder: "Any" },
@@ -157,10 +156,6 @@ export default function ShippingLabelsPage() {
     [dateRange, statuses, search]
   );
 
-  /**
-   * The header filter row edits the same state as the filter bar above it,
-   * so a pick in one shows up in the other instead of silently competing.
-   */
   const columnFilterValues = React.useMemo(() => {
     const values: Record<string, string[]> = {};
     if (search) values.shipment_number = [search];
@@ -218,7 +213,7 @@ export default function ShippingLabelsPage() {
 
   return (
     <div className="flex flex-col gap-4">
-      {/* Header */}
+      {}
       <div className="flex flex-wrap items-center justify-between gap-3">
         <h1 className="text-lg font-semibold">Shipping & Delivery</h1>
         <div className="flex gap-2">
@@ -238,7 +233,7 @@ export default function ShippingLabelsPage() {
 
       <SummaryStatStrip tiles={tiles} loading={summaryLoading} />
 
-      {/* Search + filters + date range */}
+      {}
       <div className="flex flex-wrap items-center gap-2">
         <div className="relative">
           <Search className="absolute left-2.5 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" />
@@ -281,7 +276,7 @@ export default function ShippingLabelsPage() {
         </div>
       )}
 
-      {/* Table */}
+      {}
       <DataTable
         columns={columns}
         data={rows}
@@ -310,7 +305,6 @@ export default function ShippingLabelsPage() {
   );
 }
 
-// ─── Create shipment ────────────────────────────────────────────────────────
 
 function CreateShipmentDialog({
   open,
@@ -341,8 +335,6 @@ function CreateShipmentDialog({
     if (!order || !courierId) return;
     setSaving(true);
     try {
-      // Address and package details are optional — the backend falls back to
-      // the order's own shipping address and line items when they're omitted.
       toast.success(await createShipmentRate({ courier_id: Number(courierId), order_id: order.id }));
       onOpenChange(false);
       onCreated();

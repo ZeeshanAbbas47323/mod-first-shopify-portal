@@ -23,16 +23,13 @@ import {
   type WebsiteSettingRow,
 } from "@/lib/admin-api";
 
-// ─── Schema ──────────────────────────────────────────────────────────────────
 
 const schema = z.object({
-  // Required per API contract
   site_name: z.string().min(1, "Site name is required"),
   primary_color: z.string().min(1, "Primary color is required"),
   secondary_color: z.string().min(1, "Secondary color is required"),
   font_primary: z.string().min(1, "Primary font is required"),
   font_heading: z.string().min(1, "Heading font is required"),
-  // Optional
   site_tagline: z.string().optional(),
   site_description: z.string().optional(),
   accent_color: z.string().optional(),
@@ -82,7 +79,6 @@ const parseNum = (v?: string) => {
   return isNaN(n) ? null : n;
 };
 
-// ─── Image Upload ─────────────────────────────────────────────────────────────
 
 function ImageField({
   label,
@@ -145,7 +141,6 @@ function ImageField({
   );
 }
 
-// ─── Section Card ─────────────────────────────────────────────────────────────
 
 function Section({ title, children }: { title: string; children: React.ReactNode }) {
   return (
@@ -159,7 +154,6 @@ function Section({ title, children }: { title: string; children: React.ReactNode
   );
 }
 
-// ─── Skeleton ─────────────────────────────────────────────────────────────────
 
 function Skeleton() {
   return (
@@ -171,13 +165,11 @@ function Skeleton() {
   );
 }
 
-// ─── Main Component ───────────────────────────────────────────────────────────
 
 export function WebsiteSettingsSection() {
   const [setting, setSetting] = React.useState<WebsiteSettingRow | null>(null);
   const [loading, setLoading] = React.useState(true);
 
-  // Image fields managed outside form (file upload)
   const [logo, setLogo] = React.useState<string | null>(null);
   const [logoWhite, setLogoWhite] = React.useState<string | null>(null);
   const [logoBlack, setLogoBlack] = React.useState<string | null>(null);
@@ -250,7 +242,6 @@ export function WebsiteSettingsSection() {
             order_prefix: s.order_prefix ?? "",
           });
         } else {
-          // No settings row yet — leave sensible defaults for the create flow.
           reset({
             primary_color: "#030303",
             secondary_color: "#C2E105",
@@ -323,9 +314,7 @@ export function WebsiteSettingsSection() {
       if (setting?.id != null) {
         msg = await updateWebsiteSettings(setting.id, body);
       } else {
-        // No existing row → create one, then remember its id so subsequent saves update.
         msg = await createWebsiteSettings(body);
-        // Refetch to pick up the newly-assigned id
         const fresh = await fetchWebsiteSettings();
         if (fresh) setSetting(fresh);
       }
@@ -339,7 +328,7 @@ export function WebsiteSettingsSection() {
 
   return (
     <form onSubmit={handleSubmit(onSubmit)} noValidate className="flex flex-col gap-4">
-      {/* ── Store basics ── */}
+      {}
       <Section title="Store details">
         <div className="space-y-4">
           <div className="space-y-1.5">
@@ -365,7 +354,7 @@ export function WebsiteSettingsSection() {
         </div>
       </Section>
 
-      {/* ── Branding ── */}
+      {}
       <Section title="Branding">
         <div className="grid gap-4 sm:grid-cols-2">
           <div className="space-y-1.5">
@@ -404,7 +393,7 @@ export function WebsiteSettingsSection() {
         </div>
       </Section>
 
-      {/* ── Contact ── */}
+      {}
       <Section title="Contact information">
         <div className="grid gap-4 sm:grid-cols-2">
           <div className="space-y-1.5">
@@ -450,7 +439,7 @@ export function WebsiteSettingsSection() {
         </div>
       </Section>
 
-      {/* ── Social ── */}
+      {}
       <Section title="Social media & apps">
         <div className="grid gap-4 sm:grid-cols-2">
           {(
@@ -474,7 +463,7 @@ export function WebsiteSettingsSection() {
         </div>
       </Section>
 
-      {/* ── Commerce ── */}
+      {}
       <Section title="Commerce settings">
         <div className="grid gap-4 sm:grid-cols-2">
           <div className="space-y-1.5">
@@ -553,7 +542,7 @@ export function WebsiteSettingsSection() {
         </div>
       </Section>
 
-      {/* ── SEO ── */}
+      {}
       <Section title="SEO">
         <div className="space-y-4">
           <div className="space-y-1.5">
@@ -577,7 +566,7 @@ export function WebsiteSettingsSection() {
         </div>
       </Section>
 
-      {/* ── Save ── */}
+      {}
       <div className="flex justify-end">
         <Button type="submit" disabled={isSubmitting}>
           {isSubmitting && <Loader2 className="size-4 animate-spin" />}

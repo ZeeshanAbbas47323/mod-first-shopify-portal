@@ -48,7 +48,6 @@ interface NavItem {
   children?: NavChild[];
 }
 
-/** Icon names stored on Menu.icon resolve through here. */
 const ICONS: Record<string, React.ComponentType<{ className?: string }>> = {
   BarChart3,
   FileText,
@@ -64,10 +63,6 @@ const ICONS: Record<string, React.ComponentType<{ className?: string }>> = {
   Users,
 };
 
-/**
- * Shown until the database menus arrive, and if that request fails. Keeping it
- * means a navigation outage never leaves someone staring at an empty shell.
- */
 const fallbackNav: NavItem[] = [
   { title: "Home", href: "/", icon: Home },
   {
@@ -132,12 +127,10 @@ const fallbackNav: NavItem[] = [
 const itemClasses =
   "cursor-pointer font-medium transition-colors duration-150 hover:bg-[#e0e0e0] active:bg-[#e0e0e0] data-active:bg-white data-active:shadow-sm data-active:hover:bg-white";
 
-/** Settings sits in the footer, so it never belongs in the main list. */
 const FOOTER_ROUTE = "/settings";
 
 const routeOf = (node: NavMenuNode) => node.link_value || node.slug;
 
-/** Database menus → the shape this sidebar already knows how to render. */
 function toNavItems(menus: NavMenuNode[]): NavItem[] {
   return menus
     .filter((menu) => routeOf(menu) !== FOOTER_ROUTE)
@@ -161,9 +154,6 @@ export function AppSidebar() {
     if (!loaded) void load();
   }, [loaded, load]);
 
-  // Showing the built-in list while the real one loads flashes menus the user
-  // may not be allowed to see, which then vanish. Render placeholders instead,
-  // and only fall back for real if the request actually failed.
   const mainNav = menus.length ? toNavItems(menus) : failed ? fallbackNav : [];
   const showSkeleton = !loaded && !menus.length;
 
@@ -192,8 +182,6 @@ export function AppSidebar() {
                     ? pathname === "/"
                     : pathname === item.href ||
                       pathname.startsWith(item.href + "/");
-                // Parent shows the white pill only when it's the exact page;
-                // when a child is active the child gets the pill instead.
                 const childActive = item.children?.some(
                   (c) => pathname === c.href
                 );

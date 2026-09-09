@@ -67,14 +67,12 @@ export function OrderComments({ orderId }: { orderId: number | string }) {
   const [loading, setLoading] = React.useState(true);
   const [refreshKey, setRefreshKey] = React.useState(0);
 
-  // Composer
   const [text, setText] = React.useState("");
   const [type, setType] = React.useState<OrderCommentType>("note");
   const [isInternal, setIsInternal] = React.useState(true);
   const [attachment, setAttachment] = React.useState<string | null>(null);
   const [saving, setSaving] = React.useState(false);
 
-  // Inline editing
   const [editingId, setEditingId] = React.useState<string | null>(null);
   const [editText, setEditText] = React.useState("");
   const [savingEdit, setSavingEdit] = React.useState(false);
@@ -171,7 +169,7 @@ export function OrderComments({ orderId }: { orderId: number | string }) {
         </CardHeader>
 
         <CardContent className="space-y-4">
-          {/* Composer */}
+          {}
           <div className="space-y-2 rounded-xl border border-border p-3">
             <Textarea
               value={text}
@@ -235,7 +233,7 @@ export function OrderComments({ orderId }: { orderId: number | string }) {
             </p>
           </div>
 
-          {/* Timeline */}
+          {}
           {loading ? (
             <div className="space-y-3">
               {Array.from({ length: 3 }).map((_, i) => (

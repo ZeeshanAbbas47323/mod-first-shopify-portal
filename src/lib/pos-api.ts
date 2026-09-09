@@ -3,11 +3,6 @@ import type { DateRange } from "react-day-picker";
 import { api } from "@/lib/api";
 import type { PrintFormat, PrintType } from "@/lib/admin-api";
 
-/**
- * Point of Sale APIs — shifts, devices, Stripe Terminal readers, counter sales
- * and receipt printing. Response envelope matches the rest of the API:
- * { success, status, message, payload }.
- */
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 type Json = Record<string, any>;
@@ -53,7 +48,6 @@ function parseList<T>(data: Json, limit: number): PosListResult<T> {
   return { rows, total, totalPages };
 }
 
-// ─── Shifts ───────────────────────────────────────────────────────────────────
 
 export const SHIFT_STATUSES = ["open", "paused", "closed", "ended"] as const;
 export type ShiftStatus = (typeof SHIFT_STATUSES)[number];
@@ -93,7 +87,6 @@ export async function openShift(body: {
   return unwrap(data) as ShiftRow;
 }
 
-/** The cashier's own open or paused shift, or null when none is running. */
 export async function getCurrentShift(): Promise<ShiftRow | null> {
   try {
     const { data } = await api.get("pos-shifts/current");
@@ -101,7 +94,6 @@ export async function getCurrentShift(): Promise<ShiftRow | null> {
     const shift = (p?.shift ?? p) as ShiftRow;
     return shift && shift.id != null ? shift : null;
   } catch {
-    // 404 simply means no shift is open right now.
     return null;
   }
 }
@@ -124,7 +116,6 @@ export async function closeShift(
   return unwrap(data) as ShiftRow;
 }
 
-/** "paused" pauses the shift, "open" resumes it. */
 export async function setShiftStatus(
   id: number | string,
   status: "open" | "paused"
@@ -143,7 +134,6 @@ export async function printShiftReceipt(
   return data as Json;
 }
 
-/** Z-report through the print service — supports PDF as well as HTML. */
 export async function printShiftReport(
   id: number | string,
   body: { print_type?: PrintType; format?: PrintFormat; raw?: boolean } = {}
@@ -155,7 +145,6 @@ export async function printShiftReport(
   return data;
 }
 
-// ─── Devices ──────────────────────────────────────────────────────────────────
 
 export const DEVICE_TYPES = ["tablet", "desktop", "mobile", "kiosk"] as const;
 export const RECEIPT_TYPES = ["thermal_80mm", "thermal_58mm", "a4"] as const;
@@ -190,7 +179,6 @@ export async function getPosDevice(id: number | string): Promise<PosDeviceRow> {
   return unwrap(data) as PosDeviceRow;
 }
 
-/** Devices belonging to the signed-in user's branch — used by the register. */
 export async function getMyBranchDevices(): Promise<PosDeviceRow[]> {
   const { data } = await api.get("pos-device/my-branch");
   const p = unwrap(data);
@@ -210,7 +198,6 @@ export async function updatePosDevice(
   return msg(data, "Device updated.");
 }
 
-// ─── Stripe Terminal ──────────────────────────────────────────────────────────
 
 export interface TerminalLocationRow {
   id: number | string;
@@ -304,7 +291,6 @@ export interface CollectPaymentResult {
   [k: string]: unknown;
 }
 
-/** Push the charge to the reader's screen; returns the reference to poll. */
 export async function collectTerminalPayment(body: {
   order_code: string;
   reader_id: number | string;
@@ -338,7 +324,6 @@ export async function cancelReaderAction(readerId: number | string): Promise<str
   return msg(data, "Reader action cancelled.");
 }
 
-// ─── Counter sale ─────────────────────────────────────────────────────────────
 
 export const PRINT_METHODS = [
   "dtf", "dtg", "screen_print", "embroidery", "sublimation", "uv_dtf", "vinyl",
@@ -379,10 +364,6 @@ export interface PosOrderResult {
   [k: string]: unknown;
 }
 
-/**
- * Create a counter sale. Store and branch come from the authenticated admin,
- * and omitting the customer makes it a walk-in sale.
- */
 export async function createPosOrder(body: PosOrderInput): Promise<PosOrderResult> {
   const { data } = await api.post("orders/pos", body);
   const p = unwrap(data);

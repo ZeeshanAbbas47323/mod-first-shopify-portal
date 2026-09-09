@@ -24,7 +24,6 @@ import { cn } from "@/lib/utils";
 
 const PAGE_SIZE = 15;
 
-/** How often the badge re-checks while the tab is open. */
 const POLL_MS = 60_000;
 
 function timeAgo(iso?: string) {
@@ -44,7 +43,6 @@ export function NotificationsMenu() {
     try {
       setUnread(await getUnreadNotificationCount());
     } catch {
-      // A failing badge must not interrupt the person's work.
     }
   }, []);
 
@@ -54,7 +52,6 @@ export function NotificationsMenu() {
     return () => clearInterval(t);
   }, [refreshCount]);
 
-  // Load the list only when the menu is actually opened.
   React.useEffect(() => {
     if (!open) return;
     let cancelled = false;
@@ -77,7 +74,6 @@ export function NotificationsMenu() {
 
   const readOne = async (row: NotificationRow) => {
     if (row.is_read) return;
-    // Optimistic: the badge should drop the moment it's clicked.
     setRows((prev) =>
       prev.map((r) => (r.id === row.id ? { ...r, is_read: true } : r))
     );

@@ -39,7 +39,6 @@ const EMPTY_SUMMARY: UsersSummary = {
   locked: 0,
 };
 
-/** Filter controls rendered under each column header. */
 const COLUMN_FILTERS: Record<string, ColumnFilterDef> = {
   full_name: { type: "text", placeholder: "Name or email" },
   email_subscription: {
@@ -132,8 +131,6 @@ function buildColumns(
       const isLocked = !!row.getValue("is_locked");
       const busy = unlockingId === row.original.id;
 
-      // Unlocked accounts have nothing to do here — just a quiet open-lock
-      // indicator. A locked one is a real action: click to unlock.
       if (!isLocked) {
         return (
           <div className="flex justify-center text-muted-foreground/50" title="Not locked">
@@ -194,9 +191,6 @@ export default function CustomersPage() {
   const [summaryLoading, setSummaryLoading] = React.useState(true);
 
   const [dateRange, setDateRange] = React.useState<DateRange | undefined>();
-  // Customers only. Staff accounts live under Settings → Users.
-  // Dormant accounts are deactivated in bulk by the no-orders script, so the
-  // list opens on active customers only. Clearing the filter still shows all.
   const [statuses, setStatuses] = React.useState<string[]>(["active"]);
   const [subscriptions, setSubscriptions] = React.useState<string[]>([]);
   const [searchInput, setSearchInput] = React.useState("");
@@ -208,13 +202,9 @@ export default function CustomersPage() {
   const buildFilters = React.useCallback((): Record<string, unknown> => {
     const filters: Record<string, unknown> = { role: "customer" };
     if (statuses.length === 1) filters.is_active = statuses[0] === "active";
-    // Both selected (or neither) means no opinion — only a single pick narrows it.
     if (subscriptions.length === 1) filters.email_subscribed = subscriptions[0] === "subscribed";
-    // A bare string reaches Prisma as an exact match, so a search box has to
-    // spell out `contains` or it only ever finds a perfectly typed full name.
     if (search) filters.full_name = { contains: search };
 
-    // Column filters sit closer to the data than the top bar, so they win.
     const name = columnFilters.full_name?.[0];
     if (name) filters.full_name = { contains: name };
     if (columnFilters.email_subscription?.length === 1) {
@@ -285,7 +275,7 @@ export default function CustomersPage() {
 
   return (
     <div className="flex flex-col gap-4">
-      {/* Header */}
+      {}
       <div className="flex flex-wrap items-center justify-between gap-3">
         <h1 className="text-lg font-semibold">Customers</h1>
         <ExportMenu
@@ -298,10 +288,10 @@ export default function CustomersPage() {
         />
       </div>
 
-      {/* Summary stat strip */}
+      {}
       <SummaryStatStrip tiles={tiles} loading={summaryLoading} />
 
-      {/* Filter bar */}
+      {}
       <div className="flex flex-wrap items-center gap-2">
         <DateRangePicker value={dateRange} onChange={setDateRange} />
 
@@ -352,7 +342,7 @@ export default function CustomersPage() {
         </div>
       )}
 
-      {/* Table */}
+      {}
       <DataTable
         columns={columns}
         data={rows}

@@ -11,7 +11,6 @@ import { OtpInput } from "@/components/otp-input";
 import { apiErrorMessage, sendOtp, verifyOtp } from "@/lib/auth-api";
 import { useAuthStore } from "@/stores/auth-store";
 
-/** Seconds before "Resend code" becomes available again. */
 const RESEND_COOLDOWN = 30;
 
 function VerifyOtpForm() {
@@ -26,8 +25,6 @@ function VerifyOtpForm() {
   const [resending, setResending] = React.useState(false);
   const [cooldown, setCooldown] = React.useState(RESEND_COOLDOWN);
 
-  // Verification fires from the input's completion callback, so guard against
-  // a second run while the first request is still in flight.
   const verifying = React.useRef(false);
 
   React.useEffect(() => {
@@ -64,7 +61,6 @@ function VerifyOtpForm() {
         const message = apiErrorMessage(err, "Invalid or expired code.");
         setError(message);
         toast.error(message);
-        // Clear the boxes so the next attempt starts from an empty field.
         setOtp("");
       } finally {
         verifying.current = false;
@@ -105,7 +101,7 @@ function VerifyOtpForm() {
         invalid={!!error}
       />
 
-      {/* Reserved height so the layout doesn't jump as messages swap. */}
+      {}
       <div className="mt-4 min-h-5 text-center text-sm" aria-live="polite">
         {busy && (
           <span className="inline-flex items-center gap-2 text-muted-foreground">

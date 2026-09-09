@@ -57,7 +57,6 @@ const isImage = (row: DesignUploadRow) =>
 const designCustomerName = (row: DesignUploadRow) =>
   row.user?.full_name ?? row.user?.name ?? (row.user_id != null ? `User #${row.user_id}` : "—");
 
-/** Filter controls rendered under each column header. */
 const COLUMN_FILTERS: Record<string, ColumnFilterDef> = {
   order_id: { type: "text", placeholder: "Order ID" },
   print_method: { type: "select", options: PRINT_METHODS, placeholder: "Any" },
@@ -112,10 +111,6 @@ export default function DesignUploadsPage() {
     [dateRange, debounced, statuses, methods]
   );
 
-  /**
-   * The header filter row edits the same state as the filter bar above it,
-   * so a pick in one shows up in the other instead of silently competing.
-   */
   const columnFilterValues = React.useMemo(() => {
     const values: Record<string, string[]> = {};
     if (orderId) values.order_id = [orderId];
@@ -140,8 +135,6 @@ export default function DesignUploadsPage() {
       page: page + 1,
       limit: pageSize,
       dateRange: activeFilters.dateRange,
-      // order_id resolves through the OrderItemDesign join, so it's a
-      // top-level input rather than a column filter.
       order_id: activeFilters.order_id,
       filters: {
         status: activeFilters.status,
@@ -357,7 +350,6 @@ export default function DesignUploadsPage() {
   );
 }
 
-// ─── Review dialog ────────────────────────────────────────────────────────────
 
 function DesignDialog({
   design,

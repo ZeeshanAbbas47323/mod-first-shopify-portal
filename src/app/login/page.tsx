@@ -53,7 +53,6 @@ export default function LoginPage() {
         return;
       }
 
-      // No token in the response → backend has already emailed an OTP on login.
       toast.info(result.message || "Enter the code we emailed you.");
       router.push(`/login/verify-otp?email=${encodeURIComponent(values.email)}`);
     } catch (error) {

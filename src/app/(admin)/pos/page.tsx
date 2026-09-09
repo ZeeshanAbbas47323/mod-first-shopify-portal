@@ -49,36 +49,30 @@ interface CartLine {
 }
 
 export default function PosRegisterPage() {
-  // Shift
   const [shift, setShift] = React.useState<ShiftRow | null>(null);
   const [shiftLoading, setShiftLoading] = React.useState(true);
   const [shiftKey, setShiftKey] = React.useState(0);
 
-  // Catalogue
   const [search, setSearch] = React.useState("");
   const [debounced, setDebounced] = React.useState("");
   const [products, setProducts] = React.useState<ProductRow[]>([]);
   const [productsLoading, setProductsLoading] = React.useState(true);
 
-  // Cart
   const [lines, setLines] = React.useState<CartLine[]>([]);
   const [notes, setNotes] = React.useState("");
   const [coupon, setCoupon] = React.useState("");
 
-  // Customer
   const [customer, setCustomer] = React.useState<UserRow | null>(null);
   const [customerSearch, setCustomerSearch] = React.useState("");
   const [customerResults, setCustomerResults] = React.useState<UserRow[]>([]);
   const [customerOpen, setCustomerOpen] = React.useState(false);
 
-  // Fulfilment
   const [deliveryType, setDeliveryType] = React.useState<"store_pickup" | "home_delivery">(
     "store_pickup"
   );
   const [pickupLocations, setPickupLocations] = React.useState<PickupLocationRow[]>([]);
   const [pickupId, setPickupId] = React.useState("");
 
-  // Checkout
   const [placing, setPlacing] = React.useState(false);
   const [placedOrder, setPlacedOrder] = React.useState<{ code: string; total: number } | null>(
     null
@@ -127,7 +121,6 @@ export default function PosRegisterPage() {
       .catch(() => setPickupLocations([]));
   }, []);
 
-  // Customer lookup
   React.useEffect(() => {
     if (!customerSearch.trim()) {
       setCustomerResults([]);
@@ -145,7 +138,6 @@ export default function PosRegisterPage() {
     return () => clearTimeout(t);
   }, [customerSearch]);
 
-  // ── Cart helpers ──────────────────────────────────────────────────────────
   const addLine = (product: ProductRow) => {
     setLines((prev) => {
       const i = prev.findIndex((l) => String(l.product.id) === String(product.id));
@@ -259,7 +251,7 @@ export default function PosRegisterPage() {
       )}
 
       <div className="grid gap-4 lg:grid-cols-[minmax(0,1fr)_380px]">
-        {/* ── Catalogue ─────────────────────────────────────────────────── */}
+        {}
         <Card className="min-w-0 shadow-none">
           <CardHeader className="pb-3">
             <div className="relative">
@@ -332,7 +324,7 @@ export default function PosRegisterPage() {
           </CardContent>
         </Card>
 
-        {/* ── Cart ──────────────────────────────────────────────────────── */}
+        {}
         <Card className="flex h-fit flex-col shadow-none lg:sticky lg:top-20">
           <CardHeader className="flex-row items-center gap-2 pb-3">
             <ShoppingCart className="size-4 text-muted-foreground" />
@@ -354,7 +346,7 @@ export default function PosRegisterPage() {
           </CardHeader>
 
           <CardContent className="space-y-4">
-            {/* Lines */}
+            {}
             {lines.length === 0 ? (
               <p className="py-8 text-center text-sm text-muted-foreground">
                 Tap a product to add it.
@@ -411,7 +403,7 @@ export default function PosRegisterPage() {
 
             <Separator />
 
-            {/* Customer */}
+            {}
             <div className="space-y-1.5">
               <Label>Customer</Label>
               {customer ? (
@@ -468,7 +460,7 @@ export default function PosRegisterPage() {
               )}
             </div>
 
-            {/* Fulfilment */}
+            {}
             <div className="space-y-1.5">
               <Label>Fulfilment</Label>
               <Select
@@ -522,7 +514,7 @@ export default function PosRegisterPage() {
               </p>
             )}
 
-            {/* Coupon + notes */}
+            {}
             <div className="space-y-1.5">
               <Label htmlFor="pos-coupon">Coupon code</Label>
               <Input
@@ -547,7 +539,7 @@ export default function PosRegisterPage() {
 
             <Separator />
 
-            {/* Totals */}
+            {}
             <div className="flex items-center justify-between text-sm">
               <span className="text-muted-foreground">Subtotal</span>
               <span className="font-semibold tabular-nums">{money(subtotal)}</span>

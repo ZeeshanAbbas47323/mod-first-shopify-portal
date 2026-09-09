@@ -69,7 +69,6 @@ export default function CustomerDetailPage() {
       })
       .finally(() => !cancelled && setLoading(false));
 
-    // Each related list is optional — one failing shouldn't blank the page.
     listOrders({ page: 1, limit: 10, filters: { user_id: Number(id) } })
       .then((res) => !cancelled && setOrders(res.rows))
       .catch(() => {});
@@ -117,7 +116,7 @@ export default function CustomerDetailPage() {
 
   return (
     <div className="flex flex-col gap-4">
-      {/* Header */}
+      {}
       <div className="flex flex-wrap items-center gap-3">
         <Button
           variant="ghost"
@@ -145,7 +144,7 @@ export default function CustomerDetailPage() {
         </div>
       </div>
 
-      {/* Summary */}
+      {}
       <SummaryStatStrip
         tiles={[
           { label: "Total orders", value: (customer.stats?.total_orders ?? 0).toLocaleString("en-US") },
@@ -156,9 +155,9 @@ export default function CustomerDetailPage() {
       />
 
       <div className="grid gap-4 lg:grid-cols-[minmax(0,1fr)_340px]">
-        {/* ── Left ── */}
+        {}
         <div className="flex min-w-0 flex-col gap-4">
-          {/* Orders */}
+          {}
           <Card>
             <CardHeader className="flex-row items-center gap-2 pb-3">
               <ShoppingCart className="size-4 text-muted-foreground" />
@@ -199,7 +198,7 @@ export default function CustomerDetailPage() {
             </CardContent>
           </Card>
 
-          {/* Cart */}
+          {}
           <Card>
             <CardHeader className="flex-row items-center gap-2 pb-3">
               <ShoppingCart className="size-4 text-muted-foreground" />
@@ -247,7 +246,7 @@ export default function CustomerDetailPage() {
             </CardContent>
           </Card>
 
-          {/* Wishlist */}
+          {}
           <Card>
             <CardHeader className="flex-row items-center gap-2 pb-3">
               <Heart className="size-4 text-muted-foreground" />
@@ -295,7 +294,7 @@ export default function CustomerDetailPage() {
           </Card>
         </div>
 
-        {/* ── Right ── */}
+        {}
         <div className="flex flex-col gap-4">
           <Card>
             <CardHeader className="pb-3">

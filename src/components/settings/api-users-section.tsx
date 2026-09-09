@@ -57,7 +57,6 @@ const fmtDate = (d?: string | null) => {
   return isNaN(date.getTime()) ? "—" : format(date, "MMM d, yyyy");
 };
 
-/** Filter controls rendered under each column header. */
 const COLUMN_FILTERS: Record<string, ColumnFilterDef> = {
   name: { type: "text", placeholder: "Search API users" },
   status: { type: "select", options: [{ value: "active", label: "Active" }, { value: "inactive", label: "Inactive" }], placeholder: "Any" },
@@ -114,10 +113,6 @@ export function ApiUsersSection() {
     [debounced, status]
   );
 
-  /**
-   * The header filter row edits the same state as the toolbar above it, so
-   * a pick in one shows up in the other instead of silently competing.
-   */
   const columnFilterValues = React.useMemo(() => {
     const values: Record<string, string[]> = {};
     if (search) values.name = [search];
@@ -390,7 +385,6 @@ export function ApiUsersSection() {
   );
 }
 
-// ─── Create / edit ────────────────────────────────────────────────────────────
 
 function ApiUserDialog({
   editing,
@@ -571,7 +565,6 @@ function ApiUserDialog({
   );
 }
 
-// ─── One-time credentials ─────────────────────────────────────────────────────
 
 function CopyRow({ label, value }: { label: string; value?: string }) {
   const [copied, setCopied] = React.useState(false);

@@ -83,8 +83,6 @@ export default function OrderDetailPage() {
   const [statusOpen, setStatusOpen] = React.useState(false);
   const [printOpen, setPrintOpen] = React.useState(false);
   const [printing, setPrinting] = React.useState(false);
-  // Artwork is referenced by id on the order lines, so the files are fetched
-  // once the order itself has loaded.
   const [designFiles, setDesignFiles] = React.useState<Map<string, DesignUploadRow>>(
     new Map()
   );
@@ -118,8 +116,6 @@ export default function OrderDetailPage() {
     };
   }, [order]);
 
-  // The print service keys off order_code; order_number is a different value,
-  // so only send it when the order actually carries a code.
   const printTarget = () => ({
     order_code: order?.order_code,
     order_id: order?.id,
@@ -127,7 +123,6 @@ export default function OrderDetailPage() {
 
   const handlePrintRaw = async (printType: PrintType, fmt: PrintFormat) => {
     if (!order) return;
-    // Open the tab inside the click so the browser doesn't treat it as a popup.
     const target = openPrintWindow();
     setPrinting(true);
     setPrintOpen(false);
@@ -172,7 +167,6 @@ export default function OrderDetailPage() {
           toast.warning("Pop-ups are blocked — the file was downloaded instead.");
         }
       } else {
-        // JSON response — either inline HTML or a link to a hosted file.
         const html = pickHtml(result);
         const fileUrl = pickFileUrl(result);
         if (html) {
@@ -264,7 +258,6 @@ export default function OrderDetailPage() {
   const activityLogs = order.activityLogs ?? [];
   const paymentLogs = order.paymentLogs ?? [];
   const shipments = order.shipments ?? [];
-  // Embedded designs plus the ones resolved from their ids.
   const allDesigns: OrderDesignUpload[] = [
     ...orderDesigns(order),
     ...[...designFiles.values()],
@@ -272,7 +265,7 @@ export default function OrderDetailPage() {
 
   return (
     <div className="flex flex-col gap-4">
-      {/* ── Header ── */}
+      {}
       <div className="flex flex-wrap items-center gap-3">
         <Button variant="ghost" size="icon" onClick={() => router.push("/orders")} className="shrink-0">
           <ArrowLeft className="size-5" />
@@ -324,11 +317,11 @@ export default function OrderDetailPage() {
         </div>
       </div>
 
-      {/* ── Two-column layout ── */}
+      {}
       <div className="grid gap-4 lg:grid-cols-[minmax(0,1fr)_340px]">
-        {/* ── LEFT COLUMN ── */}
+        {}
         <div className="flex min-w-0 flex-col gap-4">
-          {/* Items card */}
+          {}
           <Card>
             <CardHeader className="flex-row items-center gap-2 pb-3">
               <Package className="size-4 text-muted-foreground" />
@@ -401,7 +394,7 @@ export default function OrderDetailPage() {
             </CardContent>
           </Card>
 
-          {/* Artwork */}
+          {}
           {allDesigns.length > 0 && (
             <Card>
               <CardHeader className="flex-row items-center gap-2 pb-3">
@@ -421,7 +414,7 @@ export default function OrderDetailPage() {
             </Card>
           )}
 
-          {/* Payment summary card */}
+          {}
           <Card>
             <CardHeader className="flex-row items-center gap-2 pb-3">
               <CreditCard className="size-4 text-muted-foreground" />
@@ -469,7 +462,7 @@ export default function OrderDetailPage() {
             </CardContent>
           </Card>
 
-          {/* Payment logs */}
+          {}
           {paymentLogs.length > 0 && (
             <Card>
               <CardHeader className="flex-row items-center gap-2 pb-3">
@@ -497,10 +490,10 @@ export default function OrderDetailPage() {
             </Card>
           )}
 
-          {/* Payments & refunds */}
+          {}
           {id && <RefundsSection orderId={id} />}
 
-          {/* Shipments */}
+          {}
           {shipments.length > 0 && (
             <Card>
               <CardHeader className="flex-row items-center gap-2 pb-3">
@@ -525,7 +518,7 @@ export default function OrderDetailPage() {
             </Card>
           )}
 
-          {/* Activity timeline */}
+          {}
           {activityLogs.length > 0 && (
             <Card>
               <CardHeader className="flex-row items-center gap-2 pb-3">
@@ -553,7 +546,7 @@ export default function OrderDetailPage() {
               </CardContent>
             </Card>
           )}
-          {/* Comments */}
+          {}
           {id && <OrderComments orderId={id} />}
 
           <AssignCourierDialog
@@ -570,9 +563,9 @@ export default function OrderDetailPage() {
           />
         </div>
 
-        {/* ── RIGHT COLUMN (sidebar) ── */}
+        {}
         <div className="flex flex-col gap-4">
-          {/* Status actions */}
+          {}
           <Card>
             <CardHeader className="pb-3">
               <CardTitle className="text-base">Update Status</CardTitle>
@@ -610,7 +603,7 @@ export default function OrderDetailPage() {
             </CardContent>
           </Card>
 
-          {/* Fulfilment actions */}
+          {}
           <Card>
             <CardHeader className="pb-3">
               <CardTitle className="text-base">Actions</CardTitle>
@@ -636,7 +629,7 @@ export default function OrderDetailPage() {
             </CardContent>
           </Card>
 
-          {/* Order info card */}
+          {}
           <Card>
             <CardHeader className="flex-row items-center gap-2 pb-3">
               <FileText className="size-4 text-muted-foreground" />
@@ -664,7 +657,7 @@ export default function OrderDetailPage() {
             </CardContent>
           </Card>
 
-          {/* Notes card */}
+          {}
           <Card>
             <CardHeader className="flex-row items-center gap-2 pb-3">
               <FileText className="size-4 text-muted-foreground" />
@@ -677,14 +670,14 @@ export default function OrderDetailPage() {
             </CardContent>
           </Card>
 
-          {/* Customer card */}
+          {}
           <Card>
             <CardHeader className="flex-row items-center gap-2 pb-3">
               <User className="size-4 text-muted-foreground" />
               <CardTitle className="text-base">Customer</CardTitle>
             </CardHeader>
             <CardContent className="space-y-2">
-              {/* Linked through to the customer record, the way Shopify does. */}
+              {}
               {order.user?.id ? (
                 <Link
                   href={`/customers/${order.user.id}`}
@@ -734,7 +727,7 @@ export default function OrderDetailPage() {
             </Card>
           )}
 
-          {/* Shipping address card */}
+          {}
           {order.shippingAddr && (
             <Card>
               <CardHeader className="flex-row items-center gap-2 pb-3">
@@ -764,7 +757,7 @@ export default function OrderDetailPage() {
             </Card>
           )}
 
-          {/* Billing address card */}
+          {}
           {order.billingAddr && (
             <Card>
               <CardHeader className="flex-row items-center gap-2 pb-3">
@@ -786,9 +779,6 @@ export default function OrderDetailPage() {
     </div>
   );
 }
-
-
-// ─── Assign courier ───────────────────────────────────────────────────────────
 
 function AssignCourierDialog({
   orderId,
@@ -927,7 +917,6 @@ function AssignCourierDialog({
   );
 }
 
-// ─── Cancel order ─────────────────────────────────────────────────────────────
 
 function CancelOrderDialog({
   order,
@@ -1016,13 +1005,6 @@ function CancelOrderDialog({
   );
 }
 
-
-// ─── Artwork attached to a line ───────────────────────────────────────────────
-
-/**
- * Design files can't just be plain links — the same file is usually wanted
- * either saved to disk or opened for a quick look, so each one offers both.
- */
 function ItemDesigns({ designs }: { designs: OrderDesignUpload[] }) {
   if (designs.length === 0) return null;
 
@@ -1071,10 +1053,6 @@ function ItemDesigns({ designs }: { designs: OrderDesignUpload[] }) {
   );
 }
 
-/**
- * Fetch the file first so the browser saves it instead of navigating — a plain
- * `download` attribute is ignored for cross-origin URLs.
- */
 async function downloadDesign(url: string, name: string) {
   if (!url) return;
   try {
@@ -1090,19 +1068,14 @@ async function downloadDesign(url: string, name: string) {
     a.remove();
     setTimeout(() => URL.revokeObjectURL(objectUrl), 60_000);
   } catch {
-    // CORS or a dead link — fall back to opening it so the file isn't lost.
     toast.error("Couldn't download directly — opening the file instead.");
     window.open(url, "_blank", "noopener");
   }
 }
 
-
-// ─── Artwork card ─────────────────────────────────────────────────────────────
-
 const isPreviewable = (url: string) =>
   /\.(png|jpe?g|webp|gif|svg|avif)(\?|$)/i.test(url);
 
-/** Thumbnail with the same open/download choice as the inline chips. */
 function DesignCard({ design, index }: { design: OrderDesignUpload; index: number }) {
   const url = fileUrl(design.file_url ?? design.edit_url ?? "");
   const name = design.file_name ?? `Design ${index + 1}`;

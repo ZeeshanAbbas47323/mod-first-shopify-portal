@@ -22,11 +22,6 @@ const FORMATS: { format: ExportFormat; label: string; Icon: typeof FileText }[] 
   { format: "csv", label: "CSV (.csv)", Icon: FileText },
 ];
 
-/**
- * Format picker for tables that build their own rows — an export that depends
- * on the visible tab, say. The caller keeps its own export function and just
- * learns which format was picked.
- */
 export function ExportFormatMenu({
   onSelect,
   busy = false,
@@ -72,28 +67,18 @@ export function ExportFormatMenu({
 }
 
 interface ExportMenuProps<T> {
-  /** Base file name; the current date is appended automatically. */
   filename: string;
   columns: ExportColumn<T>[];
-  /** Rows the user has ticked. Omit on tables without selection. */
   selected?: T[];
-  /** Fetches every row matching the active filters, ignoring pagination. */
   fetchAll: () => Promise<T[]>;
-  /** Total matching rows, shown alongside the format choices. */
   total?: number;
-  /** Singular noun for messages, e.g. "customer" → "3 customers exported". */
   noun?: string;
-  /** Plural form, for the nouns an "s" doesn't fit ("category" → "categories"). */
   nounPlural?: string;
   variant?: React.ComponentProps<typeof Button>["variant"];
   size?: React.ComponentProps<typeof Button>["size"];
   className?: string;
 }
 
-/**
- * Exports every row matching the current filters, not just the loaded page —
- * so what the table is filtered to is what lands in the file.
- */
 export function ExportMenu<T>({
   filename,
   columns,

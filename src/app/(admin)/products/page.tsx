@@ -26,17 +26,12 @@ const DEFAULT_PAGE_SIZE = 20;
 const EXPORT_CAP = 5000;
 const PRODUCT_STATUSES = ["active", "draft", "archived"] as const;
 
-/**
- * Column id → the sort key `products/list` understands. The endpoint takes an
- * enum that already encodes direction, so each column maps to a pair.
- */
 const PRODUCT_SORT_MAP = {
   title: { asc: "a_z", desc: "z_a" },
   price: { asc: "price_low_high", desc: "price_high_low" },
   created_at: { asc: "oldest", desc: "newest" },
 } as const;
 
-/** Quantity at or below this is flagged amber in the inventory column. */
 const LOW_STOCK = 5;
 
 const statusTone = (s?: string) =>
@@ -62,11 +57,6 @@ const vendorName = (row: ProductRow) => {
   return String(v);
 };
 
-/**
- * Filter controls rendered under each column header. Category and vendor are
- * Prisma relations rather than scalar columns, so they can't be filtered
- * through the generic `filters` object and are left out for now.
- */
 const COLUMN_FILTERS: Record<string, ColumnFilterDef> = {
   title: { type: "text", placeholder: "Search products" },
   status: { type: "select", options: PRODUCT_STATUSES, placeholder: "Any" },
@@ -158,7 +148,6 @@ const columns: ColumnDef<ProductRow>[] = [
       const qty = r.quantity;
       const vc = r.variants_count;
 
-      // The API omits stock on some products; that isn't the same as zero.
       if (qty == null) {
         return <span className="text-sm text-muted-foreground">—</span>;
       }
@@ -193,8 +182,6 @@ const columns: ColumnDef<ProductRow>[] = [
     cell: ({ row }) => {
       const v = row.original.vendor;
       if (!v) return "—";
-      // The API's column is vendor_name; `name` is kept as a fallback for the
-      // other shapes this row type is reused with.
       if (typeof v === "object" && v !== null) {
         const o = v as { vendor_name?: string; name?: string };
         return o.vendor_name ?? o.name ?? "—";
@@ -230,9 +217,6 @@ export default function ProductsPage() {
       id: "actions",
       header: "",
       cell: ({ row }) => {
-        // Products with variants track stock per variant; the row-level shortcut
-        // would target a phantom product-level bucket, so hide it. Users can
-        // adjust per-variant stock from the product's edit page.
         const hasVariants = (row.original.variants_count ?? 0) > 0;
         if (hasVariants) return null;
         return (
@@ -286,10 +270,6 @@ export default function ProductsPage() {
     [dateRange, debounced, statuses]
   );
 
-  /**
-   * The header filter row edits the same state as the filter bar above it, so
-   * a pick in one shows up in the other instead of silently competing.
-   */
   const columnFilterValues = React.useMemo(() => {
     const values: Record<string, string[]> = {};
     if (search) values.title = [search];

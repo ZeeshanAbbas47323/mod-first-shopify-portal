@@ -265,7 +265,7 @@ export default function SettingsPage() {
         </button>
 
         <div className="mx-auto flex max-w-6xl items-start gap-8 px-4 py-8 md:px-8">
-          {/* Settings navigation */}
+          {}
           <aside className="sticky top-8 hidden w-72 shrink-0 flex-col rounded-xl bg-card ring-1 ring-black/8 md:flex">
             <div className="px-4 pt-4 pb-2">
               <Image
@@ -327,9 +327,9 @@ export default function SettingsPage() {
             </div>
           </aside>
 
-          {/* Settings content */}
+          {}
           <div className="min-w-0 flex-1 pb-16">
-            {/* Mobile section switcher */}
+            {}
             <div className="mb-4 flex gap-2 overflow-x-auto md:hidden">
               {(Object.keys(sectionMeta) as SectionKey[]).map((key) => (
                 <button

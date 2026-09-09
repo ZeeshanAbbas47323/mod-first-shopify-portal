@@ -9,10 +9,6 @@ import { apiErrorMessage } from "@/lib/auth-api";
 import { uploadImage, uploadVideo } from "@/lib/upload-api";
 import { cn, imgUrl } from "@/lib/utils";
 
-/**
- * Theme-matched single file uploader backed by the Upload APIs.
- * Uploads on select and hands the hosted URL to the form via onChange.
- */
 export function MediaUpload({
   value,
   onChange,

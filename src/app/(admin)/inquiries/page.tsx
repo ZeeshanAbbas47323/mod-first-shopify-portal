@@ -43,7 +43,6 @@ const EXPORT_CAP = 5000;
 const HELP_TOPICS = Object.keys(HELP_TOPIC_LABELS);
 const EMPTY_SUMMARY: ContactSubmissionsSummary = { total: 0, new: 0, in_progress: 0, resolved: 0 };
 
-/** Filter controls rendered under each column header. */
 const COLUMN_FILTERS: Record<string, ColumnFilterDef> = {
   help_topic: { type: "select", options: HELP_TOPICS, placeholder: "Any" },
   status: { type: "select", options: INQUIRY_STATUSES, placeholder: "Any" },
@@ -113,10 +112,6 @@ export default function ContactSubmissionsPage() {
     [dateRange, debounced, statuses, topics]
   );
 
-  /**
-   * The header filter row edits the same state as the filter bar above it,
-   * so a pick in one shows up in the other instead of silently competing.
-   */
   const columnFilterValues = React.useMemo(() => {
     const values: Record<string, string[]> = {};
     if (topics.length) values.help_topic = topics;
@@ -338,7 +333,6 @@ export default function ContactSubmissionsPage() {
   );
 }
 
-// ─── Detail ───────────────────────────────────────────────────────────────────
 
 function SubmissionDialog({
   submission,

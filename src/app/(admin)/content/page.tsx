@@ -56,7 +56,6 @@ const DEFAULT_PAGE_SIZE = 10;
 const EXPORT_CAP = 5000;
 const EMPTY_SUMMARY: BlogsSummary = { total_posts: 0, published: 0, draft: 0, archived: 0 };
 
-/** Filter controls rendered under each column header. */
 const COLUMN_FILTERS: Record<string, ColumnFilterDef> = {
   title: { type: "text", placeholder: "Search titles" },
   category: { type: "text", placeholder: "Category" },
@@ -207,10 +206,6 @@ export default function ContentPage() {
     [dateRange, debounced, statuses]
   );
 
-  /**
-   * The header filter row edits the same state as the filter bar above it,
-   * so a pick in one shows up in the other instead of silently competing.
-   */
   const columnFilterValues = React.useMemo(() => {
     const values: Record<string, string[]> = {};
     if (search) values.title = [search];
@@ -282,7 +277,7 @@ export default function ContentPage() {
 
   return (
     <div className="flex flex-col gap-4">
-      {/* Page header + tab switcher */}
+      {}
       <div className="flex flex-wrap items-center justify-between gap-3">
         <h1 className="text-lg font-semibold">Content</h1>
         <Tabs value={activeTab} onValueChange={(v) => setActiveTab(v as "blogs" | "footer" | "popups")}>
@@ -294,13 +289,13 @@ export default function ContentPage() {
         </Tabs>
       </div>
 
-      {/* Footer tab */}
+      {}
       {activeTab === "footer" && <FooterSectionsTab />}
 
-      {/* Popups tab */}
+      {}
       {activeTab === "popups" && <PopupsTab />}
 
-      {/* Blogs tab */}
+      {}
       {activeTab === "blogs" && <>
       <div className="flex flex-wrap items-center justify-between gap-3">
         <div />
@@ -479,7 +474,6 @@ function BlogDialog({
     }
   }, [open, editing, reset]);
 
-  // Auto-generate the slug from the title while creating (until slug is edited manually)
   const title = watch("title");
   React.useEffect(() => {
     if (!editing && !getFieldState("slug").isDirty) {

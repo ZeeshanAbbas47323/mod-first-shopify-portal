@@ -1,7 +1,3 @@
-/**
- * Shared table-export helpers. Every data-table page's Export button routes
- * through here so CSV and Excel stay column-for-column identical.
- */
 
 import type { Cell, SheetData } from "write-excel-file/browser";
 
@@ -13,7 +9,6 @@ export interface ExportColumn<T> {
 
 export type ExportFormat = "csv" | "xlsx";
 
-/** One CSV field, quoted only when it actually needs it. */
 function csvCell(v: unknown): string {
   const s = v === null || v === undefined ? "" : String(v);
   return /[",\n]/.test(s) ? `"${s.replace(/"/g, '""')}"` : s;
@@ -44,18 +39,12 @@ export function exportRowsToCsv<T>(
     columns.map((c) => csvCell(c.value(row))).join(",")
   );
   const csv = [header, ...lines].join("\r\n");
-  // Leading BOM so Excel reads the file as UTF-8 rather than the local codepage.
   triggerDownload(
     new Blob(["﻿" + csv], { type: "text/csv;charset=utf-8;" }),
     withExtension(filename, "csv")
   );
 }
 
-/**
- * Excel cells are typed, so a value that is really a number or a date has to
- * be handed over as one — otherwise every column lands as text and sorting or
- * summing inside Excel silently does the wrong thing.
- */
 function excelCell(v: unknown): Cell {
   if (v === null || v === undefined || v === "") return { value: undefined };
   if (typeof v === "number") {
@@ -75,7 +64,6 @@ export async function exportRowsToExcel<T>(
   columns: ExportColumn<T>[],
   rows: T[]
 ): Promise<void> {
-  // Loaded on demand — the writer is only needed the moment someone exports.
   const { default: writeXlsxFile } = await import("write-excel-file/browser");
 
   const header: Cell[] = columns.map((c) => ({
@@ -94,7 +82,6 @@ export async function exportRowsToExcel<T>(
   triggerDownload(blob, withExtension(filename, "xlsx"));
 }
 
-/** Single entry point for the Export menu — picks the writer by format. */
 export async function exportRows<T>(
   format: ExportFormat,
   filename: string,

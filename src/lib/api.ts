@@ -11,14 +11,12 @@ export const api = axios.create({
   headers: { "Content-Type": "application/json" },
 });
 
-// ── Request: attach in-memory access token ────────────────────────────────
 api.interceptors.request.use((config) => {
   const token = useAuthStore.getState().token;
   if (token) config.headers.Authorization = `Bearer ${token}`;
   return config;
 });
 
-// ── Refresh logic ─────────────────────────────────────────────────────────
 
 const AUTH_PATHS = [
   "auth/login", "auth/send-otp", "auth/verify-otp",
@@ -27,16 +25,6 @@ const AUTH_PATHS = [
 
 let refreshPromise: Promise<string | null> | null = null;
 
-/**
- * Exchange the stored refresh token for a new access token.
- * Updates the in-memory access token in the store.
- * If the server rotates the refresh token, persists the new one.
- * Returns the new access token, or null if the refresh failed.
- */
-/**
- * Reads `fullName` / `email` out of an access token and updates the stored user
- * when they differ. Decode only — the signature is the server's to verify.
- */
 function syncUserFromToken(accessToken: string): void {
   try {
     const [, body] = accessToken.split(".");
@@ -62,7 +50,6 @@ function syncUserFromToken(accessToken: string): void {
       getStoredRefreshToken()
     );
   } catch {
-    // A token we cannot decode just leaves the cached user as it is.
   }
 }
 
@@ -77,7 +64,6 @@ export async function silentRefresh(): Promise<string | null> {
       { headers: { "Content-Type": "application/json" }, timeout: 10000 }
     );
 
-    // Tokens may sit directly on the payload or inside a `tokens` container.
     const payload = data?.payload ?? data?.data ?? data;
     const tokens = payload?.tokens ?? payload?.token_data ?? payload;
     const newAccessToken: string | null =
@@ -87,15 +73,10 @@ export async function silentRefresh(): Promise<string | null> {
 
     if (!newAccessToken) return null;
 
-    // Update in-memory access token only
     useAuthStore.getState().setToken(newAccessToken);
 
-    // The cached user is persisted, so a session that signed in before
-    // `full_name` was read correctly would keep showing the email prefix until
-    // the next sign-out. The access token carries the name, so correct it here.
     syncUserFromToken(newAccessToken);
 
-    // Rotate refresh token if the server issued a new one
     if (newRefreshToken) setStoredRefreshToken(newRefreshToken);
 
     return newAccessToken;
@@ -104,7 +85,6 @@ export async function silentRefresh(): Promise<string | null> {
   }
 }
 
-// ── Response: auto-retry on 401 ───────────────────────────────────────────
 
 interface RetryableConfig extends InternalAxiosRequestConfig {
   _retry?: boolean;
@@ -120,7 +100,6 @@ api.interceptors.response.use(
     if (error.response?.status === 401 && !isAuthRoute && config && !config._retry) {
       config._retry = true;
 
-      // Deduplicate: if a refresh is already in flight, wait for it
       if (!refreshPromise) {
         refreshPromise = silentRefresh().finally(() => {
           refreshPromise = null;
@@ -134,13 +113,11 @@ api.interceptors.response.use(
         return api(config);
       }
 
-      // Refresh failed — clear session and send to login
       useAuthStore.getState().logout();
       if (typeof window !== "undefined") window.location.href = "/login";
       return Promise.reject(error);
     }
 
-    // 401 on an auth route or a retried request that still fails — just reject
     if (error.response?.status === 401 && (isAuthRoute || config?._retry)) {
       if (config?._retry) {
         useAuthStore.getState().logout();

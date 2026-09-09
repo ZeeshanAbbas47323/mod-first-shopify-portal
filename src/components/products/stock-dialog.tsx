@@ -90,7 +90,6 @@ export function StockDialog({
     }
   }, [open, reset]);
 
-  // Re-reset when mode changes so the mode-specific schema applies to a fresh form
   React.useEffect(() => {
     reset({ quantity: undefined as unknown as number, reason: undefined, notes: "" });
   }, [mode, reset]);
@@ -102,7 +101,6 @@ export function StockDialog({
     getInventoryStock(productId, variantId ?? undefined)
       .then((raw) => {
         if (cancelled) return;
-        // Response envelope may be flat, nested under `stock`, or an array `stocks[]`
         const r = raw as Record<string, unknown> | null;
         let flat: InventoryStock | null = null;
         if (r && typeof r === "object") {
@@ -176,7 +174,7 @@ export function StockDialog({
           </DialogDescription>
         </DialogHeader>
 
-        {/* Current stock */}
+        {}
         <div className="rounded-lg border border-border bg-muted/30 p-3">
           <p className="text-xs text-muted-foreground">Current stock</p>
           {stockLoading ? (
@@ -188,7 +186,7 @@ export function StockDialog({
           )}
         </div>
 
-        {/* Mode tabs */}
+        {}
         <Tabs value={mode} onValueChange={(v) => setMode(v as Mode)}>
           <TabsList className="w-full">
             <TabsTrigger value="increase" className="flex-1">
@@ -252,7 +250,7 @@ export function StockDialog({
           </DialogFooter>
         </form>
 
-        {/* Recent activity */}
+        {}
         <div className="space-y-2 border-t border-border pt-3">
           <div className="flex items-center justify-between">
             <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground">

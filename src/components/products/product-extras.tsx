@@ -87,7 +87,6 @@ export function ProductExtras({ productId }: { productId: number | string }) {
   );
 }
 
-// ─── Gallery ──────────────────────────────────────────────────────────────────
 
 function GallerySection({ productId }: { productId: number | string }) {
   const [rows, setRows] = React.useState<ProductImageDetailRow[]>([]);
@@ -144,7 +143,6 @@ function GallerySection({ productId }: { productId: number | string }) {
 
   const makePrimary = async (row: ProductImageDetailRow) => {
     try {
-      // Only one image can be primary, so clear the current one first.
       const current = rows.find((r) => r.is_primary && r.id !== row.id);
       if (current) await updateProductImage(current.id, { is_primary: false });
       toast.success(await updateProductImage(row.id, { is_primary: true }));
@@ -288,7 +286,6 @@ function GallerySection({ productId }: { productId: number | string }) {
   );
 }
 
-// ─── Description blocks ───────────────────────────────────────────────────────
 
 function DescriptionsSection({ productId }: { productId: number | string }) {
   const [rows, setRows] = React.useState<ProductDescriptionRow[]>([]);
@@ -535,7 +532,6 @@ function DescriptionDialog({
   );
 }
 
-// ─── FAQs ─────────────────────────────────────────────────────────────────────
 
 function FaqsSection({ productId }: { productId: number | string }) {
   const [rows, setRows] = React.useState<ProductFaqDetailRow[]>([]);

@@ -2,12 +2,6 @@ import { isAxiosError } from "axios";
 import { api } from "@/lib/api";
 import type { AuthUser } from "@/stores/auth-store";
 
-/**
- * Auth endpoints from "ModFirst APIS" Postman collection.
- * The exact response envelope isn't documented, so parsing is tolerant:
- * tokens/users are looked up under the common shapes
- * ({ token }, { data: { accessToken } }, etc.).
- */
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 type Json = Record<string, any>;
@@ -21,11 +15,9 @@ export interface AuthResult {
 }
 
 function unwrap(payload: Json): Json {
-  // ModFirst API envelope: { success, status, message, payload: {...} }
   return (payload?.payload ?? payload?.data ?? payload?.result ?? payload) as Json;
 }
 
-/** Tokens may sit directly on the payload or inside a `tokens` container. */
 function tokenSource(payload: Json): Json {
   const d = unwrap(payload);
   return (d?.tokens ?? d?.token_data ?? d) as Json;
@@ -53,9 +45,6 @@ function pickUser(payload: Json, fallbackEmail: string): AuthUser | null {
   const u = d?.user ?? d?.profile ?? null;
   if (!u && !fallbackEmail) return null;
   const email: string = u?.email ?? fallbackEmail;
-  // The API returns `full_name`; without it every candidate below was empty and
-  // the UI fell through to the email prefix. `join("")` also returns "" rather
-  // than null, so ?? never moved past it — hence the explicit trims.
   const candidates = [
     u?.full_name,
     u?.fullName,
@@ -76,7 +65,6 @@ function toResult(payload: Json, email: string): AuthResult {
   };
 }
 
-/** Human-readable message out of an axios error. */
 export function apiErrorMessage(error: unknown, fallback: string): string {
   if (isAxiosError(error)) {
     const data = error.response?.data as Json | undefined;
@@ -135,7 +123,6 @@ export async function changePassword(values: {
   return data?.message ?? "Password changed successfully.";
 }
 
-/** The signed-in admin's own profile. */
 export async function getProfile(): Promise<Json> {
   const { data } = await api.get("auth/profile");
   return (data?.payload ?? data?.data ?? data) as Json;
@@ -150,11 +137,9 @@ export async function updateProfile(body: {
   return data?.message ?? "Profile updated.";
 }
 
-/** Tell the server to invalidate this session before clearing it locally. */
 export async function logoutServer(): Promise<void> {
   try {
     await api.post("auth/logout");
   } catch {
-    // Signing out locally must succeed even if the call fails.
   }
 }

@@ -82,7 +82,6 @@ const EMPTY_SUMMARY: DraftOrdersSummary = {
   completed: { current: 0, previous: 0, change_percent: null },
 };
 
-/** Filter controls rendered under each column header. */
 const COLUMN_FILTERS: Record<string, ColumnFilterDef> = {
   draft_number: { type: "text", placeholder: "Search drafts" },
   status: { type: "select", options: DRAFT_STATUSES, placeholder: "Any" },
@@ -117,8 +116,6 @@ export default function DraftOrdersPage() {
   const [debounced, setDebounced] = React.useState("");
   const [statuses, setStatuses] = React.useState<string[]>([]);
   const [channels, setChannels] = React.useState<string[]>([]);
-  // Unset by default — drafts can sit open far longer than an order, so
-  // scoping to "last 30 days" the way Orders does would hide most of them.
   const [dateRange, setDateRange] = React.useState<DateRange | undefined>();
 
   const [summary, setSummary] = React.useState<DraftOrdersSummary>(EMPTY_SUMMARY);
@@ -143,10 +140,6 @@ export default function DraftOrdersPage() {
     [debounced, dateRange, statuses, channels]
   );
 
-  /**
-   * The header filter row edits the same state as the filter bar above it,
-   * so a pick in one shows up in the other instead of silently competing.
-   */
   const columnFilterValues = React.useMemo(() => {
     const values: Record<string, string[]> = {};
     if (search) values.draft_number = [search];

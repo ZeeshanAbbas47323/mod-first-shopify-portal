@@ -185,7 +185,6 @@ export function ColorCombobox({
   );
 }
 
-// ─── Size Combobox with inline create ────────────────────────────────────────
 
 export function SizeCombobox({
   value,

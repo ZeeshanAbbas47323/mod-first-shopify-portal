@@ -37,7 +37,6 @@ const exportColumns = [
   { key: "created_at", label: "Created", value: (r: CategoryTreeNode) => r.created_at ?? "" },
 ];
 
-/** A node's own id plus every ancestor's, walking up via `parent_id`. */
 function ancestorChainIds(
   node: CategoryTreeNode,
   byId: Map<string, CategoryTreeNode>
@@ -72,8 +71,6 @@ export default function ProductCategoriesPage() {
       .then((r) => {
         if (cancelled) return;
         setRows(r);
-        // Everything expanded by default — the whole point of the tree is to
-        // see the hierarchy at a glance, not to go hunting for it.
         setExpanded(new Set(r.map((c) => String(c.id))));
       })
       .catch((err) => {
@@ -105,8 +102,6 @@ export default function ProductCategoriesPage() {
       const isActive = n.is_active !== false;
       const statusOk = !statuses.length || statuses.includes(isActive ? "active" : "inactive");
       if (textMatch && statusOk) {
-        // Keep the whole ancestor chain visible so a matched leaf's path
-        // still reads as a path, not a floating orphan row.
         ancestorChainIds(n, byId).forEach((id) => set.add(id));
       }
     });
@@ -131,7 +126,6 @@ export default function ProductCategoriesPage() {
     });
   };
 
-  // Reorders one row of siblings; a category never moves between branches here.
   const handleMove = async (
     node: CategoryTreeNode,
     siblings: CategoryTreeNode[],
@@ -158,7 +152,6 @@ export default function ProductCategoriesPage() {
     }
   };
 
-  // The whole tree is already loaded, so "everything" needs no extra request.
   const fetchAllForExport = async () => flat;
 
   const allIds = React.useMemo(() => flat.map((n) => String(n.id)), [flat]);

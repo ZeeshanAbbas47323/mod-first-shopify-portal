@@ -50,7 +50,6 @@ import {
 const DEFAULT_PAGE_SIZE = 10;
 const EXPORT_CAP = 5000;
 
-// Menu access is a dashboard-only concept — the "customer" role never signs into it.
 const STAFF_ROLES = USER_ROLES.filter((r) => r !== "customer");
 
 const humanizeRole = (role?: string) =>
@@ -281,8 +280,6 @@ const ROLE_FORM_ITEMS: Record<string, string> = Object.fromEntries(
 );
 
 const menuRightSchema = z.object({
-  // Granting a new role its whole set of menus one row at a time is the slow
-  // path this dialog exists to avoid, so creating takes a list of menus.
   menu_ids: z.array(z.number().int().positive()).min(1, "Pick at least one menu"),
   role: z.string().min(1, "Role is required"),
   can_view: z.boolean(),
@@ -292,7 +289,6 @@ const menuRightSchema = z.object({
 });
 type MenuRightValues = z.infer<typeof menuRightSchema>;
 
-/** Indent child menus so the tree shape is readable in a flat list. */
 function menuDepth(menu: MenuRow, byId: Map<number, MenuRow>): number {
   let depth = 0;
   let parent = menu.parent_id != null ? byId.get(Number(menu.parent_id)) : undefined;
@@ -303,10 +299,6 @@ function menuDepth(menu: MenuRow, byId: Map<number, MenuRow>): number {
   return depth;
 }
 
-/**
- * Searchable checkbox list of dashboard menus. Replaces the old free-typed
- * "Menu ID" box, which meant looking each id up in another section first.
- */
 function MenuPicker({
   menus,
   loading,
@@ -321,10 +313,7 @@ function MenuPicker({
   value: number[];
   onChange: (next: number[]) => void;
   disabled?: boolean;
-  /** Menus this role already has a right for — nothing stops a duplicate row
-   *  being created at the database level, so they're blocked here instead. */
   assigned?: Set<number>;
-  /** True while that set is being fetched, so a stale answer isn't implied. */
   assignedLoading?: boolean;
 }) {
   const [query, setQuery] = React.useState("");
@@ -476,22 +465,13 @@ function MenuRightDialog({
   const role = watch("role");
   const selectedMenuIds = watch("menu_ids");
 
-  // Let the effect below read the current tick list without re-running on it.
   const selectedMenuIdsRef = React.useRef(selectedMenuIds);
   selectedMenuIdsRef.current = selectedMenuIds;
 
-  /**
-   * Which menus this role already holds. Nothing in the database stops a second
-   * identical row, so the picker has to be the thing that prevents it.
-   */
   React.useEffect(() => {
     if (!open || editing || !role) return;
     let cancelled = false;
 
-    // Drop the previous role's set before fetching. Without this the dialog
-    // keeps showing whoever was selected a moment ago — it opens on Manager,
-    // who usually holds every menu, so switching role left every row wrongly
-    // greyed out as "Already added".
     setAssigned(new Set());
     setAssignedLoading(true);
 
@@ -500,7 +480,6 @@ function MenuRightDialog({
         if (cancelled) return;
         const taken = new Set(res.rows.map((r) => Number(r.menu_id)));
         setAssigned(taken);
-        // A menu ticked under the previous role may already be granted here.
         setValue(
           "menu_ids",
           (selectedMenuIdsRef.current ?? []).filter((id) => !taken.has(id))
@@ -508,7 +487,6 @@ function MenuRightDialog({
       })
       .catch((error) => {
         if (cancelled) return;
-        // Failing open would let duplicates through silently, so say so.
         toast.error(
           apiErrorMessage(error, "Couldn't check which menus this role already has.")
         );
@@ -522,7 +500,6 @@ function MenuRightDialog({
   }, [open, editing, role]);
 
 
-  // Menu access is a dashboard-only concept, so storefront menus are no help here.
   React.useEffect(() => {
     if (!open || menus.length) return;
     let cancelled = false;
@@ -577,8 +554,6 @@ function MenuRightDialog({
       return;
     }
 
-    // One request per menu — the endpoint takes a single menu at a time, and a
-    // duplicate row rejects on its own, so the rest must not be lost with it.
     const results = await Promise.allSettled(
       values.menu_ids.map((menu_id) => createMenuRight({ menu_id, ...permissions }))
     );

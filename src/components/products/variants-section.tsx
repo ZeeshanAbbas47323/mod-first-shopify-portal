@@ -46,7 +46,6 @@ const STATUS_LABELS: Record<string, string> = {
   out_of_stock: "Out of stock",
 };
 
-/** One row of the form's `variants` field array. */
 export interface VariantValue {
   id?: number | string;
   color_id?: string;
@@ -61,10 +60,6 @@ export interface VariantValue {
   status: VariantStatus;
 }
 
-/**
- * The parent form's values are wider than this section needs — only `variants`
- * is touched here, so the caller narrows its control once on the way in.
- */
 export interface VariantsForm {
   variants: VariantValue[];
 }
@@ -87,7 +82,6 @@ const blankVariant = (
   status: "active",
 });
 
-// ─── Option chips ─────────────────────────────────────────────────────────────
 
 function OptionRow({
   label,
@@ -136,7 +130,6 @@ function OptionRow({
   );
 }
 
-// ─── Variant image ────────────────────────────────────────────────────────────
 
 function VariantImage({
   value,
@@ -211,7 +204,6 @@ function VariantImage({
   );
 }
 
-// ─── Section ──────────────────────────────────────────────────────────────────
 
 export function VariantsSection({
   control,
@@ -228,7 +220,6 @@ export function VariantsSection({
   sizes: SizeRow[];
   onColorCreated: (c: ColorRow) => void;
   onSizeCreated: (s: SizeRow) => void;
-  /** Used as the default price for newly generated variants. */
   basePrice?: string;
 }) {
   const { fields, append, remove, update } = useFieldArray({
@@ -264,7 +255,6 @@ export function VariantsSection({
     [sizes]
   );
 
-  // Options in play, derived from the variants that already exist.
   const usedColors = React.useMemo(
     () => [...new Set(variants.map((v) => v.color_id).filter(Boolean))] as string[],
     [variants]
@@ -274,7 +264,6 @@ export function VariantsSection({
     [variants]
   );
 
-  /** Add every missing colour × size pair, keeping the rows already entered. */
   const addCombination = (colorId: string, sizeId: string) => {
     const exists = variants.some(
       (v) => (v.color_id ?? "") === colorId && (v.size_id ?? "") === sizeId
@@ -294,7 +283,6 @@ export function VariantsSection({
     if (usedColors.length === 0) {
       addCombination("", sizeId);
     } else {
-      // A colour-only row becomes the first row of that colour's size group.
       usedColors.forEach((colorId) => {
         const bare = variants.findIndex(
           (v) => v.color_id === colorId && !v.size_id
@@ -327,7 +315,6 @@ export function VariantsSection({
     idxs.forEach((i) => remove(i));
   };
 
-  // Group by colour, the way Shopify nests variants under the first option.
   const groups = React.useMemo(() => {
     const map = new Map<string, number[]>();
     variants.forEach((v, i) => {
@@ -365,7 +352,7 @@ export function VariantsSection({
 
   return (
     <div className="space-y-4">
-      {/* ── Options ── */}
+      {}
       <div className="space-y-2">
         <OptionRow
           label="Colour"
@@ -416,7 +403,7 @@ export function VariantsSection({
         </p>
       </div>
 
-      {/* ── Bulk bar ── */}
+      {}
       {selected.size > 0 && (
         <div className="flex flex-wrap items-center gap-2 rounded-xl border border-border bg-muted/40 px-3 py-2">
           <span className="text-sm font-medium">{selected.size} selected</span>
@@ -439,7 +426,7 @@ export function VariantsSection({
         </div>
       )}
 
-      {/* ── Variant list ── */}
+      {}
       {fields.length === 0 ? (
         <div className="rounded-xl border border-dashed border-border py-10 text-center">
           <p className="text-sm font-medium">No variants yet</p>
@@ -621,7 +608,6 @@ export function VariantsSection({
   );
 }
 
-// ─── Bulk field ───────────────────────────────────────────────────────────────
 
 function BulkField({
   label,
@@ -668,7 +654,6 @@ function BulkField({
   );
 }
 
-// ─── Per-variant details ──────────────────────────────────────────────────────
 
 function VariantDetailPopover({
   control,

@@ -16,10 +16,6 @@ export interface CategoryTreeNode extends ProductCategoryRow {
   path: string[];
 }
 
-/** Flat rows (each carrying `parent_id`) → a real tree, root-first. Orphans
- * (a parent_id pointing at a category not in this set — soft-deleted or
- * outside the fetch limit) are surfaced as roots rather than silently
- * dropped, so nothing vanishes from the listing. */
 export function buildCategoryTree(rows: ProductCategoryRow[]): CategoryTreeNode[] {
   const byId = new Map<string, CategoryTreeNode>();
   rows.forEach((r) => {
@@ -38,7 +34,6 @@ export function buildCategoryTree(rows: ProductCategoryRow[]): CategoryTreeNode[
   });
 
   const assignDepth = (nodes: CategoryTreeNode[], depth: number, path: string[]) => {
-    // Siblings render in the order the sort buttons write, not insertion order.
     nodes.sort((a, b) => (a.sort_order ?? 0) - (b.sort_order ?? 0));
     nodes.forEach((n) => {
       n.depth = depth;
@@ -51,7 +46,6 @@ export function buildCategoryTree(rows: ProductCategoryRow[]): CategoryTreeNode[
   return roots;
 }
 
-/** Depth-first flatten, for CSV export or a "no tree" fallback. */
 export function flattenCategoryTree(nodes: CategoryTreeNode[]): CategoryTreeNode[] {
   const out: CategoryTreeNode[] = [];
   const walk = (n: CategoryTreeNode) => {
@@ -67,16 +61,13 @@ const imgSrc = (row: ProductCategoryRow) =>
 
 interface CategoryTreeProps {
   nodes: CategoryTreeNode[];
-  /** Ids whose subtree should render expanded. Everything else stays collapsed. */
   expanded: Set<string>;
   onToggleExpand: (id: string) => void;
   selected: Set<string>;
   onToggleSelect: (id: string) => void;
   onToggleStatus: (row: ProductCategoryRow, next: boolean) => void;
   onRowClick: (row: ProductCategoryRow) => void;
-  /** Ids to keep highlighted, e.g. search matches. */
   matchedIds?: Set<string>;
-  /** Reorders within one row of siblings; omit to hide the arrows. */
   onMove?: (
     node: CategoryTreeNode,
     siblings: CategoryTreeNode[],

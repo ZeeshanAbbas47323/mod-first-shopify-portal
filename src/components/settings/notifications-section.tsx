@@ -69,7 +69,6 @@ const columns: ColumnDef<AdminNotificationRow>[] = [
 ];
 
 export function NotificationsSection() {
-  // ── Broadcast form ──
   const [title, setTitle] = React.useState("");
   const [body, setBody] = React.useState("");
   const [roles, setRoles] = React.useState<Set<string>>(new Set());
@@ -105,7 +104,6 @@ export function NotificationsSection() {
     }
   };
 
-  // ── History ──
   const [rows, setRows] = React.useState<AdminNotificationRow[]>([]);
   const [loading, setLoading] = React.useState(true);
   const [page, setPage] = React.useState(0);

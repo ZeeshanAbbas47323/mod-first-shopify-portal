@@ -71,10 +71,6 @@ const columns: ColumnDef<AbandonedCartRow>[] = [
     cell: ({ row }) => {
       const u = row.original.user;
       return (
-        // Bounded like every other identity cell in the app — without a
-        // max-width, a long email was free to dictate this column's
-        // natural width, starving the numeric columns and making the row
-        // read as lopsided.
         <div className="min-w-0 max-w-64">
           <p className="truncate font-medium">
             {u?.full_name?.trim() || `Customer #${row.original.user_id}`}

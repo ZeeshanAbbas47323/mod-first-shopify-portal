@@ -57,7 +57,6 @@ function statusTone(s?: string) {
   return "warning" as const;
 }
 
-/** Filter controls rendered under each column header. */
 const COLUMN_FILTERS: Record<string, ColumnFilterDef> = {
   tracking_number: { type: "text", placeholder: "Tracking #" },
   status: { type: "select", options: SHIPMENT_STATUSES, placeholder: "Any" },
@@ -94,18 +93,12 @@ export function ShippingSection() {
 
   const buildFilters = React.useCallback(
     () => ({
-      // Partial match — a bare string is an exact comparison in Prisma, so
-      // typing part of a tracking number would find nothing.
       tracking_number: debounced ? { contains: debounced } : undefined,
       status: statuses.length ? { in: statuses } : undefined,
     }),
     [debounced, statuses]
   );
 
-  /**
-   * The header filter row edits the same state as the toolbar above it, so
-   * a pick in one shows up in the other instead of silently competing.
-   */
   const columnFilterValues = React.useMemo(() => {
     const values: Record<string, string[]> = {};
     if (search) values.tracking_number = [search];
@@ -298,7 +291,7 @@ export function ShippingSection() {
         }}
       />
 
-      {/* Detail Dialog */}
+      {}
       <Dialog open={detailOpen} onOpenChange={setDetailOpen}>
         <DialogContent className="sm:max-w-lg">
           <DialogHeader>
@@ -342,7 +335,7 @@ export function ShippingSection() {
                 </div>
               )}
 
-              {/* Tracking events */}
+              {}
               {trackData && (
                 <div className="space-y-1.5">
                   <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide">Tracking events</p>
@@ -437,7 +430,6 @@ function DetailRow({
   );
 }
 
-// ─── Schedule Pickup Dialog ──────────────────────────────────────────────────
 
 const schedulePickupSchema = z.object({
   requested_start_time: z.string().min(1, "Start time is required"),
@@ -512,7 +504,6 @@ function SchedulePickupDialog({
   );
 }
 
-// ─── Create Shipment Dialog ─────────────────────────────────────────────────
 
 const createShipmentSchema = z.object({
   courier_id: z.string().min(1, "Courier is required"),

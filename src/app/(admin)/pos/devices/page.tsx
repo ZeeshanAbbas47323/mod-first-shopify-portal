@@ -53,7 +53,6 @@ const STATUS_ITEMS: Record<string, string> = {
   inactive: "Inactive",
 };
 
-/** Filter controls rendered under each column header. */
 const COLUMN_FILTERS: Record<string, ColumnFilterDef> = {
   name: { type: "text", placeholder: "Search devices" },
   is_active: { type: "select", options: [{ value: "active", label: "Active" }, { value: "inactive", label: "Inactive" }], placeholder: "Any" },
@@ -77,10 +76,6 @@ export default function PosDevicesPage() {
   const [editing, setEditing] = React.useState<PosDeviceRow | null>(null);
   const [refreshKey, setRefreshKey] = React.useState(0);
 
-  /**
-   * The header filter row edits the same state as the toolbar above it, so
-   * a pick in one shows up in the other instead of silently competing.
-   */
   const columnFilterValues = React.useMemo(() => {
     const values: Record<string, string[]> = {};
     if (search) values.name = [search];
@@ -91,7 +86,6 @@ export default function PosDevicesPage() {
   const applyColumnFilters = React.useCallback(
     (next: Record<string, string[]>) => {
       setSearch(next.name?.[0] ?? "");
-      // Picking every option says nothing, same as picking none.
       const picked = next.is_active ?? [];
       setStatus(picked.length === 1 ? picked[0] : "all");
     },
@@ -310,7 +304,6 @@ export default function PosDevicesPage() {
   );
 }
 
-// ─── Dialog ───────────────────────────────────────────────────────────────────
 
 const schema = z.object({
   name: z.string().min(1, "Name is required"),

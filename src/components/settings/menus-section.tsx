@@ -66,22 +66,15 @@ const LINK_TYPE_ITEMS: Record<string, string> = Object.fromEntries([
 const humanize = (v?: string) =>
   v ? v.replace(/_/g, " ").replace(/\b\w/g, (c) => c.toUpperCase()) : "—";
 
-// ─── Tree helpers ─────────────────────────────────────────────────────────────
 
-/** Every node in the tree, depth-first — used for counts and parent pickers. */
 function flatten(nodes: MenuTreeNode[]): MenuTreeNode[] {
   return nodes.flatMap((n) => [n, ...flatten(n.children)]);
 }
 
-/** Ids of a node and everything under it — invalid parent choices. */
 function subtreeIds(node: MenuTreeNode): Set<string> {
   return new Set(flatten([node]).map((n) => String(n.id)));
 }
 
-/**
- * Keep nodes matching the predicate plus every ancestor that leads to a match,
- * so search results stay in their place in the hierarchy.
- */
 function filterTree(
   nodes: MenuTreeNode[],
   matches: (n: MenuTreeNode) => boolean
@@ -91,7 +84,6 @@ function filterTree(
     .filter((n) => matches(n) || n.children.length > 0);
 }
 
-// ─── Row ──────────────────────────────────────────────────────────────────────
 
 function MenuNodeRow({
   node,
@@ -137,7 +129,7 @@ function MenuNodeRow({
         )}
         style={{ paddingLeft: `${node.depth * 22 + 8}px` }}
       >
-        {/* Expander */}
+        {}
         {hasChildren ? (
           <button
             type="button"
@@ -160,7 +152,7 @@ function MenuNodeRow({
           </span>
         )}
 
-        {/* Name + slug */}
+        {}
         <div className="min-w-0 flex-1">
           <div className="flex items-center gap-1.5">
             <p
@@ -188,12 +180,12 @@ function MenuNodeRow({
           </p>
         </div>
 
-        {/* Link type */}
+        {}
         <span className="hidden w-28 shrink-0 text-xs text-muted-foreground sm:block">
           {humanize(node.link_type)}
         </span>
 
-        {/* Visibility */}
+        {}
         <span className="hidden w-20 shrink-0 md:block">
           {node.visibility === false ? (
             <StatusBadge status="Hidden" tone="neutral" />
@@ -202,7 +194,7 @@ function MenuNodeRow({
           )}
         </span>
 
-        {/* Status */}
+        {}
         <span className="w-20 shrink-0">
           <StatusToggle
             isActive={node.is_active !== false}
@@ -210,7 +202,7 @@ function MenuNodeRow({
           />
         </span>
 
-        {/* Reorder + actions */}
+        {}
         <div
           className="flex shrink-0 items-center gap-0.5"
           onClick={(e) => e.stopPropagation()}
@@ -257,7 +249,7 @@ function MenuNodeRow({
         </div>
       </div>
 
-      {/* Children */}
+      {}
       {hasChildren &&
         isOpen &&
         node.children.map((child) => (
@@ -278,11 +270,9 @@ function MenuNodeRow({
   );
 }
 
-// Small inline chevrons so the reorder controls read as up/down, not navigation.
 const ChevronUpIcon = () => <ChevronDown className="size-3.5 rotate-180" />;
 const ChevronDownIcon = () => <ChevronDown className="size-3.5" />;
 
-// ─── Section ──────────────────────────────────────────────────────────────────
 
 export function MenusSection() {
   const [tree, setTree] = React.useState<MenuTreeNode[]>([]);
@@ -307,8 +297,6 @@ export function MenusSection() {
     return () => clearTimeout(t);
   }, [search]);
 
-  // The tree is fetched per menu_type; the rest is filtered client-side so the
-  // hierarchy (and each match's ancestors) stays intact.
   React.useEffect(() => {
     let cancelled = false;
     setLoading(true);
@@ -316,7 +304,6 @@ export function MenusSection() {
       .then((nodes) => {
         if (cancelled) return;
         setTree(nodes);
-        // Open the top two levels by default — deep menus stay tidy.
         setExpanded(
           new Set(
             flatten(nodes)
@@ -349,7 +336,6 @@ export function MenusSection() {
     });
   }, [tree, debouncedSearch, linkType, status]);
 
-  // While filtering, show every remaining branch open.
   const filtering = !!debouncedSearch.trim() || linkType !== "all" || status !== "all";
   const effectiveExpanded = React.useMemo(
     () =>
@@ -388,7 +374,6 @@ export function MenusSection() {
     []
   );
 
-  // Reordering renumbers one row of siblings — never across branches.
   const handleMove = React.useCallback(
     async (node: MenuTreeNode, siblings: MenuTreeNode[], dir: "up" | "down") => {
       const index = siblings.findIndex((s) => String(s.id) === String(node.id));
@@ -425,7 +410,7 @@ export function MenusSection() {
 
   return (
     <div className="flex flex-col gap-3">
-      {/* Filters */}
+      {}
       <div className="flex flex-wrap items-center gap-2">
         <div className="relative min-w-44 flex-1 sm:max-w-56">
           <Search className="absolute top-1/2 left-2.5 size-4 -translate-y-1/2 text-muted-foreground" />
@@ -482,7 +467,7 @@ export function MenusSection() {
         </Button>
       </div>
 
-      {/* Tree toolbar */}
+      {}
       <div className="flex flex-wrap items-center justify-between gap-2 text-xs text-muted-foreground">
         <span>
           {parentCount} top-level {parentCount === 1 ? "menu" : "menus"} ·{" "}
@@ -499,9 +484,9 @@ export function MenusSection() {
         </div>
       </div>
 
-      {/* Tree */}
+      {}
       <div className="overflow-hidden rounded-xl border border-border bg-card">
-        {/* Column header */}
+        {}
         <div className="flex items-center gap-2 border-b border-border bg-muted/40 px-2 py-2 text-xs font-medium text-muted-foreground">
           <span className="size-5 shrink-0" />
           <span className="flex-1">Menu</span>
@@ -576,7 +561,6 @@ export function MenusSection() {
   );
 }
 
-// ─── Dialog ───────────────────────────────────────────────────────────────────
 
 const STATUS_FORM_ITEMS: Record<string, string> = {
   active: "Active",
@@ -679,7 +663,6 @@ function MenuDialog({
     }
   }, [open, editing, presetParentId, menuType, reset]);
 
-  // Auto-slug from name while creating
   React.useEffect(() => {
     if (!editing && !slugDirty.current) {
       setValue(
@@ -697,7 +680,6 @@ function MenuDialog({
 
   const linkType = watch("link_type");
 
-  // A menu can't be its own parent, nor sit under one of its descendants.
   const parentOptions = React.useMemo(() => {
     const blocked = editing ? subtreeIds(editing) : new Set<string>();
     return allNodes.filter((n) => !blocked.has(String(n.id)));

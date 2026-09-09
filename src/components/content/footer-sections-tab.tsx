@@ -38,7 +38,6 @@ import {
 const LINK_TYPES = ["url", "route", "email", "phone"] as const;
 const LINK_TARGETS = ["_self", "_blank"] as const;
 
-// ─── Link Row Editor ──────────────────────────────────────────────────────────
 
 function LinkEditor({
   link,
@@ -134,7 +133,6 @@ function LinkEditor({
   );
 }
 
-// ─── Section Card ─────────────────────────────────────────────────────────────
 
 type LocalLink = FooterLinkRow & { _localId: string; _isNew?: boolean; _deleted?: boolean };
 
@@ -158,13 +156,11 @@ function SectionCard({ section, onSaved }: { section: FooterSectionRow; onSaved:
     }
   };
 
-  // Section fields
   const [title, setTitle] = React.useState(section.title ?? "");
   const [description, setDescription] = React.useState(section.description ?? "");
   const [imageUrl, setImageUrl] = React.useState<string | null>(section.image_url ?? null);
   const [isActive, setIsActive] = React.useState(section.is_active ?? true);
 
-  // Links local state
   const [links, setLinks] = React.useState<LocalLink[]>(() =>
     (section.links ?? []).map((l) => ({ ...l, _localId: String(l.id ?? Math.random()) }))
   );
@@ -188,7 +184,6 @@ function SectionCard({ section, onSaved }: { section: FooterSectionRow; onSaved:
       if (index < 0 || target < 0 || target >= visible.length) return prev;
       const next = [...visible];
       [next[index], next[target]] = [next[target], next[index]];
-      // Deleted rows are held until save, so they ride along untouched.
       return [...next, ...prev.filter((l) => l._deleted)];
     });
   };
@@ -204,7 +199,6 @@ function SectionCard({ section, onSaved }: { section: FooterSectionRow; onSaved:
   const save = async () => {
     setSaving(true);
     try {
-      // 1. Update section metadata
       await updateFooterSection(section.id, {
         title: title || undefined,
         description: description || undefined,
@@ -213,7 +207,6 @@ function SectionCard({ section, onSaved }: { section: FooterSectionRow; onSaved:
         sort_order: section.sort_order ?? 0,
       });
 
-      // 2. Manage links
       const actions: ({ _action: "add" | "update" | "delete"; [k: string]: unknown })[] = [];
 
       let position = 0;
@@ -272,7 +265,7 @@ function SectionCard({ section, onSaved }: { section: FooterSectionRow; onSaved:
         <>
           <Separator className="mt-3" />
           <CardContent className="space-y-5 pt-4">
-            {/* Section metadata */}
+            {}
             <div className="grid gap-4 sm:grid-cols-2">
               <div className="space-y-1.5 sm:col-span-2">
                 <Label htmlFor={`title-${section.id}`}>Title</Label>
@@ -298,7 +291,7 @@ function SectionCard({ section, onSaved }: { section: FooterSectionRow; onSaved:
               </div>
             </div>
 
-            {/* Links */}
+            {}
             <div className="rounded-lg border border-border">
               <div className="flex items-center justify-between gap-3 border-b border-border bg-muted/30 px-3 py-2">
                 <div className="flex items-baseline gap-2">
@@ -333,7 +326,7 @@ function SectionCard({ section, onSaved }: { section: FooterSectionRow; onSaved:
               )}
             </div>
 
-            {/* Actions */}
+            {}
             <div className="flex flex-wrap justify-between gap-2">
               <Button variant="destructive" onClick={() => setConfirmOpen(true)} disabled={deleting}>
                 <Trash2 className="size-4" /> Delete section
@@ -359,7 +352,6 @@ function SectionCard({ section, onSaved }: { section: FooterSectionRow; onSaved:
   );
 }
 
-// ─── Add Section Dialog ───────────────────────────────────────────────────────
 
 function AddSectionDialog({
   open, onOpenChange, onCreated,
@@ -452,7 +444,6 @@ function AddSectionDialog({
   );
 }
 
-// ─── Main Tab ─────────────────────────────────────────────────────────────────
 
 export function FooterSectionsTab() {
   const [sections, setSections] = React.useState<FooterSectionRow[]>([]);

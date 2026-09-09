@@ -93,7 +93,6 @@ export function CompleteDraftDialog({
   open: boolean;
   onOpenChange: (v: boolean) => void;
   defaultEmail?: string;
-  /** Display estimate — the server recalculates the real total. */
   total: number;
 }) {
   const router = useRouter();
@@ -122,7 +121,6 @@ export function CompleteDraftDialog({
     setResult(null);
   }, [open, defaultEmail]);
 
-  // Each option only accepts its own methods, so switching resets the choice.
   const methods = DRAFT_PAYMENT_METHODS[option];
   React.useEffect(() => {
     if (!methods.includes(method)) setMethod(methods[0]);
@@ -170,7 +168,6 @@ export function CompleteDraftDialog({
       if (res.success) toast.success(res.message);
       else toast.error(res.message);
 
-      // A payment failure still creates the order, so never retry completing.
       if (res.payment?.session_url && option === "payment_screen") {
         window.open(res.payment.session_url, "_blank", "noopener");
       }
@@ -190,7 +187,6 @@ export function CompleteDraftDialog({
       open={open}
       onOpenChange={(next) => {
         if (!next && result) {
-          // The draft is now an order — go where the work continues.
           onOpenChange(false);
           router.push(orderId ? `/orders/${orderId}` : "/orders");
           return;
@@ -257,7 +253,7 @@ export function CompleteDraftDialog({
           </div>
         ) : (
           <div className="space-y-4">
-            {/* Option cards */}
+            {}
             <div className="space-y-2">
               {OPTIONS.map((o) => (
                 <button

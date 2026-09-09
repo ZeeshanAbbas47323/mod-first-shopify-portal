@@ -96,7 +96,6 @@ function getColumns(
   ];
 }
 
-/** Filter controls rendered under each column header. */
 const COLUMN_FILTERS: Record<string, ColumnFilterDef> = {
   name: { type: "text", placeholder: "Search couriers" },
 };
@@ -127,10 +126,6 @@ export function CouriersSection() {
     [debounced]
   );
 
-  /**
-   * The header filter row edits the same state as the toolbar above it, so
-   * a pick in one shows up in the other instead of silently competing.
-   */
   const columnFilterValues = React.useMemo(() => {
     const values: Record<string, string[]> = {};
     if (search) values.name = [search];

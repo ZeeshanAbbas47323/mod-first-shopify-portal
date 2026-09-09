@@ -10,7 +10,6 @@ import { cn } from "@/lib/utils";
 import { getPinStatus, verifyPin } from "@/lib/admin-api";
 import { useAuthStore } from "@/stores/auth-store";
 
-/** Locked state survives a reload so refreshing the page can't bypass the lock. */
 const LOCK_KEY = "modefirst-locked";
 const DEFAULT_MINUTES = 10;
 
@@ -31,11 +30,9 @@ const writeLocked = (locked: boolean) => {
     if (locked) sessionStorage.setItem(LOCK_KEY, "1");
     else sessionStorage.removeItem(LOCK_KEY);
   } catch {
-    // Private mode — the lock just won't survive a reload.
   }
 };
 
-/** Imperative lock trigger for the top bar's "Lock screen" menu item. */
 export const LOCK_EVENT = "modefirst:lock-screen";
 export const lockScreenNow = () =>
   window.dispatchEvent(new CustomEvent(LOCK_EVENT));
@@ -47,7 +44,6 @@ export function ScreenLock({ children }: { children: React.ReactNode }) {
 
   const isAuthenticated = useAuthStore((s) => s.isAuthenticated);
 
-  // Load the PIN settings once the user is signed in.
   React.useEffect(() => {
     if (!isAuthenticated) {
       setPinSet(false);
@@ -62,7 +58,6 @@ export function ScreenLock({ children }: { children: React.ReactNode }) {
         const enabled = !!status.is_pin_set;
         setPinSet(enabled);
         if (status.auto_lock_minutes) setMinutes(Number(status.auto_lock_minutes));
-        // Restore a lock that was active before a reload.
         if (enabled && readLocked()) setLocked(true);
       })
       .catch(() => {
@@ -83,7 +78,6 @@ export function ScreenLock({ children }: { children: React.ReactNode }) {
     writeLocked(false);
   }, []);
 
-  // Idle timer — any activity restarts the countdown.
   React.useEffect(() => {
     if (!pinSet || locked) return;
 
@@ -102,7 +96,6 @@ export function ScreenLock({ children }: { children: React.ReactNode }) {
     };
   }, [pinSet, locked, minutes, lock]);
 
-  // Manual lock from the account menu.
   React.useEffect(() => {
     if (!pinSet) return;
     const handler = () => lock();
@@ -118,7 +111,6 @@ export function ScreenLock({ children }: { children: React.ReactNode }) {
   );
 }
 
-// ─── Overlay ──────────────────────────────────────────────────────────────────
 
 function LockOverlay({ onUnlock }: { onUnlock: () => void }) {
   const router = useRouter();
@@ -167,7 +159,6 @@ function LockOverlay({ onUnlock }: { onUnlock: () => void }) {
     });
   };
 
-  // Physical keyboard works too — digits, backspace, Enter.
   React.useEffect(() => {
     const handler = (e: KeyboardEvent) => {
       if (/^\d$/.test(e.key)) {
@@ -203,7 +194,7 @@ function LockOverlay({ onUnlock }: { onUnlock: () => void }) {
         </p>
       </div>
 
-      {/* PIN dots */}
+      {}
       <div className="flex items-center gap-3">
         {Array.from({ length: 6 }).map((_, i) => (
           <span
@@ -218,7 +209,7 @@ function LockOverlay({ onUnlock }: { onUnlock: () => void }) {
 
       <p className="h-5 text-sm text-[#ff9a8a]">{error ?? ""}</p>
 
-      {/* Keypad */}
+      {}
       <div className="grid grid-cols-3 gap-3">
         {["1", "2", "3", "4", "5", "6", "7", "8", "9"].map((d) => (
           <KeypadButton key={d} onClick={() => press(d)}>

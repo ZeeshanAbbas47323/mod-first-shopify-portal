@@ -53,7 +53,6 @@ const REFUND_TONES: Record<string, BadgeTone> = {
   canceled: "neutral",
 };
 
-/** A payment plus its refunds and the balance still refundable. */
 interface PaymentWithRefunds {
   payment: PaymentRow;
   refunds: RefundRow[];
@@ -81,7 +80,6 @@ export function RefundsSection({ orderId }: { orderId: number | string }) {
 
     listOrderPayments(orderId)
       .then(async (payments) => {
-        // Refunds live per payment, so fetch them alongside each one.
         const withRefunds = await Promise.all(
           payments.map(async (payment) => {
             let refunds: RefundRow[] = [];
@@ -148,7 +146,7 @@ export function RefundsSection({ orderId }: { orderId: number | string }) {
               const currency = payment.currency ?? "USD";
               return (
                 <div key={String(payment.id)} className="rounded-xl border border-border p-3">
-                  {/* Payment header */}
+                  {}
                   <div className="flex flex-wrap items-start justify-between gap-2">
                     <div className="min-w-0">
                       <div className="flex flex-wrap items-center gap-1.5">
@@ -179,7 +177,7 @@ export function RefundsSection({ orderId }: { orderId: number | string }) {
                     </div>
                   </div>
 
-                  {/* Refund list */}
+                  {}
                   {refunds.length > 0 && (
                     <div className="mt-3 space-y-1.5 border-t border-border pt-2.5">
                       {refunds.map((r) => (
@@ -217,7 +215,7 @@ export function RefundsSection({ orderId }: { orderId: number | string }) {
                     </div>
                   )}
 
-                  {/* Action */}
+                  {}
                   <div className="mt-3 flex items-center justify-between gap-2 border-t border-border pt-2.5">
                     <span className="text-xs text-muted-foreground tabular-nums">
                       Refundable: {fmt$(refundable, currency)}
@@ -262,7 +260,6 @@ export function RefundsSection({ orderId }: { orderId: number | string }) {
   );
 }
 
-// ─── Refund dialog ────────────────────────────────────────────────────────────
 
 function RefundDialog({
   entry,

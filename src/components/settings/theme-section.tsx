@@ -206,7 +206,7 @@ export function ThemeSection() {
                   section.is_active === false && "opacity-70"
                 )}
               >
-                {/* Section header */}
+                {}
                 <div className="flex flex-wrap items-center gap-2 px-3 py-2.5">
                   <button
                     type="button"
@@ -304,7 +304,7 @@ export function ThemeSection() {
                   </div>
                 </div>
 
-                {/* Items */}
+                {}
                 {isOpen && (
                   <div className="border-t border-border bg-muted/20 px-3 py-2.5">
                     {section.title && (
@@ -441,7 +441,6 @@ export function ThemeSection() {
   );
 }
 
-// ─── Section dialog ───────────────────────────────────────────────────────────
 
 function SectionDialog({
   editing,
@@ -498,7 +497,6 @@ function SectionDialog({
   const set = (key: keyof typeof empty, value: string) =>
     setForm((f) => ({ ...f, [key]: value }));
 
-  // Derive the key from the name while creating, until it's edited by hand.
   const onNameChange = (value: string) => {
     setForm((f) => ({
       ...f,
@@ -709,7 +707,6 @@ function SectionDialog({
   );
 }
 
-// ─── Item dialog ──────────────────────────────────────────────────────────────
 
 function ItemDialog({
   target,

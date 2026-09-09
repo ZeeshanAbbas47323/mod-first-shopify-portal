@@ -32,7 +32,6 @@ import {
   type TerminalReaderRow,
 } from "@/lib/pos-api";
 
-/** Methods that need a card reader instead of a cash amount. */
 const TERMINAL_METHODS: PosPaymentMethod[] = ["stripe", "stripe_and_cash"];
 const SPLIT_METHODS: PosPaymentMethod[] = ["stripe_and_cash", "paypal_and_cash"];
 const CASH_METHODS: PosPaymentMethod[] = ["cash", ...SPLIT_METHODS];
@@ -45,7 +44,6 @@ const PRINT_TYPE_ITEMS: Record<string, string> = {
 
 type Phase = "form" | "waiting" | "done";
 
-/** Terminal statuses that mean the customer finished on the reader. */
 const SUCCESS_STATES = ["succeeded", "requires_capture", "captured", "paid", "completed"];
 const FAILED_STATES = ["canceled", "cancelled", "failed", "expired"];
 
@@ -113,7 +111,6 @@ export function PosPaymentDialog({
     (isSplit && (cashNum <= 0 || cashNum >= total)) ||
     (needsReader && !readerId);
 
-  // ── Terminal flow: push to reader → poll → capture ────────────────────────
   const runTerminal = async (amount: number) => {
     setPhase("waiting");
     setStatusText("Sending the charge to the reader…");
@@ -141,7 +138,6 @@ export function PosPaymentDialog({
             try {
               await captureTerminalPayment(reference);
             } catch {
-              // Some flows capture automatically; a failure here is not fatal.
             }
             setPhase("done");
             setStatusText("Payment complete.");
@@ -152,7 +148,6 @@ export function PosPaymentDialog({
             toast.error(`Payment ${state}.`);
           }
         } catch {
-          // Transient poll failure — keep waiting.
         }
       }, 2500);
     } catch (error) {
@@ -172,7 +167,6 @@ export function PosPaymentDialog({
         online_amount: isSplit ? onlineAmount : undefined,
       });
 
-      // Card-present: drive the reader. Hosted gateways: open the checkout URL.
       if (needsReader && readerId) {
         await runTerminal(isSplit ? (onlineAmount ?? 0) : total);
         return;
@@ -196,7 +190,6 @@ export function PosPaymentDialog({
     try {
       if (readerId) await cancelReaderAction(readerId);
     } catch {
-      // Reader may already be idle.
     }
     setPhase("form");
     setStatusText("");
@@ -225,7 +218,7 @@ export function PosPaymentDialog({
     <Dialog
       open={open}
       onOpenChange={(next) => {
-        if (!next && phase === "waiting") return; // don't close mid-charge
+        if (!next && phase === "waiting") return; 
         if (!next) stopPolling();
         onOpenChange(next);
       }}

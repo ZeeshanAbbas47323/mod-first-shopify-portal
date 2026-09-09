@@ -68,15 +68,12 @@ import {
 import { api } from "@/lib/api";
 import { cn, imgUrl } from "@/lib/utils";
 
-// ─── Schema ──────────────────────────────────────────────────────────────────
 
 const VARIANT_STATUSES = ["active", "inactive", "out_of_stock"] as const;
 
 const variantSchema = z
   .object({
     id: z.union([z.number(), z.string()]).optional(),
-    // The API needs one of the two, not both — a size-only or colour-only
-    // variant is valid.
     color_id: z.string().optional(),
     size_id: z.string().optional(),
     sku: z.string().optional(),
@@ -108,14 +105,11 @@ const productFormSchema = z.object({
   title: z.string().min(1, "Title is required"),
   description: z.string().optional(),
   status: z.enum(PRODUCT_STATUSES),
-  // Pricing
   price: z.string().optional(),
   compare_at_price: z.string().optional(),
   cost_per_item: z.string().optional(),
-  // Inventory
   sku: z.string().optional(),
   quantity: z.string().optional(),
-  // Discounts
   discount_percent: z
     .string()
     .optional()
@@ -132,18 +126,14 @@ const productFormSchema = z.object({
       const n = parseFloat(v);
       return !isNaN(n) && n >= 0;
     }, "Must be 0 or more"),
-  // Shipping
   requires_shipping: z.boolean(),
   weight: z.string().optional(),
-  // Organization
   vendor: z.string().optional(),
   category: z.string().optional(),
   tags: z.string().optional(),
-  // SEO
   slug: z.string().min(1, "URL handle is required"),
   meta_title: z.string().optional(),
   meta_description: z.string().optional(),
-  // Arrays
   variants: z.array(variantSchema),
   faqs: z.array(faqSchema),
 });
@@ -165,7 +155,6 @@ const slugify = (s: string) =>
     .replace(/-+/g, "-")
     .replace(/^-|-$/g, "");
 
-// ─── Image Grid ──────────────────────────────────────────────────────────────
 
 function ProductImageGrid({
   images,
@@ -208,14 +197,14 @@ function ProductImageGrid({
         </div>
       ))}
 
-      {/* Loading slot — shown while uploading */}
+      {}
       {uploading && (
         <div className="flex aspect-square items-center justify-center rounded-lg border border-border bg-muted/60">
           <Loader2 className="size-5 animate-spin text-muted-foreground" />
         </div>
       )}
 
-      {/* Add tile — hidden while uploading */}
+      {}
       {!uploading && (
         <button
           type="button"
@@ -242,7 +231,6 @@ function ProductImageGrid({
   );
 }
 
-// ─── Profit Calculator ────────────────────────────────────────────────────────
 
 function ProfitDisplay({ price, cost }: { price?: string; cost?: string }) {
   const p = parseNum(price);
@@ -264,7 +252,6 @@ function ProfitDisplay({ price, cost }: { price?: string; cost?: string }) {
   );
 }
 
-// ─── Combobox primitive ──────────────────────────────────────────────────────
 
 function Combobox({
   options,
@@ -343,7 +330,6 @@ function Combobox({
   );
 }
 
-// ─── Category Select ─────────────────────────────────────────────────────────
 
 function CategorySelect({
   value,
@@ -388,7 +374,6 @@ function CategorySelect({
   );
 }
 
-// ─── Vendor Select ───────────────────────────────────────────────────────────
 
 function VendorSelect({
   value,
@@ -430,10 +415,6 @@ function VendorSelect({
   );
 }
 
-// ─── Color Combobox with inline create ───────────────────────────────────────
-
-
-// ─── Section Card ─────────────────────────────────────────────────────────────
 
 function Section({
   title,
@@ -456,20 +437,17 @@ function Section({
   );
 }
 
-// ─── Main Form ────────────────────────────────────────────────────────────────
 
 export function ProductForm({ product }: { product?: ProductDetailRow }) {
   const router = useRouter();
   const isEdit = !!product;
 
-  // Images are managed outside react-hook-form
   const [images, setImages] = React.useState<ProductImageRow[]>(
     product?.images ?? []
   );
   const [removedImageUrls, setRemovedImageUrls] = React.useState<string[]>([]);
   const [imgUploading, setImgUploading] = React.useState(false);
 
-  // Colors + sizes for variant selects
   const [colors, setColors] = React.useState<ColorRow[]>([]);
   const [sizes, setSizes] = React.useState<SizeRow[]>([]);
   React.useEffect(() => {
@@ -553,7 +531,6 @@ export function ProductForm({ product }: { product?: ProductDetailRow }) {
     remove: removeFaq,
   } = useFieldArray({ control, name: "faqs" });
 
-  // Auto-slug from title while creating
   const title = useWatch({ control, name: "title" });
   const priceVal = useWatch({ control, name: "price" });
   const costVal = useWatch({ control, name: "cost_per_item" });
@@ -568,12 +545,10 @@ export function ProductForm({ product }: { product?: ProductDetailRow }) {
     }
   }, [title, isEdit, getFieldState, setValue]);
 
-  // Upload images — show blob preview immediately, swap with real URL when done
   const handleImagesAdd = async (files: FileList) => {
     setImgUploading(true);
     const arr = Array.from(files);
 
-    // 1. Add blob previews instantly so the user sees them right away
     const blobs = arr.map((f) => URL.createObjectURL(f));
     setImages((prev) => [
       ...prev,
@@ -585,7 +560,6 @@ export function ProductForm({ product }: { product?: ProductDetailRow }) {
       })),
     ]);
 
-    // 2. Upload each file individually; swap blob URL with real URL as each finishes
     const results = await Promise.allSettled(arr.map((f) => uploadImage(f, "products")));
 
     setImages((prev) => {
@@ -596,7 +570,6 @@ export function ProductForm({ product }: { product?: ProductDetailRow }) {
           if (idx !== -1) next[idx] = { ...next[idx], url: result.value };
           URL.revokeObjectURL(blobs[i]);
         } else {
-          // Remove failed blob preview
           if (idx !== -1) next.splice(idx, 1);
           URL.revokeObjectURL(blobs[i]);
         }
@@ -612,10 +585,6 @@ export function ProductForm({ product }: { product?: ProductDetailRow }) {
     setImgUploading(false);
   };
 
-  /**
-   * Without this the form silently does nothing when a field fails validation
-   * — no request, no message. Surface the first problem instead.
-   */
   const onInvalid = (formErrors: typeof errors) => {
     const variantIssue = Array.isArray(formErrors.variants)
       ? formErrors.variants.find((v) => v)
@@ -630,7 +599,6 @@ export function ProductForm({ product }: { product?: ProductDetailRow }) {
 
     toast.error(message ?? "Some fields need attention before saving.");
 
-    // Jump to the first field that failed so it isn't hidden below the fold.
     const firstInvalid = document.querySelector<HTMLElement>(
       "[aria-invalid='true'], [data-invalid='true']"
     );
@@ -638,26 +606,19 @@ export function ProductForm({ product }: { product?: ProductDetailRow }) {
   };
 
   const onSubmit = async (values: ProductFormValues) => {
-    // Treat the product as variant-tracked when EITHER the form has variant rows
-    // OR the server thinks it has variants (guards against a partial hydration
-    // wiping out per-variant stock via a product-level quantity write).
     const serverVariantCount =
       (product as { variants_count?: number } | null | undefined)?.variants_count ?? 0;
     const hasVariants = values.variants.length > 0 || serverVariantCount > 0;
     const body = {
-      // API field names
       name: values.title,
       slug: values.slug || undefined,
       description: values.description || undefined,
       short_desc: undefined as string | undefined,
       status: values.status,
-      // Pricing — API uses base_price / sale_price / cost_price
       base_price: parseNum(values.price) ?? 0,
       sale_price: parseNum(values.compare_at_price) ?? undefined,
       cost_price: parseNum(values.cost_per_item) ?? undefined,
       sku: values.sku || undefined,
-      // Product-level stock is only sent when the product has NO variants —
-      // when variants exist, stock is tracked per-variant via the inventory API.
       quantity: hasVariants ? undefined : parseNum(values.quantity) ?? undefined,
       discount_percent: parseNum(values.discount_percent) ?? undefined,
       discount_amount: parseNum(values.discount_amount) ?? undefined,
@@ -680,7 +641,6 @@ export function ProductForm({ product }: { product?: ProductDetailRow }) {
           sort_order: i,
           is_primary: i === 0,
         })),
-      // variants sent separately via /product-variants/bulk after product save
       faqs: values.faqs.map((f, i) => ({
         ...(f.id ? { id: f.id } : {}),
         question: f.question,
@@ -690,7 +650,6 @@ export function ProductForm({ product }: { product?: ProductDetailRow }) {
     };
 
     const makeVariantBody = (v: typeof values.variants[number]) => ({
-      // Send only the axis that was chosen — the API rejects a null id.
       color_id: v.color_id ? Number(v.color_id) : undefined,
       size_id: v.size_id ? Number(v.size_id) : undefined,
       sku: v.sku || undefined,
@@ -705,7 +664,6 @@ export function ProductForm({ product }: { product?: ProductDetailRow }) {
     });
 
     try {
-      // Delete removed images from storage
       if (removedImageUrls.length > 0) {
         await Promise.allSettled(
           removedImageUrls.map((url) => {
@@ -719,8 +677,6 @@ export function ProductForm({ product }: { product?: ProductDetailRow }) {
       if (isEdit) {
         const msg = await updateProduct(product.id, body);
 
-        // Variants the user deleted in the form. Nothing removed them
-        // server-side before, so they came straight back on reload.
         const keptIds = new Set(
           values.variants.filter((v) => v.id).map((v) => String(v.id))
         );
@@ -732,13 +688,11 @@ export function ProductForm({ product }: { product?: ProductDetailRow }) {
           await deleteRecord("productVariant", id as number | string);
         }
 
-        // Existing variants → PUT each one individually
         const existingVariants = values.variants.filter((v) => v.id);
         for (const v of existingVariants) {
           await api.put(`product-variants/${v.id}`, makeVariantBody(v));
         }
 
-        // New variants (no id) → bulk create
         const newVariants = values.variants.filter((v) => !v.id).map(makeVariantBody);
         if (newVariants.length > 0) {
           await api.post("product-variants/bulk", {
@@ -770,7 +724,7 @@ export function ProductForm({ product }: { product?: ProductDetailRow }) {
 
   return (
     <form onSubmit={handleSubmit(onSubmit, onInvalid)} noValidate>
-      {/* ── Top bar ── */}
+      {}
       <div className="mb-5 flex flex-wrap items-center gap-3">
         <Button
           type="button"
@@ -799,12 +753,12 @@ export function ProductForm({ product }: { product?: ProductDetailRow }) {
         </div>
       </div>
 
-      {/* ── Layout: left content + right sidebar ── */}
+      {}
       <div className="flex flex-col gap-4 lg:flex-row lg:items-start">
-        {/* ── Left column ── */}
+        {}
         <div className="flex flex-1 flex-col gap-4 min-w-0">
 
-          {/* Title & Description */}
+          {}
           <Section>
             <div className="space-y-4">
               <div className="space-y-1.5">
@@ -836,7 +790,7 @@ export function ProductForm({ product }: { product?: ProductDetailRow }) {
             </div>
           </Section>
 
-          {/* Media */}
+          {}
           <Section title="Media">
             {images.length === 0 && !imgUploading ? (
               <div
@@ -883,7 +837,7 @@ export function ProductForm({ product }: { product?: ProductDetailRow }) {
             )}
           </Section>
 
-          {/* Pricing */}
+          {}
           <Section title="Pricing">
             <div className="grid gap-3 sm:grid-cols-3">
               <div className="space-y-1.5">
@@ -929,7 +883,7 @@ export function ProductForm({ product }: { product?: ProductDetailRow }) {
             <ProfitDisplay price={priceVal} cost={costVal} />
           </Section>
 
-          {/* Inventory */}
+          {}
           <Section title="Inventory">
             <div className="space-y-4">
               <div className="space-y-1.5">
@@ -952,7 +906,7 @@ export function ProductForm({ product }: { product?: ProductDetailRow }) {
             </div>
           </Section>
 
-          {/* Shipping */}
+          {}
           <Section title="Shipping">
             <div className="space-y-4">
               <div className="flex items-center justify-between">
@@ -1000,7 +954,7 @@ export function ProductForm({ product }: { product?: ProductDetailRow }) {
             </div>
           </Section>
 
-          {/* Variants */}
+          {}
           <Section title="Variants">
             <VariantsSection
               control={control as unknown as Control<VariantsForm>}
@@ -1018,7 +972,7 @@ export function ProductForm({ product }: { product?: ProductDetailRow }) {
             )}
           </Section>
 
-          {/* FAQ */}
+          {}
           <Section title="Frequently Asked Questions">
             <div className="space-y-3">
               {faqFields.map((field, idx) => (
@@ -1069,10 +1023,10 @@ export function ProductForm({ product }: { product?: ProductDetailRow }) {
           </Section>
         </div>
 
-        {/* ── Right sidebar ── */}
+        {}
         <div className="flex flex-col gap-4 lg:w-96 lg:shrink-0">
 
-          {/* Status */}
+          {}
           <Section title="Status">
             <Controller
               control={control}
@@ -1098,7 +1052,7 @@ export function ProductForm({ product }: { product?: ProductDetailRow }) {
             />
           </Section>
 
-          {/* Organization */}
+          {}
           <Section title="Organization">
             <div className="space-y-3">
               <div className="space-y-1.5">
@@ -1129,10 +1083,10 @@ export function ProductForm({ product }: { product?: ProductDetailRow }) {
             </div>
           </Section>
 
-          {/* SEO */}
+          {}
           <Section title="Search engine listing">
             <div className="space-y-3">
-              {/* Preview */}
+              {}
               <div className="rounded-lg bg-muted/40 p-3 text-xs">
                 <p className="text-[#1a0dab] dark:text-[#8ab4f8] font-medium truncate">
                   {metaTitle || title || "Product title"}
@@ -1195,7 +1149,7 @@ export function ProductForm({ product }: { product?: ProductDetailRow }) {
         </div>
       </div>
 
-      {/* ── Bottom save bar ── */}
+      {}
       <div className="mt-6 flex justify-end gap-2 border-t border-border pt-4">
         <Button type="button" variant="outline" onClick={() => router.push("/products")}>
           Discard

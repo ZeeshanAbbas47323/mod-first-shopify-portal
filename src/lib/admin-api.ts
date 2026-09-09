@@ -2,11 +2,6 @@ import { format } from "date-fns";
 import type { DateRange } from "react-day-picker";
 import { api } from "@/lib/api";
 
-/**
- * Users & Branches list APIs from the ModFirst collection.
- * Request shape: { page, limit, startDate, endDate, filters: {...} }
- * Response envelope: { success, status, message, payload: {...} }
- */
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 type Json = Record<string, any>;
@@ -79,13 +74,7 @@ interface ListParams {
   limit: number;
   dateRange?: DateRange;
   filters?: Json;
-  /**
-   * Free-text search. This is a top-level field on every list endpoint, not a
-   * filter — the backend `filters` schemas are strict and reject unknown keys,
-   * so putting it in `filters` fails validation and breaks the whole list.
-   */
   search?: string;
-  /** Backend sort key. Meaning is per-module; the caller supplies the mapping. */
   sortBy?: string;
   order?: "asc" | "desc";
 }
@@ -105,8 +94,6 @@ function buildBody({
   if (search) body.search = search;
   if (sortBy) {
     body.sortBy = sortBy;
-    // Modules disagree on the name of the direction field, so send both. Zod
-    // strips whichever one the endpoint does not declare.
     body.order = order ?? "asc";
     body.sortOrder = order ?? "asc";
   }
@@ -124,7 +111,6 @@ function parseList<T>(data: Json, limit: number): ListResult<T> {
   const rows: T[] = Array.isArray(p)
     ? p
     : p.rows ?? p.items ?? p.list ?? p.users ?? p.branches ?? p.orders ?? p.customers ?? p.products ?? p.data ?? [];
-  // API may put pagination at root level (data.pagination) or inside payload
   const pg: Json = data?.pagination ?? p.pagination ?? {};
   const total: number =
     pg.total ?? p.total ?? p.count ?? p.totalRecords ?? rows.length;
@@ -133,7 +119,6 @@ function parseList<T>(data: Json, limit: number): ListResult<T> {
   return { rows, total, totalPages };
 }
 
-// ─── Order types ──────────────────────────────────────────────────────────────
 
 export const ORDER_STATUSES = [
   "booked", "accepted", "design_review", "preparing",
@@ -162,7 +147,6 @@ export interface OrderRow {
   payment_status?: string;
   delivery_type?: string;
   channel?: string;
-  /** Real Prisma field name — the list used to look for `total`, which doesn't exist. */
   total_amount?: number | string;
   subtotal?: number | string;
   discount?: number | string;
@@ -175,13 +159,11 @@ export interface OrderRow {
   estimated_delivery_date?: string | null;
   pickupLoc?: { id?: number | string; name?: string; address?: string; city?: string } | null;
   shippingAddr?: { city?: string | null; state?: string | null; country?: string | null } | null;
-  /** When the order was placed — preferred over created_at for display. */
   order_date?: string;
   created_at?: string;
   [k: string]: unknown;
 }
 
-/** A single value (exact match) or several (match-any) — the backend's `enumFilter` accepts both. */
 type OneOrMany = string | string[];
 
 const hasValue = (v?: OneOrMany) => (Array.isArray(v) ? v.length > 0 : !!v);
@@ -196,9 +178,7 @@ export interface ListOrdersParams {
   channel?: OneOrMany;
   order_number?: string;
   email?: string;
-  /** Free-text search across order number, customer name, email and phone. */
   search?: string;
-  /** Anything else the list endpoint accepts, e.g. user_id. */
   filters?: Json;
 }
 
@@ -211,11 +191,7 @@ export async function listOrders(params: ListOrdersParams): Promise<ListResult<O
   if (hasValue(params.payment_status)) filters.payment_status = params.payment_status;
   if (hasValue(params.delivery_type)) filters.delivery_type = params.delivery_type;
   if (hasValue(params.channel)) filters.channel = params.channel;
-  // A free-text box has to cover order number, name, email and phone, so it
-  // goes to the endpoint's `search` rather than an exact-match column filter.
   if (params.search) body.search = params.search;
-  // Partial match — a bare string reaches Prisma as an exact comparison, so
-  // typing half an order number would find nothing.
   if (params.order_number) filters.order_number = { contains: params.order_number };
   if (params.email) filters.email = params.email;
   Object.assign(filters, params.filters ?? {});
@@ -224,7 +200,6 @@ export async function listOrders(params: ListOrdersParams): Promise<ListResult<O
   return parseList<OrderRow>(data, params.limit);
 }
 
-// ─── Order summary (stat strip) ────────────────────────────────────────────────
 
 export interface OrderSummaryMetric {
   current: number;
@@ -273,7 +248,6 @@ export async function getOrdersSummary(
   };
 }
 
-/** Artwork attached to an order line. */
 export interface OrderDesignUpload {
   id?: number | string;
   file_url?: string | null;
@@ -303,7 +277,6 @@ export interface OrderItem {
   product?: {
     id?: number | string;
     title?: string;
-    /** Real field name on ProductImage. Order lines carry just the one primary/first shot. */
     images?: { image_url?: string }[];
     [k: string]: unknown;
   };
@@ -326,17 +299,12 @@ function designRows(source: Json | undefined): Json[] {
   return rows;
 }
 
-/** Designs embedded whole (they carry the file), as opposed to join rows. */
 export function orderItemDesigns(item: OrderItem): OrderDesignUpload[] {
   return designRows(item as Json).filter(
     (d) => d.file_url || d.edit_url
   ) as OrderDesignUpload[];
 }
 
-/**
- * An order line usually links artwork through a join row that carries only
- * `design_upload_id`, so the file itself has to be fetched separately.
- */
 export function orderItemDesignIds(item: OrderItem): (number | string)[] {
   const ids: (number | string)[] = [];
   designRows(item as Json).forEach((d) => {
@@ -350,7 +318,6 @@ export function orderItemDesignIds(item: OrderItem): (number | string)[] {
   );
 }
 
-/** Every upload id referenced anywhere on the order. */
 export function orderDesignIds(order: OrderDetail): (number | string)[] {
   const ids = [
     ...orderItemDesignIds(order as unknown as OrderItem),
@@ -361,7 +328,6 @@ export function orderDesignIds(order: OrderDetail): (number | string)[] {
   );
 }
 
-/** Designs embedded on the order or its lines, de-duplicated. */
 export function orderDesigns(order: OrderDetail): OrderDesignUpload[] {
   const all = [
     ...(designRows(order as Json).filter((d) => d.file_url || d.edit_url) as OrderDesignUpload[]),
@@ -376,7 +342,6 @@ export function orderDesigns(order: OrderDetail): OrderDesignUpload[] {
   });
 }
 
-/** Fetch the referenced uploads; a missing one is skipped, not fatal. */
 export async function fetchOrderDesigns(
   ids: (number | string)[]
 ): Promise<Map<string, DesignUploadRow>> {
@@ -387,7 +352,6 @@ export async function fetchOrderDesigns(
         const row = await getDesignUpload(id);
         if (row) map.set(String(id), row);
       } catch {
-        // deleted or not visible — leave it out
       }
     })
   );
@@ -509,10 +473,6 @@ export async function printOrder(body: {
   return data;
 }
 
-/**
- * GET variant that streams the file straight back — used for "open in a new
- * tab", where the browser renders or downloads it itself.
- */
 export async function printOrderRaw(params: {
   order_code?: string;
   order_id?: number | string;
@@ -531,7 +491,6 @@ export async function listUsers(params: ListParams): Promise<ListResult<UserRow>
   return parseList<UserRow>(data, params.limit);
 }
 
-/** Single-user lookup — `users/list` has no `id` filter, this is the real way to fetch one. */
 export async function getUserById(id: number | string): Promise<UserRow | null> {
   const { data } = await api.get(`users/get/${id}`);
   return (data?.payload ?? data?.data ?? data ?? null) as UserRow | null;
@@ -644,10 +603,8 @@ export interface MenuRow {
   created_at?: string;
 }
 
-/** A menu with its sub-menus resolved, as rendered by the tree view. */
 export interface MenuTreeNode extends MenuRow {
   children: MenuTreeNode[];
-  /** Nesting level, 0 for top-level menus. */
   depth: number;
 }
 
@@ -663,10 +620,6 @@ export interface NavMenuNode extends MenuRow {
   children: NavMenuNode[];
 }
 
-/**
- * The signed-in user's dashboard navigation, already filtered to what their
- * role may view, with each node's permissions attached.
- */
 export async function fetchMyMenus(): Promise<NavMenuNode[]> {
   const { data } = await api.get("menus/my");
   const payload = data?.payload ?? data?.data ?? data ?? [];
@@ -691,14 +644,12 @@ export async function listMenus(params: ListParams): Promise<ListResult<MenuRow>
   return parseList<MenuRow>(data, params.limit);
 }
 
-/** Children can arrive under any of these keys depending on the endpoint. */
 function pickChildren(node: Json): Json[] {
   const kids =
     node?.children ?? node?.sub_menus ?? node?.subMenus ?? node?.submenus ?? node?.items;
   return Array.isArray(kids) ? kids : [];
 }
 
-/** Sort siblings by sort_order, falling back to name. */
 function sortSiblings<T extends MenuRow>(nodes: T[]): T[] {
   return [...nodes].sort((a, b) => {
     const ao = a.sort_order ?? Number.MAX_SAFE_INTEGER;
@@ -707,7 +658,6 @@ function sortSiblings<T extends MenuRow>(nodes: T[]): T[] {
   });
 }
 
-/** Attach depth to an already-nested payload. */
 function normalizeTree(nodes: Json[], depth = 0): MenuTreeNode[] {
   return sortSiblings(
     nodes.map((n) => ({
@@ -718,7 +668,6 @@ function normalizeTree(nodes: Json[], depth = 0): MenuTreeNode[] {
   );
 }
 
-/** Build a tree from a flat list using parent_id. Orphans are kept at the root. */
 export function buildMenuTree(rows: MenuRow[]): MenuTreeNode[] {
   const byId = new Map<string, MenuTreeNode>();
   rows.forEach((r) => byId.set(String(r.id), { ...r, depth: 0, children: [] }));
@@ -741,10 +690,6 @@ export function buildMenuTree(rows: MenuRow[]): MenuTreeNode[] {
   return applyDepth(roots, 0);
 }
 
-/**
- * Menus as a hierarchy. Uses POST menus/tree; if that endpoint is unavailable
- * or returns a flat list, the tree is assembled client-side from parent_id.
- */
 export async function fetchMenuTree(filters: Json = {}): Promise<MenuTreeNode[]> {
   const clean = Object.fromEntries(
     Object.entries(filters).filter(([, v]) => v !== undefined && v !== null && v !== "")
@@ -755,7 +700,6 @@ export async function fetchMenuTree(filters: Json = {}): Promise<MenuTreeNode[]>
     const p: Json = data?.payload ?? data?.data ?? data ?? {};
     const nodes: Json[] = Array.isArray(p) ? p : p.rows ?? p.menus ?? p.items ?? p.tree ?? [];
     if (nodes.length) {
-      // Nested payload → use as-is; flat payload → assemble from parent_id.
       const nested = nodes.some((n) => pickChildren(n).length > 0);
       return nested
         ? normalizeTree(nodes)
@@ -763,14 +707,12 @@ export async function fetchMenuTree(filters: Json = {}): Promise<MenuTreeNode[]>
     }
     if (Array.isArray(nodes)) return [];
   } catch {
-    // fall through to the flat list below
   }
 
   const flat = await listMenus({ page: 1, limit: 500, filters: clean });
   return buildMenuTree(flat.rows);
 }
 
-// ─── Generic delete ───────────────────────────────────────────────────────────
 
 export const DELETE_TABLES = [
   "websiteSetting", "user", "homeSection", "footerSection", "menu", "menuRight",
@@ -782,7 +724,6 @@ export const DELETE_TABLES = [
 export type DeleteTable = (typeof DELETE_TABLES)[number];
 
 export async function deleteRecord(table: DeleteTable, id: number | string): Promise<string> {
-  // The endpoint is DELETE, so the payload has to travel in axios' `data`.
   const { data } = await api.delete("common/delete", { data: { id, table } });
   return (data?.message as string) ?? "Deleted.";
 }
@@ -796,7 +737,6 @@ export async function updateRecordStatus(
   return (data?.message as string) ?? "Status updated.";
 }
 
-// ─── Generic sort order ────────────────────────────────────────────────────────
 
 export const SORT_ORDER_TABLES = [
   "menu", "category", "productCategory", "generalFaq", "productDescription",
@@ -813,7 +753,6 @@ export async function updateSortOrder(
   return (data?.message as string) ?? "Order updated.";
 }
 
-/** Create endpoints — return the API's success message. */
 async function createRecord(path: string, body: Json, fallback: string) {
   const { data } = await api.post(path, body);
   return (data?.message as string) ?? fallback;
@@ -828,7 +767,6 @@ export const createSize = (body: Json) =>
 export const createColor = (body: Json) =>
   createRecord("colors", body, "Color created.");
 
-/** Update endpoints — PUT :id, return the API's success message. */
 async function updateRecord(path: string, body: Json, fallback: string) {
   const { data } = await api.put(path, body);
   return (data?.message as string) ?? fallback;
@@ -841,7 +779,6 @@ export const unlockUser = async (id: number | string) => {
   return (data?.message as string) ?? "User unlocked.";
 };
 
-/** Invalidate the user's tokens so they are signed out everywhere. */
 export const terminateUserSession = async (id: number | string) => {
   const { data } = await api.put(`users/${id}/terminate-session`);
   return (data?.message as string) ?? "Sessions terminated.";
@@ -990,7 +927,6 @@ export async function listMenuRights(
   return parseList<MenuRightRow>(data, params.limit);
 }
 
-// ─── Products ────────────────────────────────────────────────────────────────
 
 export const PRODUCT_STATUSES = ["published", "draft", "archived"] as const;
 export const WEIGHT_UNITS = ["kg", "g", "lb", "oz"] as const;
@@ -1073,7 +1009,6 @@ export async function listProducts(
   const rawRows: Json[] = Array.isArray(payload)
     ? payload
     : payload.rows ?? payload.items ?? payload.products ?? payload.list ?? payload.data ?? [];
-  // Normalize API field name differences (name→title, base_price→price, etc.)
   const rows = rawRows.map((r): ProductRow => {
     const variants = (Array.isArray(r.variants) ? r.variants : []) as Json[];
     const variantsCount =
@@ -1081,12 +1016,6 @@ export async function listProducts(
         | number
         | undefined;
 
-    // Stock is never a plain `quantity` column — it lives on the separate
-    // Inventory row, one-to-one per variant (`variant.inventory.quantity`) or,
-    // for a product with no variants, one product-level row
-    // (`product.inventory[0].quantity`). Reading `v.quantity` directly (as this
-    // used to) is always undefined, which is why every variant product showed
-    // "Out of stock" regardless of its real stock.
     const variantQty = variants.length
       ? variants.reduce((sum, v) => {
           const inv = v.inventory as Json | null | undefined;
@@ -1130,7 +1059,6 @@ export async function listProducts(
   return { rows, total, totalPages };
 }
 
-/** Pull an id out of either `color_id` or a nested `color: { id }`. */
 function relationId(row: Json, key: "color" | "size"): number | null {
   const direct = row[`${key}_id`];
   if (direct != null) return Number(direct);
@@ -1141,7 +1069,6 @@ function relationId(row: Json, key: "color" | "size"): number | null {
   return null;
 }
 
-/** Variants can come back under a few different keys and shapes. */
 function normalizeVariants(raw: Json): ProductVariantRow[] {
   const list = (raw.variants ??
     raw.productVariants ??
@@ -1166,7 +1093,6 @@ function normalizeVariants(raw: Json): ProductVariantRow[] {
 export async function getProduct(id: number | string): Promise<ProductDetailRow> {
   const { data } = await api.get(`products/get/${id}`);
   const raw = data?.payload ?? data?.data ?? data;
-  // Normalize API field names to match the form / ProductDetailRow interface
   return {
     ...raw,
     title: raw.title ?? raw.name ?? "",
@@ -1174,7 +1100,6 @@ export async function getProduct(id: number | string): Promise<ProductDetailRow>
     compare_at_price: raw.compare_at_price ?? raw.sale_price ?? null,
     cost_per_item: raw.cost_per_item ?? raw.cost_price ?? null,
     meta_description: raw.meta_description ?? raw.meta_desc ?? null,
-    // vendor may come back as an object { id, name } — pull out the id
     vendor: typeof raw.vendor === "object" && raw.vendor !== null
       ? String((raw.vendor as { id?: number | string }).id ?? "")
       : raw.vendor ?? null,
@@ -1182,20 +1107,16 @@ export async function getProduct(id: number | string): Promise<ProductDetailRow>
       ?? (typeof raw.vendor === "object" && raw.vendor !== null
         ? (raw.vendor as { id?: number | string }).id ?? null
         : null),
-    // category may come back as an object — keep category_id canonical
     category_id: raw.category_id
       ?? (typeof raw.category === "object" && raw.category !== null
         ? (raw.category as { id?: number | string }).id ?? null
         : null),
-    // images: normalize image_url → url for ProductImageRow
     images: Array.isArray(raw.images)
       ? raw.images.map((img: Record<string, unknown>) => ({
           ...img,
           url: (img.url ?? img.image_url ?? "") as string,
         }))
       : [],
-    // variants: the id must survive so edits PUT instead of creating
-    // duplicates, and colour/size may arrive as nested objects.
     variants: normalizeVariants(raw),
   } as ProductDetailRow;
 }
@@ -1212,7 +1133,6 @@ export async function createProduct(
 export const updateProduct = (id: number | string, body: Json) =>
   updateRecord(`products/${id}`, body, "Product updated.");
 
-// ─── Vendors ─────────────────────────────────────────────────────────────────
 
 export interface VendorRow {
   id: number | string;
@@ -1228,7 +1148,6 @@ export async function fetchAllVendors(): Promise<VendorRow[]> {
   return result.rows;
 }
 
-// ─── Product Categories ───────────────────────────────────────────────────────
 
 export interface ProductCategoryRow {
   id: number | string;
@@ -1308,11 +1227,6 @@ const EMPTY_REVIEWS_SUMMARY: ReviewsSummary = {
   verified_reviews_count: 0, recommendation_percentage: 0,
 };
 
-/**
- * `reviews/list` already computes this alongside the rows (rating
- * distribution, verified count, …) — asked for with `limit: 1` since only
- * the summary is needed here, not another copy of the page's own rows.
- */
 export async function getReviewsSummary(params: {
   dateRange?: DateRange;
   filters?: Json;
@@ -1330,10 +1244,6 @@ export async function getReviewById(id: number | string): Promise<ReviewRow> {
 export const updateReview = (id: number | string, body: Json) =>
   updateRecord(`reviews/${id}`, body, "Review updated.");
 
-// ─── Dashboard ────────────────────────────────────────────────────────────────
-// Field names below are kept identical to `dashboardService.ts`'s real payload
-// shape (verified against the backend, not guessed) so this layer is a plain
-// pass-through/rename, never a source of drift between the two sides.
 
 export const DASHBOARD_PERIODS = [
   "today",
@@ -1354,7 +1264,6 @@ export interface DashboardBody {
   branch_id?: number;
 }
 
-/** A headline KPI: this period's value vs. the immediately preceding period of equal length. */
 export interface DashboardMetric {
   current: number;
   previous: number;
@@ -1379,7 +1288,6 @@ export interface TrendPoint {
   signups?: number;
 }
 
-/** One slice of an order-status / sales-channel / payment-method donut. */
 export interface BreakdownItem {
   label: string;
   count: number;
@@ -1430,7 +1338,6 @@ function dashParse<T>(data: Json): T {
 
 const emptyMetric: DashboardMetric = { current: 0, previous: 0, change_percent: null };
 
-/** Store overview KPIs: revenue, orders, new customers, AOV + a few live counters. */
 export async function getDashboardOverview(body: DashboardBody = {}): Promise<DashboardOverview> {
   const { data } = await api.post("dashboard/overview", body);
   const p = dashParse<Json>(data) ?? {};
@@ -1507,7 +1414,6 @@ export async function getRecentOrders(limit = 10): Promise<RecentOrder[]> {
   }));
 }
 
-/** threshold defaults to 5 to match the "low stock" definition used by the overview counter. */
 export async function getLowStockAlerts(limit = 10, threshold = 5): Promise<LowStockItem[]> {
   const { data } = await api.post("dashboard/low-stock-alerts", { limit, threshold });
   const rows = dashParse<Json[]>(data) ?? [];
@@ -1534,7 +1440,6 @@ export async function getPendingActions(): Promise<PendingActions> {
   };
 }
 
-// ─── Reports ──────────────────────────────────────────────────────────────────
 
 export const SALES_GROUP_BY = ["day", "week", "month", "product", "category"] as const;
 export type SalesGroupBy = (typeof SALES_GROUP_BY)[number];
@@ -1546,7 +1451,6 @@ export const ORDER_STATUSES_REPORT = [
 
 export const PAYMENT_STATUSES_REPORT = ["pending","paid","partially_paid","refunded","failed"] as const;
 
-// Sales
 export interface SalesDataRow {
   date?: string; label?: string; period?: string;
   orders?: number; subtotal?: number; discount?: number;
@@ -1569,7 +1473,6 @@ export async function getSalesReport(body: {
   return { data: rows, summary };
 }
 
-// Orders
 export interface OrderReportRow {
   id: number | string; order_number?: string;
   customer?: string | { full_name?: string; name?: string } | null;
@@ -1593,7 +1496,6 @@ export async function getOrderReport(body: {
   const { data } = await api.post("reports/orders", body);
   const p: Json = data?.payload ?? data?.data ?? data ?? {};
   const rawRows: Json[] = Array.isArray(p) ? p : p.rows ?? p.orders ?? p.data ?? [];
-  // Backend returns full_name/email/*_amount/*_fee/order_date — normalize to the shape this page renders.
   const rows: OrderReportRow[] = rawRows.map((r) => ({
     ...r,
     id: r.id,
@@ -1616,7 +1518,6 @@ export async function getOrderReport(body: {
   return { rows, summary, total, totalPages };
 }
 
-// Inventory
 export interface InventoryReportRow {
   id: number | string; name?: string; title?: string; sku?: string | null;
   category?: string | null; quantity?: number; cost_price?: number | null;
@@ -1634,7 +1535,6 @@ export async function getInventoryReport(body?: {
   const { data } = await api.post("reports/inventory", body ?? {});
   const p: Json = data?.payload ?? data?.data ?? data ?? {};
   const rawRows: Json[] = Array.isArray(p) ? p : p.items ?? p.rows ?? p.data ?? [];
-  // Backend rows come back as product_id/product_name — normalize to id/name for this page.
   const rows: InventoryReportRow[] = rawRows.map((r) => ({
     ...r,
     id: r.id ?? r.product_id,
@@ -1650,7 +1550,6 @@ export async function getInventoryReport(body?: {
   return { rows, summary };
 }
 
-// Customers
 export interface CustomerReportRow {
   id: number | string; full_name?: string; name?: string; email?: string;
   total_orders?: number; total_spent?: number; avg_order_value?: number;
@@ -1665,7 +1564,6 @@ export async function getCustomerReport(body?: {
   return rows.map((r) => ({ ...r, id: r.id ?? r.user_id })) as CustomerReportRow[];
 }
 
-// Product Performance
 export interface ProductPerfRow {
   id: number | string; name?: string; title?: string; category?: string | null;
   units_sold?: number; revenue?: number; cost?: number;
@@ -1678,7 +1576,6 @@ export async function getProductPerformanceReport(body: {
   const { data } = await api.post("reports/product-performance", body);
   const p: Json = data?.payload ?? data?.data ?? data ?? {};
   const rows = (Array.isArray(p) ? p : p.products ?? p.rows ?? p.data ?? []) as Json[];
-  // Backend returns product_id/product_name/margin_percent — normalize to id/name/margin.
   return rows.map((r) => ({
     ...r,
     id: r.id ?? r.product_id,
@@ -1687,7 +1584,6 @@ export async function getProductPerformanceReport(body: {
   })) as ProductPerfRow[];
 }
 
-// Financial
 export interface FinancialBreakdownRow {
   method?: string; payment_method?: string;
   transactions?: number; amount?: number; gateway_fee?: number; net?: number;
@@ -1708,8 +1604,6 @@ export async function getFinancialReport(body: {
 }): Promise<FinancialReport> {
   const { data } = await api.post("reports/financial", body);
   const p: Json = data?.payload ?? data?.data ?? data ?? {};
-  // Backend returns a flat summary (gross_revenue, discounts_given, ...) plus a
-  // by_payment_method breakdown of transactions/amount/gateway_fee — normalize both.
   const rawBreakdown = (Array.isArray(p) ? [] : p.by_payment_method ?? p.breakdown ?? p.rows ?? []) as Json[];
   const breakdown: FinancialBreakdownRow[] = rawBreakdown.map((r) => ({
     method: r.method ?? r.payment_method,
@@ -1733,7 +1627,6 @@ export async function getFinancialReport(body: {
   return { breakdown, totals };
 }
 
-// Coupon Usage
 export interface CouponUsageRow {
   coupon_id?: number | string; id?: number | string;
   code?: string; name?: string;
@@ -1745,11 +1638,9 @@ export async function getCouponUsageReport(body?: {
   const { data } = await api.post("reports/coupon-usage", body ?? {});
   const p: Json = data?.payload ?? data?.data ?? data ?? {};
   const rows = (Array.isArray(p) ? p : p.coupons ?? p.rows ?? p.data ?? []) as Json[];
-  // Backend field is total_discount_given — normalize to total_discount.
   return rows.map((r) => ({ ...r, total_discount: r.total_discount ?? r.total_discount_given })) as CouponUsageRow[];
 }
 
-// ─── Global Search (Admin) ────────────────────────────────────────────────────
 
 export type AdminSearchType = "products" | "orders" | "users" | "vendors" | "coupons";
 
@@ -1790,22 +1681,19 @@ export async function globalAdminSearch(
   return (p.results ?? p) as AdminSearchResults;
 }
 
-// ─── Website Settings ─────────────────────────────────────────────────────────
 
 export interface WebsiteSettingRow {
   id?: number | string;
-  // Required on create
   site_name?: string;
   primary_color?: string;
   secondary_color?: string;
   font_primary?: string;
   font_heading?: string;
-  // Optional
   site_tagline?: string | null;
   site_description?: string | null;
-  logo_url?: string | null;             // generic fallback logo
-  logo_white_url?: string | null;       // used in EMAILS (dark header band)
-  logo_black_url?: string | null;       // used on RECEIPTS and PRINTS (white paper)
+  logo_url?: string | null;             
+  logo_white_url?: string | null;       
+  logo_black_url?: string | null;       
   favicon_url?: string | null;
   footer_logo_url?: string | null;
   accent_color?: string | null;
@@ -1828,13 +1716,13 @@ export interface WebsiteSettingRow {
   pinterest_url?: string | null;
   playstore_url?: string | null;
   appstore_url?: string | null;
-  currency?: string;              // default USD
-  currency_symbol?: string;       // default $
+  currency?: string;              
+  currency_symbol?: string;       
   tax_percentage?: number | null;
   default_shipping_fee?: number | null;
-  free_shipping_threshold?: number | null;   // display only, not applied at checkout
+  free_shipping_threshold?: number | null;   
   min_order_amount?: number | null;
-  first_order_discount_enabled?: boolean;    // default false
+  first_order_discount_enabled?: boolean;    
   first_order_discount_type?: "percentage" | "fixed_amount" | string | null;
   first_order_discount_value?: number | null;
   first_order_max_discount?: number | null;
@@ -1842,11 +1730,10 @@ export interface WebsiteSettingRow {
   meta_description?: string | null;
   meta_keywords?: string | null;
   og_image_url?: string | null;
-  order_prefix?: string;          // string, min 1, max 10
-  is_active?: boolean;            // default true
+  order_prefix?: string;          
+  is_active?: boolean;            
 }
 
-/** Fetch website settings via list endpoint. */
 export async function fetchWebsiteSettings(): Promise<WebsiteSettingRow | null> {
   const { data } = await api.post("website-settings/list", { page: 1, limit: 1 });
   const p: Json = data?.payload ?? data?.data ?? data ?? {};
@@ -1869,7 +1756,6 @@ export async function updateWebsiteSettings(
   return (data?.message as string) ?? "Settings saved.";
 }
 
-// ─── Shipping / Shipments ─────────────────────────────────────────────────────
 
 export const SHIPMENT_STATUSES = [
   "PENDING", "LABEL_CREATED", "PICKUP_SCHEDULED", "PICKED_UP", "SHIPPED",
@@ -2007,7 +1893,6 @@ export async function syncShipmentPickup(body: {
   return (data?.message as string) ?? "Pickup synced.";
 }
 
-// ─── Couriers ─────────────────────────────────────────────────────────────────
 
 export interface CourierRow {
   id: number | string;
@@ -2044,13 +1929,10 @@ export async function updateCourier(id: number | string, body: Partial<CourierRo
   return (data?.message as string) ?? "Courier updated.";
 }
 
-// There is no DELETE /couriers/:id upstream — every soft delete goes through
-// the shared common/delete endpoint.
 export async function deleteCourier(id: number | string): Promise<string> {
   return deleteRecord("courier", id);
 }
 
-// ─── Popups ───────────────────────────────────────────────────────────────────
 
 export const POPUP_TYPES = ["announcement", "coupon", "newsletter"] as const;
 export type PopupType = (typeof POPUP_TYPES)[number];
@@ -2095,7 +1977,6 @@ export async function deletePopup(id: number | string): Promise<string> {
   return deleteRecord("popup", id);
 }
 
-// ─── Coupons ─────────────────────────────────────────────────────────────────
 
 export const COUPON_TYPES = ["percentage", "fixed_amount", "free_shipping"] as const;
 export type CouponType = (typeof COUPON_TYPES)[number];
@@ -2170,7 +2051,6 @@ export async function validateCoupon(body: {
   return (data?.payload ?? data?.data ?? data) as Json;
 }
 
-// ─── Inventory ───────────────────────────────────────────────────────────────
 
 export const INVENTORY_REASONS = [
   "STOCK_IN", "STOCK_OUT", "MANUAL_ADJUSTMENT",
@@ -2248,7 +2128,6 @@ export async function listInventoryLogs(params: ListParams): Promise<ListResult<
   return parseList<InventoryLogRow>(data, params.limit);
 }
 
-// ─── Pickup Locations ─────────────────────────────────────────────────────────
 
 export interface PickupLocationRow {
   id: number | string;
@@ -2284,14 +2163,13 @@ export async function deletePickupLocation(id: number | string): Promise<string>
   return deleteRecord("pickupLocation", id);
 }
 
-// ─── Footer Sections ──────────────────────────────────────────────────────────
 
 export interface FooterLinkRow {
   id?: number | string;
   name: string;
   url: string;
-  type?: string;      // url / route / email / phone
-  target?: string;    // _self / _blank
+  type?: string;      
+  target?: string;    
   icon?: string | null;
   badge?: string | null;
   sort_order?: number;
@@ -2340,7 +2218,6 @@ export async function manageFooterLinks(
   return (data?.message as string) ?? "Links saved.";
 }
 
-// ─── Content Pages ────────────────────────────────────────────────────────────
 
 export const CONTENT_TYPES = [
   "page", "blog_post", "faq", "policy", "privacy", "terms",
@@ -2432,7 +2309,6 @@ export const createContentPage = (body: ContentPageInput) =>
 export const updateContentPage = (id: number | string, body: Partial<ContentPageInput>) =>
   updateRecord(`content-pages/${id}`, body, "Content page updated.");
 
-// ─── Order Comments ───────────────────────────────────────────────────────────
 
 export const ORDER_COMMENT_TYPES = [
   "note", "status_update", "customer_message", "internal_flag",
@@ -2472,7 +2348,6 @@ export interface OrderCommentInput {
   is_active?: boolean;
 }
 
-/** The timeline for one order, oldest first. */
 export async function listOrderComments(
   orderId: number | string
 ): Promise<OrderCommentRow[]> {
@@ -2508,7 +2383,6 @@ export async function updateOrderComment(
   return (data?.message as string) ?? "Comment updated.";
 }
 
-// ─── Payments ─────────────────────────────────────────────────────────────────
 
 export const PAYMENT_METHODS = [
   "stripe", "paypal", "cash", "bank_transfer",
@@ -2542,7 +2416,6 @@ export async function listPayments(params: ListParams): Promise<ListResult<Payme
   return parseList<PaymentRow>(data, params.limit);
 }
 
-/** Every payment recorded against one order. */
 export async function listOrderPayments(
   orderId: number | string
 ): Promise<PaymentRow[]> {
@@ -2555,7 +2428,6 @@ export async function listPaymentLogs(params: ListParams): Promise<ListResult<Js
   return parseList<Json>(data, params.limit);
 }
 
-// ─── Payment Refunds ──────────────────────────────────────────────────────────
 
 export interface RefundRow {
   id: number | string;
@@ -2600,14 +2472,12 @@ export async function cancelRefund(id: number | string): Promise<string> {
   return (data?.message as string) ?? "Refund cancelled.";
 }
 
-/** Refunds that still count against a payment's balance. */
 export function refundedTotal(refunds: RefundRow[]): number {
   return refunds
     .filter((r) => !["cancelled", "canceled", "failed"].includes(String(r.status ?? "").toLowerCase()))
     .reduce((sum, r) => sum + Number(r.amount ?? 0), 0);
 }
 
-// ─── Home Sections (storefront theme) ─────────────────────────────────────────
 
 export interface HomeSectionItemRow {
   id: number | string;
@@ -2659,7 +2529,6 @@ export interface HomeSectionInput {
   items?: Partial<HomeSectionItemRow>[];
 }
 
-/** Items are managed in one batched call, each tagged with what to do. */
 export type HomeSectionItemAction =
   | ({ _action: "add" } & Partial<HomeSectionItemRow>)
   | ({ _action: "update"; id: number | string } & Partial<HomeSectionItemRow>)
@@ -2680,7 +2549,6 @@ export async function listHomeSections(
   return { ...result, rows: result.rows.map(normalizeSection) };
 }
 
-/** Every section with its items, ordered — used by the theme editor. */
 export async function fetchAllHomeSections(): Promise<HomeSectionRow[]> {
   const res = await listHomeSections({ page: 1, limit: 100 });
   return [...res.rows].sort(
@@ -2714,7 +2582,6 @@ export async function manageHomeSectionItems(
   return (data?.message as string) ?? "Items updated.";
 }
 
-// ─── User PIN / Screen lock ───────────────────────────────────────────────────
 
 export interface PinStatus {
   is_pin_set?: boolean;
@@ -2724,7 +2591,6 @@ export interface PinStatus {
   [k: string]: unknown;
 }
 
-/** Whether the signed-in user has a screen-lock PIN, and its auto-lock delay. */
 export async function getPinStatus(): Promise<PinStatus> {
   const { data } = await api.get("users/pin/status");
   const p: Json = data?.payload ?? data?.data ?? data ?? {};
@@ -2740,7 +2606,6 @@ export async function setPin(pin: string, confirmPin: string): Promise<string> {
   return (data?.message as string) ?? "PIN set.";
 }
 
-/** Returns true when the PIN matches — used by the lock screen. */
 export async function verifyPin(pin: string): Promise<boolean> {
   const { data } = await api.post("users/pin/verify", { pin });
   const p: Json = data?.payload ?? data?.data ?? data ?? {};
@@ -2768,7 +2633,6 @@ export async function updateAutoLock(minutes: number): Promise<string> {
   return (data?.message as string) ?? "Auto-lock updated.";
 }
 
-/** Admin action — set a new PIN for another user who has been locked out. */
 export async function resetUserPin(body: {
   userId: number | string;
   newPin: string;
@@ -2778,7 +2642,6 @@ export async function resetUserPin(body: {
   return (data?.message as string) ?? "PIN reset.";
 }
 
-// ─── Wishlists ────────────────────────────────────────────────────────────────
 
 export interface WishlistRow {
   id: number | string;
@@ -2810,7 +2673,6 @@ export async function getWishlistById(id: number | string): Promise<WishlistRow>
   return (data?.payload ?? data?.data ?? data) as WishlistRow;
 }
 
-/** Saves the product for the signed-in user. */
 export async function createWishlist(body: {
   product_id: number | string;
   is_active?: boolean;
@@ -2819,7 +2681,6 @@ export async function createWishlist(body: {
   return (data?.message as string) ?? "Added to wishlist.";
 }
 
-// ─── Single-record fetches filling out earlier modules ────────────────────────
 
 export async function getFooterSection(id: number | string): Promise<FooterSectionRow> {
   const { data } = await api.get(`footer-sections/get/${id}`);
@@ -2836,7 +2697,6 @@ export async function getSubscriberById(id: number | string): Promise<Subscriber
   return (data?.payload ?? data?.data ?? data) as SubscriberRow;
 }
 
-// ─── Branch membership ────────────────────────────────────────────────────────
 
 export async function assignUserToBranch(body: {
   user_id: number | string;
@@ -2856,7 +2716,6 @@ export async function removeUserFromBranch(body: {
   return (data?.message as string) ?? "User removed from branch.";
 }
 
-// ─── Discount Tiers ───────────────────────────────────────────────────────────
 
 export const DISCOUNT_TIER_TYPES = ["percentage", "fixed_amount"] as const;
 export type DiscountTierType = (typeof DISCOUNT_TIER_TYPES)[number];
@@ -2911,7 +2770,6 @@ export async function getDiscountTiersSummary(params: {
   return (dashParse<Json>(data) as DiscountTiersSummary) ?? EMPTY_DISCOUNT_TIERS_SUMMARY;
 }
 
-/** Every tier, for the pickers that attach a tier to a customer. */
 export async function fetchAllDiscountTiers(): Promise<DiscountTierRow[]> {
   const res = await listDiscountTiers({ page: 1, limit: 100 });
   return res.rows;
@@ -2930,7 +2788,6 @@ export const updateDiscountTier = (
   body: Partial<DiscountTierInput>
 ) => updateRecord(`discount-tiers/${id}`, body, "Discount tier updated.");
 
-// ─── API Users (storefront credentials) ───────────────────────────────────────
 
 export interface ApiUserRow {
   id: number | string;
@@ -2947,7 +2804,6 @@ export interface ApiUserRow {
   [k: string]: unknown;
 }
 
-/** Returned once on create and regenerate — never retrievable again. */
 export interface ApiCredentials {
   api_key?: string;
   api_password?: string;
@@ -3008,13 +2864,11 @@ export async function regenerateApiCredentials(
   };
 }
 
-/** All stores, for the API-user store picker. */
 export async function fetchAllWebsiteSettings(): Promise<WebsiteSettingRow[]> {
   const { data } = await api.post("website-settings/list", { page: 1, limit: 100 });
   return parseList<WebsiteSettingRow>(data, 100).rows;
 }
 
-// ─── Contact form submissions ─────────────────────────────────────────────────
 
 export const INQUIRY_STATUSES = ["new", "in_progress", "resolved", "archived"] as const;
 export type InquiryStatus = (typeof INQUIRY_STATUSES)[number];
@@ -3097,7 +2951,6 @@ export async function updateContactSubmission(
   return (data?.message as string) ?? "Submission updated.";
 }
 
-// ─── Net 30 applications ──────────────────────────────────────────────────────
 
 export interface Net30ApplicationRow {
   id: number | string;
@@ -3165,7 +3018,6 @@ export async function updateNet30Application(
   return (data?.message as string) ?? "Application updated.";
 }
 
-// ─── Product images ───────────────────────────────────────────────────────────
 
 export interface ProductImageDetailRow {
   id: number | string;
@@ -3219,7 +3071,6 @@ export const updateProductImage = (
   body: Partial<ProductImageDetailRow>
 ) => updateRecord(`product-images/${id}`, body, "Image updated.");
 
-// ─── Product descriptions ─────────────────────────────────────────────────────
 
 export interface ProductDescriptionRow {
   id: number | string;
@@ -3275,7 +3126,6 @@ export const updateProductDescription = (
   body: Partial<ProductDescriptionRow>
 ) => updateRecord(`product-descriptions/${id}`, body, "Description updated.");
 
-// ─── Product FAQs ─────────────────────────────────────────────────────────────
 
 export interface ProductFaqDetailRow {
   id: number | string;
@@ -3326,7 +3176,6 @@ export const updateProductFaq = (
   body: Partial<ProductFaqDetailRow>
 ) => updateRecord(`product-faqs/${id}`, body, "FAQ updated.");
 
-// ─── Product variants, scan and sale pricing ──────────────────────────────────
 
 export async function listProductVariants(
   params: ListParams
@@ -3342,7 +3191,6 @@ export async function getProductVariant(
   return (data?.payload ?? data?.data ?? data) as ProductVariantRow;
 }
 
-/** Barcode/SKU lookup — tries the variant SKU first, then the product SKU. */
 export async function scanProduct(body: {
   code?: string;
   product_id?: number | string;
@@ -3371,7 +3219,6 @@ export async function removeSale(body: {
   return (data?.message as string) ?? "Sale removed.";
 }
 
-// ─── Order operations ─────────────────────────────────────────────────────────
 
 export async function assignOrderCourier(
   id: number | string,
@@ -3412,7 +3259,6 @@ export interface BulkStatusResult {
   message: string;
 }
 
-/** Moves many orders at once; illegal transitions come back in `failed`. */
 export async function bulkUpdateOrderStatus(body: {
   order_ids: (number | string)[];
   status: string;
@@ -3427,7 +3273,6 @@ export async function bulkUpdateOrderStatus(body: {
   };
 }
 
-// ─── Activity log ─────────────────────────────────────────────────────────────
 
 export interface ActivityLogRow {
   id: number | string;
@@ -3454,7 +3299,6 @@ export async function getActivityLog(id: number | string): Promise<ActivityLogRo
   return (data?.payload ?? data?.data ?? data) as ActivityLogRow;
 }
 
-// ─── Addresses & cart (customer records) ──────────────────────────────────────
 
 export interface AddressRow {
   id: number | string;
@@ -3474,7 +3318,6 @@ export interface AddressRow {
   [k: string]: unknown;
 }
 
-/** Admin-wide address list (the plain list endpoint is customer-scoped). */
 export async function listAddresses(params: ListParams): Promise<ListResult<AddressRow>> {
   const { data } = await api.post("addresses/admin/list", buildBody(params));
   return parseList<AddressRow>(data, params.limit);
@@ -3497,13 +3340,6 @@ export interface CartItemRow {
   [k: string]: unknown;
 }
 
-/**
- * Staff view of one customer's cart (Customers → detail). `cart-items/list` is
- * customer-only — it needs storefront API-key headers this client never sends
- * and always scopes to the caller's own cart — so this goes through the admin
- * endpoint instead, with `user_id` required and sent at the top level rather
- * than inside `filters`.
- */
 export async function listCartItems(
   params: ListParams & { userId: number | string }
 ): Promise<ListResult<CartItemRow>> {
@@ -3517,7 +3353,6 @@ export async function getCartItem(id: number | string): Promise<CartItemRow> {
   return (data?.payload ?? data?.data ?? data) as CartItemRow;
 }
 
-// ─── Design uploads ───────────────────────────────────────────────────────────
 
 export interface DesignUploadRow {
   id: number | string;
@@ -3539,7 +3374,6 @@ export async function listDesignUploads(
   params: ListParams & { order_id?: number }
 ): Promise<ListResult<DesignUploadRow>> {
   const body = buildBody(params);
-  // Resolved through the OrderItemDesign join, so it rides at the top level.
   if (params.order_id) body.order_id = params.order_id;
   const { data } = await api.post("design-uploads/list", body);
   return parseList<DesignUploadRow>(data, params.limit);
@@ -3556,7 +3390,6 @@ export const createDesignUpload = (body: Json) =>
 export const updateDesignUpload = (id: number | string, body: Json) =>
   updateRecord(`design-uploads/${id}`, body, "Design updated.");
 
-// ─── Duration report ──────────────────────────────────────────────────────────
 
 export interface DurationReport {
   orders: Json[];
@@ -3584,7 +3417,6 @@ export async function getDurationReport(body: {
   };
 }
 
-/** Excel export — returns the .xlsx blob. */
 export async function exportDurationReport(body: {
   period?: DashboardPeriod;
   startDate?: string;
@@ -3599,7 +3431,6 @@ export async function exportDurationReport(body: {
   return data as Blob;
 }
 
-// ─── Remaining single-record fetches ──────────────────────────────────────────
 
 export async function getMenuById(id: number | string): Promise<MenuRow> {
   const { data } = await api.get(`menus/get/${id}`);
@@ -3655,7 +3486,6 @@ export async function getProductCategoryById(
   return (data?.payload ?? data?.data ?? data) as ProductCategoryRow;
 }
 
-/** The store settings for the signed-in admin. */
 export async function getCurrentWebsiteSettings(): Promise<WebsiteSettingRow> {
   const { data } = await api.get("website-settings/current");
   return (data?.payload ?? data?.data ?? data) as WebsiteSettingRow;
@@ -3678,7 +3508,6 @@ export async function createCheckoutSession(body: Json): Promise<Json> {
   return (data?.payload ?? data?.data ?? data) as Json;
 }
 
-// ─── Draft orders ─────────────────────────────────────────────────────────────
 
 export const DRAFT_STATUSES = [
   "open", "invoice_sent", "completed", "cancelled",
@@ -3728,10 +3557,8 @@ export interface DraftOrderRow {
   full_name?: string | null;
   shipping_address_id?: number | null;
   billing_address_id?: number | null;
-  /** Real include key is `shippingAddr` — matches the Order model's own relation name. */
   shippingAddr?: { city?: string | null; state?: string | null; country?: string | null } | null;
   pickup_location_id?: number | null;
-  /** Real include key is `pickupLoc` — matches the Order model's own relation name. */
   pickupLoc?: { id?: number | string; name?: string; address?: string; city?: string } | null;
   coupon_code?: string | null;
   manual_discount_type?: "percentage" | "fixed_amount" | null;
@@ -3805,13 +3632,11 @@ export async function getDraftOrder(id: number | string): Promise<DraftOrderRow>
   return draftUnwrap(data);
 }
 
-/** Creating from the dashboard makes it a point_of_sale draft. */
 export async function createDraftOrder(body: DraftOrderInput): Promise<DraftOrderRow> {
   const { data } = await api.post("draft-orders/", body);
   return draftUnwrap(data);
 }
 
-/** Sending `items` replaces the whole line set; omit it to leave lines alone. */
 export async function updateDraftOrder(
   id: number | string,
   body: Partial<DraftOrderInput>
@@ -3863,7 +3688,6 @@ export const DRAFT_PAYMENT_OPTIONS = [
 ] as const;
 export type DraftPaymentOption = (typeof DRAFT_PAYMENT_OPTIONS)[number];
 
-/** Each option only accepts its own set of methods — a mismatch is a 422. */
 export const DRAFT_PAYMENT_METHODS: Record<DraftPaymentOption, string[]> = {
   send_payment_link: ["stripe", "paypal", "stripe_and_cash", "paypal_and_cash"],
   payment_screen: ["stripe", "paypal", "stripe_and_cash", "paypal_and_cash"],
@@ -3890,11 +3714,6 @@ export interface CompleteDraftResult {
   [k: string]: unknown;
 }
 
-/**
- * Turns the draft into a real order and settles payment in one call. A payment
- * failure still returns the created order, so the caller must not retry
- * completing the same draft.
- */
 export async function completeDraftOrder(
   id: number | string,
   body: {
@@ -3933,7 +3752,6 @@ export interface AddressInput {
   is_default?: boolean;
   type?: "shipping" | "billing";
   is_active?: boolean;
-  /** Not documented, but sent so the API can attach it to the customer. */
   user_id?: number | string;
 }
 
@@ -3950,11 +3768,6 @@ export async function updateAddress(
   return (data?.message as string) ?? "Address updated.";
 }
 
-/**
- * A customer's saved addresses. The admin list has no user_id filter, so the
- * customer's email is used and the results are narrowed by user_id when the
- * API happens to return it.
- */
 export async function listCustomerAddresses(customer: {
   id?: number | string | null;
   email?: string | null;
@@ -3972,7 +3785,6 @@ export async function listCustomerAddresses(customer: {
   return owned.length ? owned : rows;
 }
 
-// ─── Notifications ────────────────────────────────────────────────────────────
 
 export interface NotificationRow {
   id: number;
@@ -3993,7 +3805,6 @@ export interface NotificationListResult {
   unreadCount: number;
 }
 
-/** The signed-in user's own notifications. */
 export async function listMyNotifications(params: {
   page: number;
   limit: number;
@@ -4032,7 +3843,6 @@ export async function deleteNotification(id: number | string): Promise<void> {
   await api.delete(`notifications/${id}`);
 }
 
-/** Staff roles a broadcast can target — matches the API's own enum. */
 export const NOTIFIABLE_ROLES: Record<string, string> = {
   super_admin: "Super admin",
   admin: "Admin",
@@ -4050,7 +3860,6 @@ export interface AdminNotificationRow extends NotificationRow {
   recipient?: { id: number; full_name: string; role: string } | null;
 }
 
-/** Every notification sent, across every recipient — Settings → Notifications. */
 export async function listNotifications(params: {
   page: number;
   limit: number;
@@ -4071,7 +3880,6 @@ export async function listNotifications(params: {
   };
 }
 
-/** Broadcast a notification to whole roles, specific staff, or both. */
 export async function sendNotification(body: {
   title: string;
   body: string;
@@ -4082,7 +3890,6 @@ export async function sendNotification(body: {
   return (data?.message as string) ?? "Notification sent.";
 }
 
-// ─── Abandoned carts ──────────────────────────────────────────────────────────
 
 export interface AbandonedCartRow {
   user_id: number;
@@ -4110,7 +3917,6 @@ export interface AbandonedCartsSummary {
   average_cart_value: number;
 }
 
-/** A snapshot, not a trend — an abandoned cart has no meaningful "vs last period". */
 export async function getAbandonedCartsSummary(
   dateRange?: DateRange
 ): Promise<AbandonedCartsSummary> {

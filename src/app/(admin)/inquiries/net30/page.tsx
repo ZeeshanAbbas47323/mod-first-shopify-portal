@@ -58,7 +58,6 @@ const fmtWhen = (v?: string) => {
   return isNaN(d.getTime()) ? "—" : format(d, "MMM d, yyyy · h:mm a");
 };
 
-/** Filter controls rendered under each column header. */
 const COLUMN_FILTERS: Record<string, ColumnFilterDef> = {
   company_name: { type: "text", placeholder: "Search companies" },
   status: { type: "select", options: INQUIRY_STATUSES, placeholder: "Any" },
@@ -114,10 +113,6 @@ export default function Net30ApplicationsPage() {
     [dateRange, debounced, statuses]
   );
 
-  /**
-   * The header filter row edits the same state as the filter bar above it,
-   * so a pick in one shows up in the other instead of silently competing.
-   */
   const columnFilterValues = React.useMemo(() => {
     const values: Record<string, string[]> = {};
     if (company) values.company_name = [company];
@@ -365,7 +360,6 @@ export default function Net30ApplicationsPage() {
   );
 }
 
-// ─── Detail ───────────────────────────────────────────────────────────────────
 
 function Field({ label, value }: { label: string; value: React.ReactNode }) {
   return (

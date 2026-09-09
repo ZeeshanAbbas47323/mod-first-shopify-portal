@@ -19,7 +19,6 @@ import { listActivityLogs, type ActivityLogRow } from "@/lib/admin-api";
 const DEFAULT_PAGE_SIZE = 25;
 const EXPORT_CAP = 5000;
 
-/** Colour the verb so create/update/delete are scannable. */
 const ACTION_TONES: Record<string, BadgeTone> = {
   create: "success",
   created: "success",
@@ -43,7 +42,6 @@ const actorName = (row: ActivityLogRow) =>
   row.user?.name ??
   (row.performed_by != null ? `User #${row.performed_by}` : "System");
 
-/** Filter controls rendered under each column header. */
 const COLUMN_FILTERS: Record<string, ColumnFilterDef> = {
   action: { type: "text", placeholder: "Action" },
   entity_type: { type: "text", placeholder: "Entity" },
@@ -74,18 +72,12 @@ export function ActivityLogSection() {
 
   const buildFilters = React.useCallback(
     () => ({
-      // Partial, case-insensitive-ish match — exact equality was unusable
-      // since real values are stored like "UPDATE"/"User", not "update"/"user".
       entity_type: debounced.entityType ? { contains: debounced.entityType } : undefined,
       action: debounced.action ? { contains: debounced.action } : undefined,
     }),
     [debounced]
   );
 
-  /**
-   * The header filter row edits the same state as the toolbar above it, so
-   * a pick in one shows up in the other instead of silently competing.
-   */
   const columnFilterValues = React.useMemo(() => {
     const values: Record<string, string[]> = {};
     if (action) values.action = [action];

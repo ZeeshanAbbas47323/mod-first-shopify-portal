@@ -6,7 +6,6 @@ import { cn } from "@/lib/utils";
 interface OtpInputProps {
   value: string;
   onChange: (value: string) => void;
-  /** Fired once the last box is filled, so no submit button is needed. */
   onComplete: (value: string) => void;
   length?: number;
   disabled?: boolean;
@@ -14,14 +13,6 @@ interface OtpInputProps {
   autoFocus?: boolean;
 }
 
-/**
- * One box per digit, with the behaviour people expect from a code field:
- * typing advances, backspace retreats, arrows move, and pasting a whole code
- * fills every box at once.
- *
- * `onComplete` fires as soon as the last digit lands, so the caller can verify
- * immediately rather than making the user press a button.
- */
 export function OtpInput({
   value,
   onChange,
@@ -32,7 +23,6 @@ export function OtpInput({
   autoFocus = true,
 }: OtpInputProps) {
   const inputs = React.useRef<(HTMLInputElement | null)[]>([]);
-  // Guards against firing twice when the last digit is set and re-rendered.
   const completed = React.useRef(false);
 
   React.useEffect(() => {
@@ -51,7 +41,6 @@ export function OtpInput({
     const digits = raw.replace(/\D/g, "");
     if (!digits) return;
 
-    // Typing over a filled box, or the browser autofilling the whole code.
     if (digits.length > 1) {
       const filled = (value.slice(0, index) + digits).slice(0, length);
       onChange(filled);
@@ -110,7 +99,6 @@ export function OtpInput({
           }}
           type="text"
           inputMode="numeric"
-          // Only the first box carries this, so iOS fills the whole code once.
           autoComplete={i === 0 ? "one-time-code" : "off"}
           maxLength={1}
           value={value[i] ?? ""}

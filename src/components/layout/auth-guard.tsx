@@ -15,7 +15,6 @@ export function AuthGuard({ children }: { children: React.ReactNode }) {
   const resetMenus = useMenuStore((s) => s.reset);
   const [state, setState] = React.useState<State>("loading");
 
-  // The next person to sign in gets their own navigation, not the last one's.
   const signOut = React.useCallback(() => {
     resetMenus();
     logout();
@@ -23,7 +22,6 @@ export function AuthGuard({ children }: { children: React.ReactNode }) {
 
   React.useEffect(() => {
     async function init() {
-      // Zustand persist has not yet hydrated from localStorage — wait one tick
       await Promise.resolve();
 
       const authenticated = useAuthStore.getState().isAuthenticated;
@@ -35,8 +33,6 @@ export function AuthGuard({ children }: { children: React.ReactNode }) {
         return;
       }
 
-      // isAuthenticated = true but no in-memory token means the page was
-      // refreshed. Exchange the stored refresh token for a new access token.
       const inMemoryToken = useAuthStore.getState().token;
       if (!inMemoryToken) {
         const hasRefreshToken = !!getStoredRefreshToken();
@@ -60,8 +56,6 @@ export function AuthGuard({ children }: { children: React.ReactNode }) {
     }
 
     init();
-    // Run once on mount — we only need to bootstrap the session, not react to
-    // token changes (the axios interceptor handles mid-session refreshes).
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 

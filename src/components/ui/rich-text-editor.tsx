@@ -268,7 +268,6 @@ function Toolbar({
   );
 }
 
-/** Shared typography styles so the editor, HTML preview and the storefront agree. */
 const proseClasses = [
   "[&_h1]:mt-4 [&_h1]:mb-2 [&_h1]:text-2xl [&_h1]:font-bold",
   "[&_h2]:mt-4 [&_h2]:mb-2 [&_h2]:text-xl [&_h2]:font-semibold",
@@ -289,7 +288,6 @@ const proseClasses = [
   "[&_th]:border [&_th]:border-border [&_th]:bg-muted [&_th]:p-2 [&_th]:text-left",
 ].join(" ");
 
-/** Point relative <img src> at the API host so previews resolve. */
 function resolveImages(html: string): string {
   return html.replace(
     /(<img[^>]+src=")(\/[^"]*)"/g,
@@ -310,11 +308,8 @@ export function RichTextEditor({
   onChange: (html: string) => void;
   placeholder?: string;
   className?: string;
-  /** Editing area min height, e.g. "24rem" for full-page editors. */
   minHeight?: string;
-  /** Editing area max height before it scrolls. */
   maxHeight?: string;
-  /** Upload folder for images inserted from the toolbar. */
   uploadFolder?: string;
 }) {
   const [mode, setMode] = React.useState<Mode>("rich");
@@ -332,7 +327,6 @@ export function RichTextEditor({
     onUpdate: ({ editor }) => onChange(editor.getHTML()),
   });
 
-  // Keep the editor in sync when the form resets or the HTML tab is edited.
   React.useEffect(() => {
     if (editor && mode === "rich" && value !== editor.getHTML()) {
       editor.commands.setContent(value || "", { emitUpdate: false });

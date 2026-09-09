@@ -60,7 +60,6 @@ export default function ForgotPasswordPage() {
     }
   };
 
-  // Fired by OtpInput the moment the sixth digit lands.
   const onOtpComplete = React.useCallback(
     async (code: string) => {
       if (verifying.current) return;

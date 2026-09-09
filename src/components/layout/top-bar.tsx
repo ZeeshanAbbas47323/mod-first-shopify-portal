@@ -36,7 +36,6 @@ import {
   type AdminSearchType,
 } from "@/lib/admin-api";
 
-// ─── Result-type config ───────────────────────────────────────────────────────
 
 const TYPE_CONFIG: Record<
   AdminSearchType,
@@ -107,7 +106,6 @@ const TYPE_CONFIG: Record<
 
 const ALL_TYPES = Object.keys(TYPE_CONFIG) as AdminSearchType[];
 
-// ─── Quick nav links shown when no query ──────────────────────────────────────
 
 const QUICK_LINKS = [
   { label: "Home", href: "/", icon: Home, color: "bg-slate-100 text-slate-600 dark:bg-slate-800 dark:text-slate-300" },
@@ -118,7 +116,6 @@ const QUICK_LINKS = [
   { label: "Settings", href: "/settings", icon: Settings, color: "bg-slate-100 text-slate-600 dark:bg-slate-800 dark:text-slate-300" },
 ];
 
-// ─── Debounce ─────────────────────────────────────────────────────────────────
 
 function useDebounce<T>(value: T, delay: number): T {
   const [debounced, setDebounced] = React.useState(value);
@@ -129,7 +126,6 @@ function useDebounce<T>(value: T, delay: number): T {
   return debounced;
 }
 
-// ─── TopBar ───────────────────────────────────────────────────────────────────
 
 export function TopBar() {
   const router = useRouter();
@@ -142,7 +138,6 @@ export function TopBar() {
 
   const debounced = useDebounce(query.trim(), 300);
 
-  // ⌘K / Ctrl+K shortcut
   React.useEffect(() => {
     const handler = (e: KeyboardEvent) => {
       if (e.key === "k" && (e.metaKey || e.ctrlKey)) {
@@ -154,7 +149,6 @@ export function TopBar() {
     return () => document.removeEventListener("keydown", handler);
   }, []);
 
-  // Clear state when dialog closes
   React.useEffect(() => {
     if (!open) {
       setQuery("");
@@ -163,7 +157,6 @@ export function TopBar() {
     }
   }, [open]);
 
-  // Call POST /search/admin when debounced query >= 2 chars
   React.useEffect(() => {
     if (debounced.length < 2) {
       setResults({});
@@ -198,14 +191,14 @@ export function TopBar() {
 
   return (
     <header className="fixed inset-x-0 top-0 z-50 flex h-14 items-center gap-3 bg-[#1a1a1a] px-3">
-      {/* Left — logo + sidebar trigger */}
+      {}
       <div className="flex flex-1 items-center gap-2">
         <SidebarTrigger className="text-neutral-300 hover:bg-white/10 hover:text-white md:hidden" />
         {/* eslint-disable-next-line @next/next/no-img-element */}
         <img src="/images/branding/logo_white.png" alt="Mod First" className="h-7 w-auto" />
       </div>
 
-      {/* Center — search trigger button */}
+      {}
       <div className="flex w-full max-w-xl justify-center">
         <button
           onClick={() => setOpen(true)}
@@ -219,7 +212,7 @@ export function TopBar() {
         </button>
       </div>
 
-      {/* Right — notifications + user menu */}
+      {}
       <div className="flex flex-1 items-center justify-end gap-2">
         <NotificationsMenu />
 
@@ -261,12 +254,12 @@ export function TopBar() {
         </DropdownMenu>
       </div>
 
-      {/* Global Search Dialog */}
+      {}
       <Dialog open={open} onOpenChange={setOpen}>
         <DialogContent className="overflow-hidden p-0 shadow-2xl sm:max-w-2xl [&>button]:hidden">
           <Command shouldFilter={false} className="rounded-xl">
 
-            {/* ── Search input ── */}
+            {}
             <div className="flex items-center gap-3 border-b border-border px-4 py-3">
               {loading
                 ? <Loader2 className="size-5 shrink-0 animate-spin text-muted-foreground" />
@@ -295,7 +288,7 @@ export function TopBar() {
 
             <CommandList className="max-h-[480px] overflow-y-auto">
 
-              {/* ── Quick links (no query) ── */}
+              {}
               {debounced.length < 2 && (
                 <CommandGroup heading="Quick navigation">
                   <div className="grid grid-cols-3 gap-1 p-2">
@@ -319,7 +312,7 @@ export function TopBar() {
                 </CommandGroup>
               )}
 
-              {/* ── No results ── */}
+              {}
               {!loading && debounced.length >= 2 && totalHits === 0 && (
                 <div className="flex flex-col items-center gap-3 py-12 text-center">
                   <div className="flex size-14 items-center justify-center rounded-full bg-muted">
@@ -332,7 +325,7 @@ export function TopBar() {
                 </div>
               )}
 
-              {/* ── Grouped results ── */}
+              {}
               {ALL_TYPES.map((type) => {
                 const items = results[type];
                 if (!items?.length) return null;
@@ -382,7 +375,7 @@ export function TopBar() {
               })}
             </CommandList>
 
-            {/* ── Footer ── */}
+            {}
             <div className="flex items-center justify-between border-t border-border bg-muted/30 px-4 py-2">
               <p className="text-xs text-muted-foreground">
                 {debounced.length >= 2

@@ -58,7 +58,6 @@ type FormValues = z.infer<typeof schema>;
 
 const TYPE_ITEMS = CONTENT_TYPE_LABELS as Record<string, string>;
 
-/** Rough word/character read-out so editors can see how long a page is. */
 function contentStats(html: string) {
   const text = html.replace(/<[^>]*>/g, " ").replace(/&nbsp;/g, " ").trim();
   const words = text ? text.split(/\s+/).length : 0;
@@ -101,7 +100,6 @@ export function ContentPageForm({ page }: { page?: ContentPageRow }) {
   const canonical = watch("canonical_url");
   const stats = React.useMemo(() => contentStats(content ?? ""), [content]);
 
-  // Warn before losing unsaved edits.
   React.useEffect(() => {
     if (!isDirty) return;
     const onBeforeUnload = (e: BeforeUnloadEvent) => e.preventDefault();
@@ -156,7 +154,7 @@ export function ContentPageForm({ page }: { page?: ContentPageRow }) {
     <>
       <form onSubmit={handleSubmit(onSubmit)} noValidate>
         <div className="flex flex-col gap-5">
-          {/* Header */}
+          {}
           <div className="flex flex-wrap items-center justify-between gap-3">
             <div className="min-w-0">
               <button
@@ -197,7 +195,7 @@ export function ContentPageForm({ page }: { page?: ContentPageRow }) {
           </div>
 
           <div className="grid gap-5 lg:grid-cols-[minmax(0,1fr)_320px]">
-            {/* ── Left column ─────────────────────────────────────── */}
+            {}
             <div className="flex min-w-0 flex-col gap-5">
               <Card className="shadow-none">
                 <CardHeader className="pb-3">
@@ -255,13 +253,13 @@ export function ContentPageForm({ page }: { page?: ContentPageRow }) {
                 </CardContent>
               </Card>
 
-              {/* SEO */}
+              {}
               <Card className="shadow-none">
                 <CardHeader className="pb-3">
                   <CardTitle className="text-sm">Search engine listing</CardTitle>
                 </CardHeader>
                 <CardContent className="space-y-4">
-                  {/* Google-style preview */}
+                  {}
                   <div className="rounded-lg border border-border bg-muted/30 p-3">
                     <p className="truncate text-xs text-[#0b6b12]">
                       {canonical || "https://modfirstapparel.com/pages/…"}
@@ -332,7 +330,7 @@ export function ContentPageForm({ page }: { page?: ContentPageRow }) {
               </Card>
             </div>
 
-            {/* ── Right column ────────────────────────────────────── */}
+            {}
             <div className="flex flex-col gap-5">
               <Card className="shadow-none">
                 <CardHeader className="pb-3">

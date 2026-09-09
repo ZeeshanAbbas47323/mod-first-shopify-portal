@@ -15,7 +15,6 @@ import { Separator } from "@/components/ui/separator";
 import { imgUrl, cn } from "@/lib/utils";
 import { listOrders } from "@/lib/admin-api";
 
-// ─── Customer preview ───────────────────────────────────────────────────────
 
 export interface CustomerPreviewData {
   user_id?: number | string | null;
@@ -25,13 +24,6 @@ export interface CustomerPreviewData {
   country?: string | null;
 }
 
-/**
- * Click a customer's name on a list to see who they are without leaving the
- * page — mirrors Shopify's customer preview card. Normalized props so any
- * list (orders, drafts, …) can feed it without sharing a row type. The order
- * count is fetched lazily (only once the card is actually opened) since
- * eagerly counting every row's customer would be one query per row.
- */
 export function CustomerPreviewPopover({ customer }: { customer: CustomerPreviewData }) {
   const [orderCount, setOrderCount] = React.useState<number | null>(null);
   const [loading, setLoading] = React.useState(false);
@@ -105,7 +97,6 @@ export function CustomerPreviewPopover({ customer }: { customer: CustomerPreview
   );
 }
 
-// ─── Fulfillment / items preview ───────────────────────────────────────────
 
 export interface FulfillmentPreviewItem {
   id: number | string;
@@ -115,7 +106,6 @@ export interface FulfillmentPreviewItem {
   image?: string | null;
 }
 
-/** Delivery blurb shared by orders (real ETA) and drafts (pickup location only, no ETA yet). */
 export function pickupOrDeliveryBlurb(input: {
   delivery_type?: string | null;
   pickupLocationName?: string | null;
@@ -131,11 +121,6 @@ export function pickupOrDeliveryBlurb(input: {
   return null;
 }
 
-/**
- * Click the items count to preview what's actually in the order/draft —
- * thumbnail, product/variant name, quantity, and whether it's shipping or
- * pickup. Mirrors Shopify's fulfillment-status item preview.
- */
 export function FulfillmentPreviewPopover({
   items,
   deliveryBlurb,

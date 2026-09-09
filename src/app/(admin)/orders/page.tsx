@@ -106,7 +106,6 @@ const columns: ColumnDef<OrderRow>[] = [
     accessorKey: "order_date",
     header: "Date",
     cell: ({ row }) => {
-      // order_date is when the order was placed; created_at is the fallback.
       const v = row.original.order_date ?? row.original.created_at;
       if (!v) return "—";
       const d = new Date(v);
@@ -141,8 +140,6 @@ const columns: ColumnDef<OrderRow>[] = [
     },
   },
   {
-    // Real Prisma field is total_amount — "total" doesn't exist on the row,
-    // which is why this column used to render "—" for every order.
     accessorKey: "total_amount",
     header: () => <div className="text-right">Total</div>,
     cell: ({ row }) => (
@@ -168,15 +165,12 @@ const columns: ColumnDef<OrderRow>[] = [
     },
   },
   {
-    // Real field is the `items` array — "items_count" doesn't exist, so this
-    // used to render "—" too. Now also doubles as the fulfillment preview.
     id: "items",
     header: "Items",
     cell: ({ row }) => <FulfillmentPreviewPopover {...orderFulfillmentPreview(row.original)} />,
   },
 ];
 
-// Tab → status filter mapping
 const TAB_STATUS: Record<string, string | undefined> = {
   all: undefined,
   pending: "booked",
@@ -203,7 +197,6 @@ const EMPTY_SUMMARY: OrdersSummary = {
   trend: [],
 };
 
-/** Filter controls rendered under each column header. */
 const COLUMN_FILTERS: Record<string, ColumnFilterDef> = {
   order_number: { type: "text", placeholder: "Order #" },
   customer: { type: "text", placeholder: "Name or email" },
@@ -241,7 +234,6 @@ export default function OrdersPage() {
   const [summary, setSummary] = React.useState<OrdersSummary>(EMPTY_SUMMARY);
   const [summaryLoading, setSummaryLoading] = React.useState(true);
 
-  // Filters
   const [dateRange, setDateRange] = React.useState<DateRange>({
     from: subDays(new Date(), 29),
     to: new Date(),
@@ -254,7 +246,6 @@ export default function OrdersPage() {
   const [statuses, setStatuses] = React.useState<string[]>([]);
   const [orderNumber, setOrderNumber] = React.useState("");
 
-  // Reset page when filters/tab change
   React.useEffect(() => {
     setPage(1);
   }, [tab, dateRange, payStatuses, deliveryTypes, channels, search, statuses, orderNumber]);
@@ -262,7 +253,6 @@ export default function OrdersPage() {
   const activeFilters = React.useMemo(
     () => ({
       dateRange,
-      // An explicit status filter is a narrower statement than the tab, so it wins.
       status: statuses.length ? statuses : TAB_STATUS[tab],
       payment_status: payStatuses,
       delivery_type: deliveryTypes,
@@ -273,10 +263,6 @@ export default function OrdersPage() {
     [dateRange, tab, payStatuses, deliveryTypes, channels, search, statuses, orderNumber]
   );
 
-  /**
-   * The header filter row and the filter bar above it edit the same state, so
-   * a pick in one shows up in the other instead of silently competing.
-   */
   const columnFilterValues = React.useMemo(() => {
     const values: Record<string, string[]> = {};
     if (orderNumber) values.order_number = [orderNumber];
@@ -320,7 +306,6 @@ export default function OrdersPage() {
     return () => { cancelled = true; };
   }, [activeFilters]);
 
-  // Illegal transitions come back in `failed`, so report both halves.
   const runBulkStatus = async (status: string) => {
     if (!selected.length) return;
     setBulkBusy(true);
@@ -378,7 +363,7 @@ export default function OrdersPage() {
 
   return (
     <div className="flex flex-col gap-4">
-      {/* Header */}
+      {}
       <div className="flex flex-wrap items-center justify-between gap-3">
         <h1 className="text-lg font-semibold">Orders</h1>
         <div className="flex gap-2">
@@ -393,10 +378,10 @@ export default function OrdersPage() {
         </div>
       </div>
 
-      {/* Summary stat strip */}
+      {}
       <SummaryStatStrip tiles={tiles} loading={summaryLoading} />
 
-      {/* Status tabs */}
+      {}
       <Tabs value={tab} onValueChange={(v) => v && setTab(v)}>
         <TabsList className="bg-transparent p-0">
           {TABS.map((t) => (
@@ -411,15 +396,15 @@ export default function OrdersPage() {
         </TabsList>
       </Tabs>
 
-      {/* Filter bar */}
+      {}
       <div className="flex flex-wrap items-center gap-2">
-        {/* Date range */}
+        {}
         <DateRangePicker
           value={dateRange}
           onChange={(r) => r && setDateRange(r)}
         />
 
-        {/* Payment status — multi-select */}
+        {}
         <MultiSelectFilter
           label="Payment status"
           options={PAYMENT_STATUSES}
@@ -427,7 +412,7 @@ export default function OrdersPage() {
           onChange={setPayStatuses}
         />
 
-        {/* Delivery type — multi-select */}
+        {}
         <MultiSelectFilter
           label="Delivery type"
           options={DELIVERY_TYPES}
@@ -435,7 +420,7 @@ export default function OrdersPage() {
           onChange={setDeliveryTypes}
         />
 
-        {/* Channel — multi-select */}
+        {}
         <MultiSelectFilter
           label="Channel"
           options={ORDER_CHANNELS}
@@ -443,7 +428,7 @@ export default function OrdersPage() {
           onChange={setChannels}
         />
 
-        {/* Order/customer search */}
+        {}
         <div className="flex items-center gap-1">
           <div className="relative">
             <Search className="absolute left-2.5 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" />
@@ -465,7 +450,7 @@ export default function OrdersPage() {
         </div>
       </div>
 
-      {/* Bulk actions */}
+      {}
       {selected.length > 0 && (
         <div className="flex flex-wrap items-center gap-3 rounded-xl border border-border bg-card px-3 py-2">
           <span className="text-sm font-medium">
@@ -504,7 +489,7 @@ export default function OrdersPage() {
         </div>
       )}
 
-      {/* Table */}
+      {}
       <DataTable
         columns={columns}
         data={rows}

@@ -28,7 +28,6 @@ import {
   type ProductCategoryRow,
 } from "@/lib/admin-api";
 
-// ─── Helpers ─────────────────────────────────────────────────────────────────
 
 const slugify = (s: string) =>
   s.toLowerCase().trim()
@@ -37,7 +36,6 @@ const slugify = (s: string) =>
     .replace(/-+/g, "-")
     .replace(/^-|-$/g, "");
 
-// ─── Schema ──────────────────────────────────────────────────────────────────
 
 const schema = z.object({
   name: z.string().min(1, "Name is required"),
@@ -49,7 +47,6 @@ const schema = z.object({
 });
 type FormValues = z.infer<typeof schema>;
 
-// ─── Image Upload Box ─────────────────────────────────────────────────────────
 
 function ImageUploadBox({
   label,
@@ -126,7 +123,6 @@ function ImageUploadBox({
   );
 }
 
-// ─── Main Form ────────────────────────────────────────────────────────────────
 
 export function CategoryForm({ category }: { category?: ProductCategoryRow }) {
   const router = useRouter();
@@ -160,17 +156,14 @@ export function CategoryForm({ category }: { category?: ProductCategoryRow }) {
     },
   });
 
-  // Load parent categories
   React.useEffect(() => {
     fetchAllProductCategories()
       .then((cats) => {
-        // Exclude current category from parent options
         setParents(cats.filter((c) => c.id !== category?.id));
       })
       .catch(() => {});
   }, [category?.id]);
 
-  // Auto-slug from name on create
   const nameVal = watch("name");
   React.useEffect(() => {
     if (!isEdit && !getFieldState("slug").isDirty) {
@@ -223,7 +216,7 @@ export function CategoryForm({ category }: { category?: ProductCategoryRow }) {
     <>
     <form onSubmit={handleSubmit(onSubmit)} noValidate>
       <div className="flex flex-col gap-5">
-        {/* Header */}
+        {}
         <div className="flex flex-wrap items-center justify-between gap-3">
           <div>
             <button
@@ -256,9 +249,9 @@ export function CategoryForm({ category }: { category?: ProductCategoryRow }) {
         </div>
 
         <div className="grid gap-5 lg:grid-cols-[minmax(0,1fr)_320px]">
-          {/* ── Left column ──────────────────────────────────────── */}
+          {}
           <div className="flex min-w-0 flex-col gap-5">
-            {/* Basic info */}
+            {}
             <Card className="shadow-none">
               <CardHeader className="pb-3">
                 <CardTitle className="text-sm">Basic information</CardTitle>
@@ -304,7 +297,7 @@ export function CategoryForm({ category }: { category?: ProductCategoryRow }) {
               </CardContent>
             </Card>
 
-            {/* Images */}
+            {}
             <Card className="shadow-none">
               <CardHeader className="pb-3">
                 <CardTitle className="text-sm">Images</CardTitle>
@@ -320,9 +313,9 @@ export function CategoryForm({ category }: { category?: ProductCategoryRow }) {
             </Card>
           </div>
 
-          {/* ── Right sidebar ────────────────────────────────────── */}
+          {}
           <div className="flex flex-col gap-5">
-            {/* Status */}
+            {}
             <Card className="shadow-none">
               <CardHeader className="pb-3">
                 <CardTitle className="text-sm">Status</CardTitle>
@@ -346,7 +339,7 @@ export function CategoryForm({ category }: { category?: ProductCategoryRow }) {
               </CardContent>
             </Card>
 
-            {/* Parent category */}
+            {}
             <Card className="shadow-none">
               <CardHeader className="pb-3">
                 <CardTitle className="text-sm">Organization</CardTitle>
@@ -401,7 +394,7 @@ export function CategoryForm({ category }: { category?: ProductCategoryRow }) {
               </CardContent>
             </Card>
 
-            {/* Meta */}
+            {}
             {isEdit && (
               <Card className="shadow-none">
                 <CardHeader className="pb-3">

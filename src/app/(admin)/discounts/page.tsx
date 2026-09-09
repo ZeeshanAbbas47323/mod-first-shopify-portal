@@ -57,9 +57,7 @@ const typeLabel: Record<CouponType, string> = {
   free_shipping: "Free shipping",
 };
 
-// Status tones now live in the shared toneMap (src/components/status-badge.tsx).
 
-/** Filter controls rendered under each column header. */
 const COLUMN_FILTERS: Record<string, ColumnFilterDef> = {
   code: { type: "text", placeholder: "Search codes" },
   type: { type: "select", options: COUPON_TYPES, placeholder: "Any" },
@@ -224,10 +222,6 @@ export default function DiscountsPage() {
     [dateRange, debounced, statuses, types]
   );
 
-  /**
-   * The header filter row edits the same state as the filter bar above it,
-   * so a pick in one shows up in the other instead of silently competing.
-   */
   const columnFilterValues = React.useMemo(() => {
     const values: Record<string, string[]> = {};
     if (search) values.code = [search];
@@ -386,9 +380,6 @@ export default function DiscountsPage() {
 const couponSchema = z.object({
   code: z.string().min(1, "Code is required").regex(/^[A-Z0-9_-]+$/, "Uppercase letters, numbers, dashes and underscores only"),
   type: z.enum(COUPON_TYPES),
-  // `value` is only required for percentage / fixed_amount; free_shipping ignores it.
-  // A cleared input yields NaN under valueAsNumber — coerce that to undefined here
-  // and only enforce a number on the non-free-shipping branches via superRefine below.
   value: z.union([z.number(), z.nan()]).optional(),
   min_order_amount: z.number().nonnegative().optional(),
   usage_limit: z.number().int().positive().optional(),
@@ -618,7 +609,6 @@ function CouponDialog({
   );
 }
 
-// ─── Validate Coupon Dialog ──────────────────────────────────────────────────
 
 const validateSchema = z.object({
   code: z.string().min(1, "Code is required"),

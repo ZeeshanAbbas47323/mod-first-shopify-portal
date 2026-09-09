@@ -26,7 +26,6 @@ export function DateRangePicker({
   const [open, setOpen] = React.useState(false);
   const [draft, setDraft] = React.useState<DateRange | undefined>(value);
 
-  // Sync draft when popover opens
   const handleOpenChange = (o: boolean) => {
     if (o) setDraft(value);
     setOpen(o);

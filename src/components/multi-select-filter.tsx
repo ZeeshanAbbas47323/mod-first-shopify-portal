@@ -25,8 +25,6 @@ interface MultiSelectFilterProps {
   className?: string;
 }
 
-// lower-case first so an UPPERCASE enum (shipment statuses) title-cases
-// instead of staying shouty; already-lowercase enums are unaffected.
 const humanize = (s: string) =>
   s.toLowerCase().replace(/_/g, " ").replace(/\b\w/g, (c) => c.toUpperCase());
 
@@ -36,12 +34,6 @@ function toOptions(options: MultiSelectFilterProps["options"]): MultiSelectOptio
   );
 }
 
-/**
- * A Shopify-style filter pill: shows the base label until something is
- * picked, then "Label (n)". Opens a checkbox list rather than forcing one
- * value — the order list's status/payment/channel filters all need "any of
- * these", not "exactly one".
- */
 export function MultiSelectFilter({
   label,
   options,

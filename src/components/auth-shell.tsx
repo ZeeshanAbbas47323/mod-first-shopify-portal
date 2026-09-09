@@ -2,19 +2,11 @@ import Image from "next/image";
 import { Card, CardContent } from "@/components/ui/card";
 
 interface AuthShellProps {
-  /** Screen heading, e.g. "Log in". */
   title?: string;
-  /** Supporting line under the heading. */
   subtitle?: React.ReactNode;
   children: React.ReactNode;
 }
 
-/**
- * The frame every auth screen sits in — logo, card and footer. Login, OTP and
- * password reset all render through this so the three screens stay identical;
- * they previously duplicated the markup and had drifted apart on the logo and
- * heading alignment.
- */
 export function AuthShell({ title, subtitle, children }: AuthShellProps) {
   return (
     <div className="flex min-h-screen flex-col items-center justify-center bg-background px-4">

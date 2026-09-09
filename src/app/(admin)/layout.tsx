@@ -12,7 +12,7 @@ export default function AdminLayout({
   return (
     <AuthGuard>
       <ScreenLock>
-        {/* Black band under the top bar so the canvas corners curve against it, Shopify-style */}
+        {}
         <SidebarProvider className="bg-[linear-gradient(to_bottom,#1a1a1a_calc(3.5rem+12px),var(--sidebar)_calc(3.5rem+12px))] pt-14">
           <TopBar />
           <AppSidebar />

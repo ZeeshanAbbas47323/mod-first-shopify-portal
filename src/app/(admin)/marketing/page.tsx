@@ -86,7 +86,6 @@ export default function MarketingPage() {
   );
 }
 
-/* ------------------------------ Campaigns ------------------------------ */
 
 const campaignStatusTone = (s?: string) =>
   s === "sent"
@@ -173,7 +172,6 @@ const campaignColumns: ColumnDef<CampaignRow>[] = [
   },
 ];
 
-/** Filter controls rendered under each column header. */
 const CAMPAIGN_COLUMN_FILTERS: Record<string, ColumnFilterDef> = {
   subject: { type: "text", placeholder: "Search subjects" },
   status: { type: "select", options: CAMPAIGN_STATUSES, placeholder: "Any" },
@@ -213,10 +211,6 @@ function CampaignsTab() {
     [debouncedSearch, statuses]
   );
 
-  /**
-   * The header filter row edits the same state as the toolbar above it, so
-   * a pick in one shows up in the other instead of silently competing.
-   */
   const columnFilterValues = React.useMemo(() => {
     const values: Record<string, string[]> = {};
     if (search) values.subject = [search];
@@ -545,7 +539,6 @@ function CampaignDialog({
   );
 }
 
-/* ------------------------------ Subscribers ------------------------------ */
 
 const subStatusTone = (s?: string) =>
   s === "subscribed" ? "success" : s === "pending" ? "attention" : "neutral";
@@ -637,7 +630,6 @@ const subscriberColumns: ColumnDef<SubscriberRow>[] = [
   },
 ];
 
-/** Filter controls rendered under each column header. */
 const SUBSCRIBER_COLUMN_FILTERS: Record<string, ColumnFilterDef> = {
   email: { type: "text", placeholder: "Search emails" },
   status: { type: "select", options: SUBSCRIBER_STATUSES, placeholder: "Any" },
@@ -682,10 +674,6 @@ function SubscribersTab() {
     [dateRange, debouncedSearch, statuses, sources]
   );
 
-  /**
-   * The header filter row edits the same state as the toolbar above it, so
-   * a pick in one shows up in the other instead of silently competing.
-   */
   const columnFilterValues = React.useMemo(() => {
     const values: Record<string, string[]> = {};
     if (search) values.email = [search];
@@ -872,7 +860,6 @@ function SubscriberDialog({
     try {
       let message: string;
       if (editing) {
-        // Update API accepts full_name, status, is_active
         message = await updateSubscriber(editing.id, {
           full_name: values.full_name || undefined,
           status: values.status,

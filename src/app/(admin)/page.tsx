@@ -34,13 +34,11 @@ import {
   type LowStockItem, type PendingActions,
 } from "@/lib/admin-api";
 
-// ─── Palette ──────────────────────────────────────────────────────────────────
 
 const BLUE   = "#005bd3";
 const TEAL   = "#1a9ba1";
 const PIE_COLORS = ["#005bd3","#1a9ba1","#8456cd","#b98900","#29845a","#e51c00","#637381"];
 
-// ─── Helpers ──────────────────────────────────────────────────────────────────
 
 function Skeleton({ className }: { className?: string }) {
   return <div className={cn("animate-pulse rounded-md bg-muted", className)} />;
@@ -70,7 +68,6 @@ function ChartTip({ active, payload, label, currency = false }: {
   );
 }
 
-// ─── KPI Card ─────────────────────────────────────────────────────────────────
 
 function KpiCard({
   label, value, delta, icon, loading,
@@ -104,7 +101,6 @@ function KpiCard({
   );
 }
 
-// ─── Donut Chart ──────────────────────────────────────────────────────────────
 
 function DonutChart({ data, title, loading }: { data: BreakdownItem[]; title: string; loading: boolean }) {
   const total = data.reduce((s, d) => s + d.count, 0);
@@ -151,7 +147,6 @@ function DonutChart({ data, title, loading }: { data: BreakdownItem[]; title: st
   );
 }
 
-// ─── Greeting ─────────────────────────────────────────────────────────────────
 
 function greeting() {
   const h = new Date().getHours();
@@ -160,7 +155,6 @@ function greeting() {
   return "Good evening";
 }
 
-// ─── Empty defaults ───────────────────────────────────────────────────────────
 
 const EMPTY_METRIC = { current: 0, previous: 0, change_percent: null };
 const EMPTY_OVERVIEW: DashboardOverview = {
@@ -173,20 +167,15 @@ const EMPTY_PENDING: PendingActions = {
   booked_orders: 0, unresolved_customer_messages: 0, locked_accounts: 0,
 };
 
-// ═══════════════════════════════════════════════════════════════════════════════
-// PAGE
-// ═══════════════════════════════════════════════════════════════════════════════
 
 export default function HomePage() {
   const user = useAuthStore((s) => s.user);
   const [period, setPeriod] = React.useState<DashboardPeriod>("last_7_days");
   const [customRange, setCustomRange] = React.useState<DateRange | undefined>();
 
-  // KPIs
   const [overview, setOverview] = React.useState<DashboardOverview>(EMPTY_OVERVIEW);
   const [kpiLoading, setKpiLoading] = React.useState(true);
 
-  // Charts
   const [revTrend, setRevTrend] = React.useState<TrendPoint[]>([]);
   const [custTrend, setCustTrend] = React.useState<TrendPoint[]>([]);
   const [orderStatus, setOrderStatus] = React.useState<BreakdownItem[]>([]);
@@ -195,14 +184,12 @@ export default function HomePage() {
   const [topProducts, setTopProducts] = React.useState<TopProduct[]>([]);
   const [chartsLoading, setChartsLoading] = React.useState(true);
 
-  // Widgets
   const [recentOrders, setRecentOrders] = React.useState<RecentOrder[]>([]);
   const [lowStock, setLowStock] = React.useState<LowStockItem[]>([]);
   const [pending, setPending] = React.useState<PendingActions>(EMPTY_PENDING);
   const [widgetsLoading, setWidgetsLoading] = React.useState(true);
 
   React.useEffect(() => {
-    // Don't fetch when custom is selected but range not yet picked
     if (period === "custom" && (!customRange?.from || !customRange?.to)) return;
 
     let cancelled = false;
@@ -267,7 +254,6 @@ export default function HomePage() {
     return () => { cancelled = true; };
   }, []);
 
-  // Pending actions banner count
   const pendingOrders = pending.booked_orders;
   const lowStockCount = overview.low_stock_alerts;
   const pendingReviews = pending.pending_reviews;
@@ -284,7 +270,7 @@ export default function HomePage() {
 
   return (
     <div className="flex flex-col gap-6">
-      {/* Header */}
+      {}
       <div className="flex flex-wrap items-start justify-between gap-3">
         <div>
           <h1 className="text-lg font-semibold capitalize">
@@ -318,7 +304,7 @@ export default function HomePage() {
         </div>
       </div>
 
-      {/* Pending actions banner */}
+      {}
       {pendingCount > 0 && (
         <div className="flex flex-wrap items-center gap-3 rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 dark:border-amber-900/40 dark:bg-amber-950/30">
           <AlertTriangle className="size-4 shrink-0 text-amber-600" />
@@ -345,7 +331,7 @@ export default function HomePage() {
         </div>
       )}
 
-      {/* KPI Cards */}
+      {}
       <Card className="py-0 shadow-none">
         <CardContent className="grid grid-cols-2 p-0 lg:grid-cols-4 lg:divide-x divide-y lg:divide-y-0">
           <KpiCard
@@ -374,7 +360,7 @@ export default function HomePage() {
         </CardContent>
       </Card>
 
-      {/* Revenue Chart */}
+      {}
       <Card className="shadow-none">
         <CardHeader className="pb-1 pt-4 px-4">
           <CardTitle className="text-sm">Revenue</CardTitle>
@@ -404,7 +390,7 @@ export default function HomePage() {
         </CardContent>
       </Card>
 
-      {/* Customer Growth + Top Products */}
+      {}
       <div className="grid gap-5 lg:grid-cols-2">
         <Card className="shadow-none">
           <CardHeader className="pb-1 pt-4 px-4">
@@ -457,16 +443,16 @@ export default function HomePage() {
         </Card>
       </div>
 
-      {/* Breakdown Donuts */}
+      {}
       <div className="flex flex-wrap gap-4">
         <DonutChart title="Order status" data={orderStatus} loading={chartsLoading} />
         <DonutChart title="Sales channel" data={orderChannel} loading={chartsLoading} />
         <DonutChart title="Payment method" data={payMethod} loading={chartsLoading} />
       </div>
 
-      {/* Recent Orders + Low Stock */}
+      {}
       <div className="grid gap-5 lg:grid-cols-2">
-        {/* Recent Orders */}
+        {}
         <Card className="gap-0 py-0 shadow-none">
           <div className="flex items-center justify-between px-4 py-3">
             <h2 className="text-sm font-semibold">Recent orders</h2>
@@ -509,7 +495,7 @@ export default function HomePage() {
           </CardContent>
         </Card>
 
-        {/* Low Stock */}
+        {}
         <Card className="gap-0 py-0 shadow-none">
           <div className="flex items-center justify-between px-4 py-3">
             <h2 className="text-sm font-semibold">Low stock alerts</h2>

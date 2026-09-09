@@ -8,18 +8,13 @@ export interface AuthUser {
 
 interface AuthState {
   user: AuthUser | null;
-  /** Access token — lives in memory only, never written to localStorage. */
   token: string | null;
   isAuthenticated: boolean;
   login: (user: AuthUser, accessToken: string, refreshToken?: string | null) => void;
-  /** Called by the token-refresh flow to update the in-memory access token only. */
   setToken: (accessToken: string) => void;
   logout: () => void;
 }
 
-// ── Refresh token helpers ──────────────────────────────────────────────────
-// The refresh token lives in localStorage under its own key, completely
-// outside the Zustand persist snapshot so it never sits next to the access token.
 
 const RT_KEY = "modefirst-rt";
 
@@ -34,7 +29,6 @@ export const setStoredRefreshToken = (token: string | null): void => {
   else localStorage.removeItem(RT_KEY);
 };
 
-// ── Store ──────────────────────────────────────────────────────────────────
 
 export const useAuthStore = create<AuthState>()(
   persist(
@@ -57,8 +51,6 @@ export const useAuthStore = create<AuthState>()(
     }),
     {
       name: "modefirst-auth",
-      // Access token is intentionally excluded — it only lives in memory.
-      // On page refresh, AuthGuard will do a silent re-exchange using the RT.
       partialize: (state) => ({
         user: state.user,
         isAuthenticated: state.isAuthenticated,
