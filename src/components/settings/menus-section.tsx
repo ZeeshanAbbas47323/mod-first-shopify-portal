@@ -2,6 +2,7 @@
 
 import * as React from "react";
 import {
+  GripVertical,
   ChevronDown,
   ChevronRight,
   CornerDownRight,
@@ -38,7 +39,7 @@ import {
 import { Skeleton } from "@/components/ui/skeleton";
 import { StatusBadge, StatusToggle } from "@/components/status-badge";
 import { apiErrorMessage } from "@/lib/auth-api";
-import { moveRow } from "@/lib/sort-order";
+import { moveRow, persistOrder } from "@/lib/sort-order";
 import { cn } from "@/lib/utils";
 import {
   createMenu,
@@ -85,31 +86,47 @@ function filterTree(
 }
 
 
+/** The row being dragged, the level it belongs to, and the row it is over. */
+type DragState = { id: string; parentKey: string; overId: string | null } | null;
+
 function MenuNodeRow({
   node,
   siblings,
+  parentKey,
   expanded,
   onToggleExpand,
   onEdit,
   onAddChild,
   onToggleStatus,
   onMove,
+  onReorder,
+  drag,
+  setDrag,
   onDelete,
 }: {
   node: MenuTreeNode;
   siblings: MenuTreeNode[];
+  /** Identifies the sibling group, so a row only accepts drops from its own level. */
+  parentKey: string;
   expanded: Set<string>;
   onToggleExpand: (id: string) => void;
   onEdit: (node: MenuTreeNode) => void;
   onAddChild: (parent: MenuTreeNode) => void;
   onToggleStatus: (node: MenuTreeNode, next: boolean) => Promise<void>;
   onMove: (node: MenuTreeNode, siblings: MenuTreeNode[], dir: "up" | "down") => void;
+  onReorder: (siblings: MenuTreeNode[], from: number, to: number) => void;
+  drag: DragState;
+  setDrag: (next: DragState) => void;
   onDelete: (node: MenuTreeNode) => void;
 }) {
   const id = String(node.id);
   const isOpen = expanded.has(id);
   const hasChildren = node.children.length > 0;
   const index = siblings.findIndex((s) => String(s.id) === id);
+
+  const isDragging = drag?.id === id;
+  const isDropTarget =
+    !!drag && drag.parentKey === parentKey && drag.overId === id && !isDragging;
 
   return (
     <>
@@ -123,9 +140,25 @@ function MenuNodeRow({
             onEdit(node);
           }
         }}
+        onDragOver={(e) => {
+          if (!drag || drag.parentKey !== parentKey) return;
+          e.preventDefault();
+          if (drag.overId !== id) setDrag({ ...drag, overId: id });
+        }}
+        onDrop={(e) => {
+          if (!drag || drag.parentKey !== parentKey) return;
+          e.preventDefault();
+          const from = siblings.findIndex((s) => String(s.id) === drag.id);
+          if (from >= 0 && index >= 0 && from !== index) {
+            onReorder(siblings, from, index);
+          }
+          setDrag(null);
+        }}
         className={cn(
           "group flex cursor-pointer items-center gap-2 border-b border-border px-2 py-2 text-sm transition-colors last:border-b-0 hover:bg-muted/50",
-          node.is_active === false && "opacity-60"
+          node.is_active === false && "opacity-60",
+          isDragging && "opacity-40",
+          isDropTarget && "bg-primary/5 ring-1 ring-inset ring-primary/40"
         )}
         style={{ paddingLeft: `${node.depth * 22 + 8}px` }}
       >
@@ -212,21 +245,27 @@ function MenuNodeRow({
           </span>
           <button
             type="button"
-            aria-label="Move up"
-            disabled={index <= 0}
-            onClick={() => onMove(node, siblings, "up")}
-            className="rounded p-1 text-muted-foreground hover:bg-muted hover:text-foreground disabled:pointer-events-none disabled:opacity-25"
+            draggable
+            aria-label={"Reorder " + node.name + ". Drag, or use arrow keys."}
+            title="Drag to reorder"
+            onDragStart={(e) => {
+              setDrag({ id, parentKey, overId: null });
+              e.dataTransfer.effectAllowed = "move";
+              e.dataTransfer.setData("text/plain", id);
+            }}
+            onDragEnd={() => setDrag(null)}
+            onKeyDown={(e) => {
+              if (e.key === "ArrowUp") {
+                e.preventDefault();
+                onMove(node, siblings, "up");
+              } else if (e.key === "ArrowDown") {
+                e.preventDefault();
+                onMove(node, siblings, "down");
+              }
+            }}
+            className="cursor-grab rounded p-1 text-muted-foreground transition hover:bg-muted hover:text-foreground active:cursor-grabbing"
           >
-            <ChevronUpIcon />
-          </button>
-          <button
-            type="button"
-            aria-label="Move down"
-            disabled={index < 0 || index >= siblings.length - 1}
-            onClick={() => onMove(node, siblings, "down")}
-            className="rounded p-1 text-muted-foreground hover:bg-muted hover:text-foreground disabled:pointer-events-none disabled:opacity-25"
-          >
-            <ChevronDownIcon />
+            <GripVertical className="size-3.5" />
           </button>
           <button
             type="button"
@@ -257,12 +296,16 @@ function MenuNodeRow({
             key={child.id}
             node={child}
             siblings={node.children}
+            parentKey={id}
             expanded={expanded}
             onToggleExpand={onToggleExpand}
             onEdit={onEdit}
             onAddChild={onAddChild}
             onToggleStatus={onToggleStatus}
             onMove={onMove}
+            onReorder={onReorder}
+            drag={drag}
+            setDrag={setDrag}
             onDelete={onDelete}
           />
         ))}
@@ -270,8 +313,6 @@ function MenuNodeRow({
   );
 }
 
-const ChevronUpIcon = () => <ChevronDown className="size-3.5 rotate-180" />;
-const ChevronDownIcon = () => <ChevronDown className="size-3.5" />;
 
 
 export function MenusSection() {
@@ -369,6 +410,26 @@ export function MenusSection() {
         setRefreshKey((k) => k + 1);
       } catch (error) {
         toast.error(apiErrorMessage(error, "Couldn't update status."));
+      }
+    },
+    []
+  );
+
+  const [drag, setDrag] = React.useState<DragState>(null);
+
+  const handleReorder = React.useCallback(
+    async (siblings: MenuTreeNode[], from: number, to: number) => {
+      const next = [...siblings];
+      const [moved] = next.splice(from, 1);
+      next.splice(to, 0, moved);
+      try {
+        await persistOrder("menu", next);
+        toast.success("Order updated.");
+      } catch (error) {
+        toast.error(apiErrorMessage(error, "Couldn't reorder menus."));
+      } finally {
+        // Refetch either way, so a failed save snaps back to the stored order.
+        setRefreshKey((k) => k + 1);
       }
     },
     []
@@ -517,6 +578,7 @@ export function MenusSection() {
               key={node.id}
               node={node}
               siblings={visibleTree}
+              parentKey="root"
               expanded={effectiveExpanded}
               onToggleExpand={toggleExpand}
               onEdit={(n) => {
@@ -527,6 +589,9 @@ export function MenusSection() {
               onAddChild={(parent) => openCreate(String(parent.id))}
               onToggleStatus={handleToggleStatus}
               onMove={handleMove}
+              onReorder={handleReorder}
+              drag={drag}
+              setDrag={setDrag}
               onDelete={setDeleteTarget}
             />
           ))

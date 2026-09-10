@@ -126,6 +126,7 @@ export default function AbandonedCheckoutsPage() {
   const [rows, setRows] = React.useState<AbandonedCartRow[]>([]);
   const [loading, setLoading] = React.useState(true);
   const [page, setPage] = React.useState(0);
+  const [refreshKey, setRefreshKey] = React.useState(0);
   const [pageSize, setPageSize] = React.useState<number>(DEFAULT_PAGE_SIZE);
   const [pageCount, setPageCount] = React.useState(1);
   const [total, setTotal] = React.useState(0);
@@ -158,7 +159,7 @@ export default function AbandonedCheckoutsPage() {
     return () => {
       cancelled = true;
     };
-  }, [page, pageSize, dateRange]);
+  }, [page, pageSize, dateRange, refreshKey]);
 
   React.useEffect(() => {
     let cancelled = false;
@@ -221,6 +222,7 @@ export default function AbandonedCheckoutsPage() {
       )}
 
       <DataTable
+        onRefresh={() => setRefreshKey((k) => k + 1)}
         columns={columns}
         data={rows}
         loading={loading}

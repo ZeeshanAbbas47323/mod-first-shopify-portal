@@ -112,23 +112,6 @@ export default function DesignUploadsPage() {
     [dateRange, debounced, statuses, methods]
   );
 
-  const columnFilterValues = React.useMemo(() => {
-    const values: Record<string, string[]> = {};
-    if (orderId) values.order_id = [orderId];
-    if (methods.length) values.print_method = methods;
-    if (statuses.length) values.status = statuses;
-    return values;
-  }, [orderId, methods, statuses]);
-
-  const applyColumnFilters = React.useCallback(
-    (next: Record<string, string[]>) => {
-      setOrderId(next.order_id?.[0] ?? "");
-      setMethods(next.print_method ?? []);
-      setStatuses(next.status ?? []);
-    },
-    []
-  );
-
   React.useEffect(() => {
     let cancelled = false;
     setLoading(true);
@@ -322,6 +305,7 @@ export default function DesignUploadsPage() {
       )}
 
       <DataTable
+        onRefresh={() => setRefreshKey((k) => k + 1)}
         columns={columns}
         data={rows}
         loading={loading}
@@ -329,7 +313,6 @@ export default function DesignUploadsPage() {
         clearSelectionKey={clearKey}
         onRowClick={setDetail}
         columnFilterDefs={COLUMN_FILTERS}
-        serverColumnFilters={{ value: columnFilterValues, onChange: applyColumnFilters }}
         serverPagination={{
           pageIndex: page,
           pageCount,

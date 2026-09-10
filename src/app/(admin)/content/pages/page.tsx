@@ -147,6 +147,7 @@ export default function ContentPagesPage() {
   const [rows, setRows] = React.useState<ContentPageRow[]>([]);
   const [loading, setLoading] = React.useState(true);
   const [page, setPage] = React.useState(0);
+  const [refreshKey, setRefreshKey] = React.useState(0);
   const [pageSize, setPageSize] = React.useState<number>(DEFAULT_PAGE_SIZE);
   const [pageCount, setPageCount] = React.useState(1);
   const [total, setTotal] = React.useState(0);
@@ -183,23 +184,6 @@ export default function ContentPagesPage() {
     [dateRange, debounced, contentTypes, statuses]
   );
 
-  const columnFilterValues = React.useMemo(() => {
-    const values: Record<string, string[]> = {};
-    if (search) values.title = [search];
-    if (contentTypes.length) values.content_type = contentTypes;
-    if (statuses.length) values.is_active = statuses;
-    return values;
-  }, [search, contentTypes, statuses]);
-
-  const applyColumnFilters = React.useCallback(
-    (next: Record<string, string[]>) => {
-      setSearch(next.title?.[0] ?? "");
-      setContentTypes(next.content_type ?? []);
-      setStatuses(next.is_active ?? []);
-    },
-    []
-  );
-
   React.useEffect(() => {
     let cancelled = false;
     setLoading(true);
@@ -227,7 +211,7 @@ export default function ContentPagesPage() {
     return () => {
       cancelled = true;
     };
-  }, [page, pageSize, activeFilters]);
+  }, [page, pageSize, activeFilters, refreshKey]);
 
   React.useEffect(() => {
     let cancelled = false;
@@ -321,6 +305,7 @@ export default function ContentPagesPage() {
       )}
 
       <DataTable
+        onRefresh={() => setRefreshKey((k) => k + 1)}
         columns={columns}
         data={rows}
         loading={loading}
@@ -328,7 +313,6 @@ export default function ContentPagesPage() {
         clearSelectionKey={clearKey}
         onRowClick={(row) => router.push(`/content/pages/${row.id}`)}
         columnFilterDefs={COLUMN_FILTERS}
-        serverColumnFilters={{ value: columnFilterValues, onChange: applyColumnFilters }}
         serverPagination={{
           pageIndex: page,
           pageCount,

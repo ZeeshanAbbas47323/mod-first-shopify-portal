@@ -163,6 +163,7 @@ export function PopupsTab() {
       />
 
       <DataTable
+        onRefresh={() => setRefreshKey((k) => k + 1)}
         columns={columns} data={rows} loading={loading}
         onRowClick={(row) => { setEditing(row); setDialogOpen(true); }}
         serverPagination={{

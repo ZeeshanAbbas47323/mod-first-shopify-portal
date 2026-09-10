@@ -106,23 +106,6 @@ export default function DiscountTiersPage() {
     [dateRange, debounced, types, statuses]
   );
 
-  const columnFilterValues = React.useMemo(() => {
-    const values: Record<string, string[]> = {};
-    if (search) values.name = [search];
-    if (types.length) values.discount_type = types;
-    if (statuses.length) values.status = statuses;
-    return values;
-  }, [search, types, statuses]);
-
-  const applyColumnFilters = React.useCallback(
-    (next: Record<string, string[]>) => {
-      setSearch(next.name?.[0] ?? "");
-      setTypes(next.discount_type ?? []);
-      setStatuses(next.status ?? []);
-    },
-    []
-  );
-
   React.useEffect(() => {
     let cancelled = false;
     setLoading(true);
@@ -322,6 +305,7 @@ export default function DiscountTiersPage() {
       )}
 
       <DataTable
+        onRefresh={() => setRefreshKey((k) => k + 1)}
         columns={columns}
         data={rows}
         loading={loading}
@@ -332,7 +316,6 @@ export default function DiscountTiersPage() {
           setDialogOpen(true);
         }}
         columnFilterDefs={COLUMN_FILTERS}
-        serverColumnFilters={{ value: columnFilterValues, onChange: applyColumnFilters }}
         serverPagination={{
           pageIndex: page,
           pageCount,

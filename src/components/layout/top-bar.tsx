@@ -4,7 +4,7 @@ import * as React from "react";
 import { useRouter } from "next/navigation";
 import {
   Home, Loader2, LockKeyhole, LogOut, Package, Percent,
-  Search, Settings, ShoppingCart, Store, Tag, Users, X,
+  Search, Settings, ShoppingCart, Store, Tag, UserRound, Users, X,
 } from "lucide-react";
 
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
@@ -237,6 +237,9 @@ export function TopBar() {
               </DropdownMenuLabel>
             </DropdownMenuGroup>
             <DropdownMenuSeparator />
+            <DropdownMenuItem onClick={() => router.push("/profile")}>
+              <UserRound className="size-4" /> My profile
+            </DropdownMenuItem>
             <DropdownMenuItem onClick={() => router.push("/settings")}>
               <Settings className="size-4" /> Settings
             </DropdownMenuItem>

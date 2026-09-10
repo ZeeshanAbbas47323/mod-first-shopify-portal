@@ -212,21 +212,6 @@ function CampaignsTab() {
     [debouncedSearch, statuses]
   );
 
-  const columnFilterValues = React.useMemo(() => {
-    const values: Record<string, string[]> = {};
-    if (search) values.subject = [search];
-    if (statuses.length) values.status = statuses;
-    return values;
-  }, [search, statuses]);
-
-  const applyColumnFilters = React.useCallback(
-    (next: Record<string, string[]>) => {
-      setSearch(next.subject?.[0] ?? "");
-      setStatuses(next.status ?? []);
-    },
-    []
-  );
-
   React.useEffect(() => {
     let cancelled = false;
     setLoading(true);
@@ -307,6 +292,7 @@ function CampaignsTab() {
       />
 
       <DataTable
+        onRefresh={() => setRefreshKey((k) => k + 1)}
         columns={campaignColumns}
         data={rows}
         loading={loading}
@@ -317,7 +303,6 @@ function CampaignsTab() {
           setDialogOpen(true);
         }}
         columnFilterDefs={CAMPAIGN_COLUMN_FILTERS}
-        serverColumnFilters={{ value: columnFilterValues, onChange: applyColumnFilters }}
         serverPagination={{
           pageIndex: page,
           pageCount,
@@ -675,23 +660,6 @@ function SubscribersTab() {
     [dateRange, debouncedSearch, statuses, sources]
   );
 
-  const columnFilterValues = React.useMemo(() => {
-    const values: Record<string, string[]> = {};
-    if (search) values.email = [search];
-    if (statuses.length) values.status = statuses;
-    if (sources.length) values.source = sources;
-    return values;
-  }, [search, statuses, sources]);
-
-  const applyColumnFilters = React.useCallback(
-    (next: Record<string, string[]>) => {
-      setSearch(next.email?.[0] ?? "");
-      setStatuses(next.status ?? []);
-      setSources(next.source ?? []);
-    },
-    []
-  );
-
   React.useEffect(() => {
     let cancelled = false;
     setLoading(true);
@@ -792,7 +760,6 @@ function SubscribersTab() {
           setDialogOpen(true);
         }}
         columnFilterDefs={SUBSCRIBER_COLUMN_FILTERS}
-        serverColumnFilters={{ value: columnFilterValues, onChange: applyColumnFilters }}
         serverPagination={{
           pageIndex: page,
           pageCount,

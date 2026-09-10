@@ -33,3 +33,18 @@ export async function moveRow<T extends Sortable>(
   );
   return next;
 }
+
+/**
+ * Persists an arbitrary order (not just an adjacent swap), which is what a
+ * drag-and-drop list produces. Sort values are rewritten from the array index
+ * so the stored order always matches what the user sees.
+ */
+export async function persistOrder<T extends Sortable>(
+  table: SortOrderTable,
+  ordered: T[]
+): Promise<void> {
+  await updateSortOrder(
+    table,
+    ordered.map((row, i) => ({ id: row.id, sort_order: i }))
+  );
+}

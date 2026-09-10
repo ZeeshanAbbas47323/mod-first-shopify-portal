@@ -114,21 +114,6 @@ export default function Net30ApplicationsPage() {
     [dateRange, debounced, statuses]
   );
 
-  const columnFilterValues = React.useMemo(() => {
-    const values: Record<string, string[]> = {};
-    if (company) values.company_name = [company];
-    if (statuses.length) values.status = statuses;
-    return values;
-  }, [company, statuses]);
-
-  const applyColumnFilters = React.useCallback(
-    (next: Record<string, string[]>) => {
-      setCompany(next.company_name?.[0] ?? "");
-      setStatuses(next.status ?? []);
-    },
-    []
-  );
-
   React.useEffect(() => {
     let cancelled = false;
     setLoading(true);
@@ -332,6 +317,7 @@ export default function Net30ApplicationsPage() {
       )}
 
       <DataTable
+        onRefresh={() => setRefreshKey((k) => k + 1)}
         columns={columns}
         data={rows}
         loading={loading}
@@ -339,7 +325,6 @@ export default function Net30ApplicationsPage() {
         clearSelectionKey={clearKey}
         onRowClick={setDetail}
         columnFilterDefs={COLUMN_FILTERS}
-        serverColumnFilters={{ value: columnFilterValues, onChange: applyColumnFilters }}
         serverPagination={{
           pageIndex: page,
           pageCount,

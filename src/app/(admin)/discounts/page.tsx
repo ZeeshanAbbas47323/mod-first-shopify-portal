@@ -223,23 +223,6 @@ export default function DiscountsPage() {
     [dateRange, debounced, statuses, types]
   );
 
-  const columnFilterValues = React.useMemo(() => {
-    const values: Record<string, string[]> = {};
-    if (search) values.code = [search];
-    if (types.length) values.type = types;
-    if (statuses.length) values.status = statuses;
-    return values;
-  }, [search, types, statuses]);
-
-  const applyColumnFilters = React.useCallback(
-    (next: Record<string, string[]>) => {
-      setSearch(next.code?.[0] ?? "");
-      setTypes(next.type ?? []);
-      setStatuses(next.status ?? []);
-    },
-    []
-  );
-
   React.useEffect(() => {
     let cancelled = false;
     setLoading(true);
@@ -357,12 +340,12 @@ export default function DiscountsPage() {
       <ValidateCouponDialog open={validateOpen} onOpenChange={setValidateOpen} />
 
       <DataTable
+        onRefresh={() => setRefreshKey((k) => k + 1)}
         columns={columns} data={rows} loading={loading}
         onSelectionChange={setSelected}
         clearSelectionKey={clearKey}
         onRowClick={(row) => { setEditing(row); setDialogOpen(true); }}
         columnFilterDefs={COLUMN_FILTERS}
-        serverColumnFilters={{ value: columnFilterValues, onChange: applyColumnFilters }}
         serverPagination={{
           pageIndex: page,
           pageCount,

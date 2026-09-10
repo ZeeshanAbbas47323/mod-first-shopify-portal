@@ -556,6 +556,7 @@ export default function InventoryPage() {
           </div>
 
           <DataTable
+            onRefresh={() => setRefreshKey((k) => k + 1)}
             columns={stockColumns}
             data={visibleRows}
             loading={loading}

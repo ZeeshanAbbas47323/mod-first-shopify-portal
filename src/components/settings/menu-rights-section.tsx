@@ -1,24 +1,12 @@
 "use client";
 
 import * as React from "react";
-import { type ColumnDef } from "@tanstack/react-table";
-import { format } from "date-fns";
-import { Check, Loader2, Minus, Plus, Trash2 } from "lucide-react";
-import { useForm, Controller } from "react-hook-form";
-import { zodResolver } from "@hookform/resolvers/zod";
-import { z } from "zod";
+import { Loader2, RefreshCw, Search, ShieldCheck } from "lucide-react";
 import { toast } from "sonner";
 
+import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import {
-  Dialog,
-  DialogContent,
-  DialogDescription,
-  DialogFooter,
-  DialogHeader,
-  DialogTitle,
-} from "@/components/ui/dialog";
-import { ConfirmDeleteDialog } from "@/components/confirm-delete-dialog";
+import { Checkbox } from "@/components/ui/checkbox";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import {
@@ -28,721 +16,452 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { DataTable } from "@/components/data-table";
-import { StatusBadge } from "@/components/status-badge";
-import { Checkbox } from "@/components/ui/checkbox";
-import { MultiSelectFilter } from "@/components/multi-select-filter";
+import { Skeleton } from "@/components/ui/skeleton";
+import {
+  USER_ROLES,
+  getMenuRightMatrix,
+  saveMenuRightMatrix,
+  type MenuPermissionRow,
+} from "@/lib/admin-api";
 import { apiErrorMessage } from "@/lib/auth-api";
 import { cn } from "@/lib/utils";
-import { exportRows as writeExport, type ExportFormat, fetchAllPages } from "@/lib/export";
-import { ExportFormatMenu } from "@/components/export-menu";
-import {
-  createMenuRight,
-  deleteRecord,
-  listMenuRights,
-  listMenus,
-  updateMenuRight,
-  USER_ROLES,
-  type MenuRightRow,
-  type MenuRow,
-} from "@/lib/admin-api";
 
-const DEFAULT_PAGE_SIZE = 10;
-const EXPORT_CAP = 5000;
+const PERMISSIONS = [
+  { key: "can_view", label: "View" },
+  { key: "can_create", label: "Create" },
+  { key: "can_edit", label: "Update" },
+  { key: "can_delete", label: "Delete" },
+] as const;
 
-const STAFF_ROLES = USER_ROLES.filter((r) => r !== "customer");
+type PermissionKey = (typeof PERMISSIONS)[number]["key"];
 
-const humanizeRole = (role?: string) =>
-  role ? role.replace(/_/g, " ").replace(/\b\w/g, (c) => c.toUpperCase()) : "—";
-
-function PermissionCell({ allowed }: { allowed?: boolean }) {
-  return allowed ? (
-    <Check className="size-4 text-[#29845a]" aria-label="Allowed" />
-  ) : (
-    <Minus className="size-4 text-muted-foreground/50" aria-label="Not allowed" />
-  );
-}
-
-const columns: ColumnDef<MenuRightRow>[] = [
-  {
-    id: "menu",
-    header: "Menu",
-    cell: ({ row }) => {
-      const r = row.original;
-      return (
-        <div className="min-w-0">
-          <p className="truncate font-medium">
-            {r.menu?.name ?? `Menu #${r.menu_id}`}
-          </p>
-          {r.menu?.slug && (
-            <p className="truncate font-mono text-xs text-muted-foreground">
-              /{r.menu.slug}
-            </p>
-          )}
-        </div>
-      );
-    },
-  },
-  {
-    accessorKey: "role",
-    header: "Role",
-    cell: ({ row }) => (
-      <StatusBadge status={humanizeRole(row.original.role)} tone="info" />
-    ),
-  },
-  {
-    accessorKey: "can_view",
-    header: "View",
-    cell: ({ row }) => <PermissionCell allowed={row.original.can_view} />,
-  },
-  {
-    accessorKey: "can_create",
-    header: "Create",
-    cell: ({ row }) => <PermissionCell allowed={row.original.can_create} />,
-  },
-  {
-    accessorKey: "can_edit",
-    header: "Edit",
-    cell: ({ row }) => <PermissionCell allowed={row.original.can_edit} />,
-  },
-  {
-    accessorKey: "can_delete",
-    header: "Delete",
-    cell: ({ row }) => <PermissionCell allowed={row.original.can_delete} />,
-  },
-  {
-    accessorKey: "created_at",
-    header: "Created",
-    cell: ({ row }) => {
-      const d = row.original.created_at;
-      if (!d) return "—";
-      const date = new Date(d);
-      return isNaN(date.getTime()) ? "—" : format(date, "MMM d, yyyy");
-    },
-  },
-];
-
-type Tri = "all" | "yes" | "no";
-const triToBool = (v: Tri) => (v === "all" ? undefined : v === "yes");
-
-export function MenuRightsSection() {
-  const [rows, setRows] = React.useState<MenuRightRow[]>([]);
-  const [loading, setLoading] = React.useState(true);
-  const [page, setPage] = React.useState(0);
-  const [pageSize, setPageSize] = React.useState<number>(DEFAULT_PAGE_SIZE);
-  const [pageCount, setPageCount] = React.useState(1);
-  const [total, setTotal] = React.useState(0);
-
-  const [roles, setRoles] = React.useState<string[]>([]);
-  const [canView, setCanView] = React.useState<Tri>("all");
-  const [canEdit, setCanEdit] = React.useState<Tri>("all");
-  const [canDelete, setCanDelete] = React.useState<Tri>("all");
-  const [dialogOpen, setDialogOpen] = React.useState(false);
-  const [editing, setEditing] = React.useState<MenuRightRow | null>(null);
-  const [refreshKey, setRefreshKey] = React.useState(0);
-  const [exportBusy, setExportBusy] = React.useState(false);
-
-  React.useEffect(() => {
-    setPage(0);
-  }, [roles, canView, canEdit, canDelete]);
-
-  const buildFilters = React.useCallback(
-    () => ({
-      role: roles.length ? { in: roles } : undefined,
-      can_view: triToBool(canView),
-      can_edit: triToBool(canEdit),
-      can_delete: triToBool(canDelete),
-    }),
-    [roles, canView, canEdit, canDelete]
-  );
-
-  React.useEffect(() => {
-    let cancelled = false;
-    setLoading(true);
-    listMenuRights({
-      page: page + 1,
-      limit: pageSize,
-      filters: buildFilters(),
-    })
-      .then((res) => {
-        if (cancelled) return;
-        setRows(res.rows);
-        setTotal(res.total);
-        setPageCount(res.totalPages);
-      })
-      .catch((error) => {
-        if (cancelled) return;
-        setRows([]);
-        toast.error(apiErrorMessage(error, "Couldn't load menu rights."));
-      })
-      .finally(() => !cancelled && setLoading(false));
-    return () => {
-      cancelled = true;
-    };
-  }, [page, pageSize, buildFilters, refreshKey]);
-
-  const runExport = async (fileFormat: ExportFormat) => {
-    setExportBusy(true);
-    try {
-      const exportRows = await fetchAllPages((page, limit) => listMenuRights({ page, limit, filters: buildFilters() }), EXPORT_CAP);
-      if (!exportRows.length) {
-        toast.error("Nothing to export.");
-        return;
-      }
-      await writeExport(fileFormat, "menu-rights", [
-        { key: "menu", label: "Menu", value: (r: MenuRightRow) => r.menu?.name ?? `Menu #${r.menu_id}` },
-        { key: "role", label: "Role", value: (r: MenuRightRow) => humanizeRole(r.role) },
-        { key: "can_view", label: "View", value: (r: MenuRightRow) => (r.can_view ? "Yes" : "No") },
-        { key: "can_create", label: "Create", value: (r: MenuRightRow) => (r.can_create ? "Yes" : "No") },
-        { key: "can_edit", label: "Edit", value: (r: MenuRightRow) => (r.can_edit ? "Yes" : "No") },
-        { key: "can_delete", label: "Delete", value: (r: MenuRightRow) => (r.can_delete ? "Yes" : "No") },
-      ], exportRows);
-      toast.success(`Exported ${exportRows.length} row${exportRows.length === 1 ? "" : "s"}.`);
-    } catch (error) {
-      toast.error(apiErrorMessage(error, "Couldn't export menu rights."));
-    } finally {
-      setExportBusy(false);
-    }
-  };
-
-  const triSelect = (label: string, value: Tri, onChange: (v: Tri) => void) => (
-    <Select
-      items={{ all: `${label}: All`, yes: `${label}: Yes`, no: `${label}: No` }}
-      value={value}
-      onValueChange={(v) => onChange(v as Tri)}
-    >
-      <SelectTrigger className="min-w-32 bg-card">
-        <SelectValue />
-      </SelectTrigger>
-      <SelectContent>
-        <SelectItem value="all">{label}: All</SelectItem>
-        <SelectItem value="yes">{label}: Yes</SelectItem>
-        <SelectItem value="no">{label}: No</SelectItem>
-      </SelectContent>
-    </Select>
-  );
-
-  return (
-    <div className="flex flex-col gap-3">
-      <div className="flex flex-wrap items-center gap-2">
-        <MultiSelectFilter
-          label="Role"
-          options={STAFF_ROLES.map((r) => ({ value: r, label: humanizeRole(r) }))}
-          value={roles}
-          onChange={setRoles}
-        />
-        {triSelect("View", canView, setCanView)}
-        {triSelect("Edit", canEdit, setCanEdit)}
-        {triSelect("Delete", canDelete, setCanDelete)}
-        <ExportFormatMenu onSelect={runExport} busy={exportBusy} />
-        <Button
-          className="ml-auto"
-          onClick={() => {
-            setEditing(null);
-            setDialogOpen(true);
-          }}
-        >
-          <Plus className="size-4" />
-          Add right
-        </Button>
-      </div>
-
-      <MenuRightDialog
-        editing={editing}
-        open={dialogOpen}
-        onOpenChange={setDialogOpen}
-        onSaved={() => setRefreshKey((k) => k + 1)}
-      />
-
-      <DataTable
-        columns={columns}
-        data={rows}
-        loading={loading}
-        onRowClick={(row) => {
-          setEditing(row);
-          setDialogOpen(true);
-        }}
-        serverPagination={{
-          pageIndex: page,
-          pageCount,
-          total,
-          onPageChange: setPage,
-          pageSize,
-          onPageSizeChange: setPageSize,
-        }}
-      />
-    </div>
-  );
-}
-
-const ROLE_FORM_ITEMS: Record<string, string> = Object.fromEntries(
-  STAFF_ROLES.map((r) => [r, humanizeRole(r)])
+/** super_admin bypasses rights entirely, and customers never see the admin. */
+const ASSIGNABLE_ROLES = USER_ROLES.filter(
+  (role) => role !== "super_admin" && role !== "customer"
 );
 
-const menuRightSchema = z.object({
-  menu_ids: z.array(z.number().int().positive()).min(1, "Pick at least one menu"),
-  role: z.string().min(1, "Role is required"),
-  can_view: z.boolean(),
-  can_create: z.boolean(),
-  can_edit: z.boolean(),
-  can_delete: z.boolean(),
-});
-type MenuRightValues = z.infer<typeof menuRightSchema>;
+const ROLE_ITEMS = Object.fromEntries(
+  ASSIGNABLE_ROLES.map((role) => [role, humanizeRole(role)])
+);
 
-function menuDepth(menu: MenuRow, byId: Map<number, MenuRow>): number {
-  let depth = 0;
-  let parent = menu.parent_id != null ? byId.get(Number(menu.parent_id)) : undefined;
-  while (parent && depth < 5) {
-    depth += 1;
-    parent = parent.parent_id != null ? byId.get(Number(parent.parent_id)) : undefined;
-  }
-  return depth;
+function humanizeRole(role: string) {
+  return role
+    .split("_")
+    .map((part) => part.charAt(0).toUpperCase() + part.slice(1))
+    .join(" ");
 }
 
-function MenuPicker({
-  menus,
-  loading,
-  value,
-  onChange,
-  disabled,
-  assigned,
-  assignedLoading,
-}: {
-  menus: MenuRow[];
-  loading: boolean;
-  value: number[];
-  onChange: (next: number[]) => void;
-  disabled?: boolean;
-  assigned?: Set<number>;
-  assignedLoading?: boolean;
-}) {
-  const [query, setQuery] = React.useState("");
-  const [hideAssigned, setHideAssigned] = React.useState(true);
+type Grants = Record<PermissionKey, boolean>;
 
-  const byId = React.useMemo(
-    () => new Map(menus.map((m) => [Number(m.id), m])),
-    [menus]
+/** menu id -> the four flags, which is what the table edits and submits. */
+type GrantMap = Record<number, Grants>;
+
+function toGrantMap(items: MenuPermissionRow[]): GrantMap {
+  const map: GrantMap = {};
+  for (const item of items) {
+    map[item.id] = {
+      can_view: !!item.can_view,
+      can_create: !!item.can_create,
+      can_edit: !!item.can_edit,
+      can_delete: !!item.can_delete,
+    };
+  }
+  return map;
+}
+
+/**
+ * Flattens the menu list into parent-then-children order so the table reads as
+ * a tree. Children of a parent that isn't in the set are kept at the root
+ * rather than dropped, so nothing becomes invisible and un-grantable.
+ */
+function flattenTree(items: MenuPermissionRow[]) {
+  const byParent = new Map<number | null, MenuPermissionRow[]>();
+  const ids = new Set(items.map((item) => item.id));
+
+  for (const item of items) {
+    const parent =
+      item.parent_id != null && ids.has(item.parent_id) ? item.parent_id : null;
+    const bucket = byParent.get(parent);
+    if (bucket) bucket.push(item);
+    else byParent.set(parent, [item]);
+  }
+
+  const out: { row: MenuPermissionRow; depth: number }[] = [];
+  const walk = (parent: number | null, depth: number) => {
+    for (const row of byParent.get(parent) ?? []) {
+      out.push({ row, depth });
+      walk(row.id, depth + 1);
+    }
+  };
+  walk(null, 0);
+  return out;
+}
+
+export function MenuRightsSection() {
+  const [role, setRole] = React.useState<string>(ASSIGNABLE_ROLES[0]);
+  const [rows, setRows] = React.useState<MenuPermissionRow[]>([]);
+  const [grants, setGrants] = React.useState<GrantMap>({});
+  const [baseline, setBaseline] = React.useState<GrantMap>({});
+  const [loading, setLoading] = React.useState(true);
+  const [saving, setSaving] = React.useState(false);
+  const [search, setSearch] = React.useState("");
+
+  const load = React.useCallback(
+    async (nextRole: string) => {
+      setLoading(true);
+      try {
+        const matrix = await getMenuRightMatrix(nextRole);
+        const map = toGrantMap(matrix.items);
+        setRows(matrix.items);
+        setGrants(map);
+        setBaseline(map);
+      } catch (error) {
+        setRows([]);
+        setGrants({});
+        setBaseline({});
+        toast.error(apiErrorMessage(error, "Couldn't load permissions."));
+      } finally {
+        setLoading(false);
+      }
+    },
+    []
   );
 
-  const isTaken = React.useCallback(
-    (menu: MenuRow) => !!assigned?.has(Number(menu.id)),
-    [assigned]
-  );
+  React.useEffect(() => {
+    void load(role);
+  }, [role, load]);
 
-  const takenCount = React.useMemo(
-    () => menus.filter(isTaken).length,
-    [menus, isTaken]
-  );
+  const tree = React.useMemo(() => flattenTree(rows), [rows]);
 
   const visible = React.useMemo(() => {
-    const q = query.trim().toLowerCase();
-    let list = menus;
-    if (hideAssigned && !disabled) list = list.filter((m) => !isTaken(m));
-    if (!q) return list;
-    return list.filter(
-      (m) =>
-        m.name.toLowerCase().includes(q) || (m.slug ?? "").toLowerCase().includes(q)
+    const term = search.trim().toLowerCase();
+    if (!term) return tree;
+    return tree.filter(
+      ({ row }) =>
+        row.name.toLowerCase().includes(term) ||
+        row.slug.toLowerCase().includes(term)
     );
-  }, [menus, query, hideAssigned, disabled, isTaken]);
+  }, [tree, search]);
 
-  const toggle = (id: number) =>
-    onChange(value.includes(id) ? value.filter((v) => v !== id) : [...value, id]);
+  const dirty = React.useMemo(
+    () =>
+      rows.some((row) =>
+        PERMISSIONS.some(
+          ({ key }) => !!grants[row.id]?.[key] !== !!baseline[row.id]?.[key]
+        )
+      ),
+    [rows, grants, baseline]
+  );
 
-  const selectableIds = visible
-    .map((m) => Number(m.id))
-    .filter((id) => !assigned?.has(id));
-  const allSelected =
-    selectableIds.length > 0 && selectableIds.every((id) => value.includes(id));
+  const grantedCount = React.useMemo(
+    () =>
+      rows.filter((row) =>
+        PERMISSIONS.some(({ key }) => grants[row.id]?.[key])
+      ).length,
+    [rows, grants]
+  );
 
-  const everythingTaken =
-    !loading && !assignedLoading && menus.length > 0 && takenCount === menus.length;
+  const setGrant = (menuId: number, key: PermissionKey, value: boolean) => {
+    setGrants((prev) => {
+      const current = prev[menuId] ?? {
+        can_view: false,
+        can_create: false,
+        can_edit: false,
+        can_delete: false,
+      };
+      const next: Grants = { ...current, [key]: value };
+
+      // Create/Update/Delete are meaningless without View, and clearing View
+      // should not leave orphaned write access behind.
+      if (key === "can_view" && !value) {
+        next.can_create = false;
+        next.can_edit = false;
+        next.can_delete = false;
+      } else if (key !== "can_view" && value) {
+        next.can_view = true;
+      }
+
+      return { ...prev, [menuId]: next };
+    });
+  };
+
+  /** Toggles a whole menu row: all four flags on, or all off. */
+  const setRowAll = (menuId: number, value: boolean) => {
+    setGrants((prev) => ({
+      ...prev,
+      [menuId]: {
+        can_view: value,
+        can_create: value,
+        can_edit: value,
+        can_delete: value,
+      },
+    }));
+  };
+
+  /** Toggles one permission column across every row currently visible. */
+  const setColumnAll = (key: PermissionKey, value: boolean) => {
+    setGrants((prev) => {
+      const next = { ...prev };
+      for (const { row } of visible) {
+        const current = next[row.id] ?? {
+          can_view: false,
+          can_create: false,
+          can_edit: false,
+          can_delete: false,
+        };
+        const updated: Grants = { ...current, [key]: value };
+        if (key === "can_view" && !value) {
+          updated.can_create = false;
+          updated.can_edit = false;
+          updated.can_delete = false;
+        } else if (key !== "can_view" && value) {
+          updated.can_view = true;
+        }
+        next[row.id] = updated;
+      }
+      return next;
+    });
+  };
+
+  const columnState = (key: PermissionKey) => {
+    if (!visible.length) return { checked: false, indeterminate: false };
+    const on = visible.filter(({ row }) => grants[row.id]?.[key]).length;
+    return {
+      checked: on === visible.length,
+      indeterminate: on > 0 && on < visible.length,
+    };
+  };
+
+  const save = async () => {
+    setSaving(true);
+    try {
+      const message = await saveMenuRightMatrix(
+        role,
+        rows.map((row) => ({
+          menu_id: row.id,
+          can_view: !!grants[row.id]?.can_view,
+          can_create: !!grants[row.id]?.can_create,
+          can_edit: !!grants[row.id]?.can_edit,
+          can_delete: !!grants[row.id]?.can_delete,
+        }))
+      );
+      setBaseline(grants);
+      toast.success(message);
+    } catch (error) {
+      toast.error(apiErrorMessage(error, "Couldn't save permissions."));
+    } finally {
+      setSaving(false);
+    }
+  };
 
   return (
-    <div className="rounded-lg border border-input bg-card">
-      <div className="flex flex-wrap items-center gap-2 border-b border-input p-2">
-        <Input
-          value={query}
-          onChange={(e) => setQuery(e.target.value)}
-          placeholder="Search menus"
-          disabled={disabled}
-          className="h-8 min-w-32 flex-1 text-sm"
-        />
+    <div className="flex flex-col gap-4">
+      <div className="rounded-lg bg-card p-4 ring-1 ring-black/8">
+        <div className="flex flex-col gap-4 md:flex-row md:items-end md:justify-between">
+          <div className="flex flex-col gap-1.5">
+            <Label htmlFor="permission-role">Role</Label>
+            <Select
+              items={ROLE_ITEMS}
+              value={role}
+              onValueChange={(v) => setRole(v as string)}
+            >
+              <SelectTrigger id="permission-role" className="w-full md:w-56">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                {ASSIGNABLE_ROLES.map((r) => (
+                  <SelectItem key={r} value={r}>
+                    {humanizeRole(r)}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+            <p className="text-xs text-muted-foreground">
+              Permissions apply to every user with this role. Super admins always
+              have full access.
+            </p>
+          </div>
+
+          <div className="flex flex-wrap items-center gap-2">
+            <div className="relative min-w-0 flex-1 md:w-56 md:flex-none">
+              <Search className="absolute left-2.5 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" />
+              <Input
+                value={search}
+                onChange={(e) => setSearch(e.target.value)}
+                placeholder="Search menus…"
+                aria-label="Search menus"
+                className="pl-8"
+              />
+            </div>
+            <Button
+              variant="outline"
+              size="icon"
+              onClick={() => void load(role)}
+              disabled={loading || saving}
+              aria-label="Refresh"
+              title="Refresh"
+            >
+              <RefreshCw className={cn("size-4", loading && "animate-spin")} />
+            </Button>
+          </div>
+        </div>
+      </div>
+
+      <div className="overflow-hidden rounded-lg bg-card ring-1 ring-black/8">
+        <div className="flex flex-wrap items-center justify-between gap-2 border-b px-4 py-3">
+          <div className="flex items-center gap-2">
+            <ShieldCheck className="size-4 text-muted-foreground" />
+            <h2 className="text-sm font-semibold">Menu permissions</h2>
+            {!loading && (
+              <Badge variant="secondary">
+                {grantedCount} of {rows.length} granted
+              </Badge>
+            )}
+          </div>
+          {dirty && !loading && (
+            <span className="text-xs text-muted-foreground">
+              Unsaved changes
+            </span>
+          )}
+        </div>
+
+        <div className="overflow-x-auto">
+          <table className="w-full min-w-[44rem] border-collapse text-sm">
+            <thead>
+              <tr className="bg-[#f7f7f7] text-xs font-semibold text-muted-foreground">
+                <th className="w-10 px-4 py-2.5 text-left" />
+                <th className="px-2 py-2.5 text-left font-semibold">
+                  Menu name
+                </th>
+                <th className="px-2 py-2.5 text-left font-semibold">Type</th>
+                {PERMISSIONS.map(({ key, label }) => {
+                  const state = columnState(key);
+                  return (
+                    <th key={key} className="w-24 px-2 py-2.5 text-center">
+                      <div className="flex flex-col items-center gap-1">
+                        <span>{label}</span>
+                        <Checkbox
+                          checked={state.checked}
+                          indeterminate={state.indeterminate}
+                          disabled={loading || saving || !visible.length}
+                          onCheckedChange={(v) => setColumnAll(key, !!v)}
+                          aria-label={`Toggle ${label} for all visible menus`}
+                        />
+                      </div>
+                    </th>
+                  );
+                })}
+              </tr>
+            </thead>
+            <tbody>
+              {loading ? (
+                Array.from({ length: 8 }).map((_, i) => (
+                  <tr key={i} className="border-b last:border-0">
+                    <td className="px-4 py-3">
+                      <Skeleton className="size-4 rounded" />
+                    </td>
+                    <td className="px-2 py-3">
+                      <Skeleton className="h-4 w-40" />
+                    </td>
+                    <td className="px-2 py-3">
+                      <Skeleton className="h-5 w-16 rounded-full" />
+                    </td>
+                    {PERMISSIONS.map(({ key }) => (
+                      <td key={key} className="px-2 py-3">
+                        <Skeleton className="mx-auto size-4 rounded" />
+                      </td>
+                    ))}
+                  </tr>
+                ))
+              ) : !visible.length ? (
+                <tr>
+                  <td colSpan={3 + PERMISSIONS.length} className="px-4 py-16">
+                    <div className="flex flex-col items-center gap-1 text-center">
+                      <p className="text-sm font-medium">No menus found</p>
+                      <p className="text-xs text-muted-foreground">
+                        {search
+                          ? "Try a different search term."
+                          : "Add dashboard menus first, then assign permissions here."}
+                      </p>
+                    </div>
+                  </td>
+                </tr>
+              ) : (
+                visible.map(({ row, depth }) => {
+                  const rowGrants = grants[row.id];
+                  const any = PERMISSIONS.some(({ key }) => rowGrants?.[key]);
+                  const all = PERMISSIONS.every(({ key }) => rowGrants?.[key]);
+
+                  return (
+                    <tr
+                      key={row.id}
+                      className="border-b transition-colors last:border-0 hover:bg-muted/40"
+                    >
+                      <td className="px-4 py-2.5">
+                        <Checkbox
+                          checked={all}
+                          indeterminate={any && !all}
+                          disabled={saving}
+                          onCheckedChange={(v) => setRowAll(row.id, !!v)}
+                          aria-label={`Toggle all permissions for ${row.name}`}
+                        />
+                      </td>
+                      <td className="px-2 py-2.5">
+                        <div
+                          className="flex min-w-0 items-center gap-1.5"
+                          style={{ paddingLeft: `${depth * 1.25}rem` }}
+                        >
+                          {depth > 0 && (
+                            <span
+                              aria-hidden="true"
+                              className="text-muted-foreground"
+                            >
+                              ↳
+                            </span>
+                          )}
+                          <span className="truncate font-medium">
+                            {row.name}
+                          </span>
+                        </div>
+                      </td>
+                      <td className="px-2 py-2.5">
+                        <Badge variant="secondary" className="font-normal">
+                          {row.slug}
+                        </Badge>
+                      </td>
+                      {PERMISSIONS.map(({ key, label }) => (
+                        <td key={key} className="px-2 py-2.5 text-center">
+                          <Checkbox
+                            checked={!!rowGrants?.[key]}
+                            disabled={saving}
+                            onCheckedChange={(v) => setGrant(row.id, key, !!v)}
+                            aria-label={`${label} ${row.name}`}
+                            className="mx-auto"
+                          />
+                        </td>
+                      ))}
+                    </tr>
+                  );
+                })
+              )}
+            </tbody>
+          </table>
+        </div>
+      </div>
+
+      <div className="sticky bottom-0 flex flex-wrap items-center justify-end gap-2 rounded-lg bg-card p-3 ring-1 ring-black/8">
         <Button
-          type="button"
-          size="sm"
           variant="outline"
-          disabled={disabled || !selectableIds.length}
-          onClick={() =>
-            onChange(
-              allSelected
-                ? value.filter((id) => !selectableIds.includes(id))
-                : [...new Set([...value, ...selectableIds])]
-            )
-          }
+          onClick={() => setGrants(baseline)}
+          disabled={!dirty || saving || loading}
         >
-          {allSelected ? "Clear" : "All"}
+          Discard
+        </Button>
+        <Button onClick={save} disabled={!dirty || saving || loading}>
+          {saving && <Loader2 className="size-4 animate-spin" />}
+          {saving ? "Saving…" : "Save permissions"}
         </Button>
       </div>
-
-      {!disabled && takenCount > 0 && (
-        <label className="flex cursor-pointer items-center gap-2 border-b border-input bg-muted/30 px-2 py-1.5 text-xs text-muted-foreground">
-          <Checkbox
-            checked={hideAssigned}
-            onCheckedChange={(v) => setHideAssigned(!!v)}
-          />
-          <span>Hide the {takenCount} this role already has</span>
-        </label>
-      )}
-
-      <div className="max-h-56 overflow-y-auto p-1">
-        {loading ? (
-          <p className="flex items-center gap-2 px-2 py-6 text-sm text-muted-foreground">
-            <Loader2 className="size-4 animate-spin" />
-            Loading menus…
-          </p>
-        ) : everythingTaken ? (
-          <p className="px-3 py-6 text-center text-sm text-muted-foreground">
-            This role already has every dashboard menu. Close this and click an
-            existing row to change its permissions.
-          </p>
-        ) : !visible.length ? (
-          <p className="px-3 py-6 text-center text-sm text-muted-foreground">
-            {menus.length
-              ? "No menus match that search."
-              : "No dashboard menus found."}
-          </p>
-        ) : (
-          visible.map((menu) => {
-            const id = Number(menu.id);
-            const taken = isTaken(menu);
-            return (
-              <label
-                key={id}
-                className={cn(
-                  "flex items-center gap-2 rounded-md px-2 py-1.5 text-sm",
-                  taken
-                    ? "cursor-not-allowed opacity-60"
-                    : "cursor-pointer hover:bg-muted"
-                )}
-                style={{ paddingLeft: 8 + menuDepth(menu, byId) * 14 }}
-              >
-                <Checkbox
-                  checked={!taken && value.includes(id)}
-                  onCheckedChange={() => !taken && toggle(id)}
-                  disabled={disabled || taken}
-                />
-                <span className="min-w-0 flex-1 truncate">{menu.name}</span>
-                {menu.slug && (
-                  <span className="hidden shrink-0 font-mono text-xs text-muted-foreground sm:inline">
-                    /{menu.slug}
-                  </span>
-                )}
-                {taken && (
-                  <span className="shrink-0 text-xs text-muted-foreground">Added</span>
-                )}
-              </label>
-            );
-          })
-        )}
-      </div>
-
-      <div className="flex flex-wrap items-center gap-2 border-t border-input px-3 py-1.5 text-xs text-muted-foreground">
-        <span>{value.length} selected</span>
-        {assignedLoading && (
-          <span className="ml-auto flex items-center gap-1">
-            <Loader2 className="size-3 animate-spin" />
-            Checking this role…
-          </span>
-        )}
-      </div>
     </div>
-  );
-}
-
-
-function MenuRightDialog({
-  editing,
-  open,
-  onOpenChange,
-  onSaved,
-}: {
-  editing: MenuRightRow | null;
-  open: boolean;
-  onOpenChange: (open: boolean) => void;
-  onSaved: () => void;
-}) {
-  const {
-    register,
-    handleSubmit,
-    control,
-    reset,
-    watch,
-    setValue,
-    formState: { errors, isSubmitting },
-  } = useForm<MenuRightValues>({
-    resolver: zodResolver(menuRightSchema),
-    defaultValues: {
-      menu_ids: [],
-      role: "manager",
-      can_view: true,
-      can_create: false,
-      can_edit: false,
-      can_delete: false,
-    },
-  });
-
-  const [menus, setMenus] = React.useState<MenuRow[]>([]);
-  const [menusLoading, setMenusLoading] = React.useState(false);
-  const [assigned, setAssigned] = React.useState<Set<number>>(new Set());
-  const [assignedLoading, setAssignedLoading] = React.useState(false);
-
-  const role = watch("role");
-  const selectedMenuIds = watch("menu_ids");
-
-  const selectedMenuIdsRef = React.useRef(selectedMenuIds);
-  selectedMenuIdsRef.current = selectedMenuIds;
-
-  React.useEffect(() => {
-    if (!open || editing || !role) return;
-    let cancelled = false;
-
-    setAssigned(new Set());
-    setAssignedLoading(true);
-
-    listMenuRights({ page: 1, limit: 500, filters: { role } })
-      .then((res) => {
-        if (cancelled) return;
-        const taken = new Set(res.rows.map((r) => Number(r.menu_id)));
-        setAssigned(taken);
-        setValue(
-          "menu_ids",
-          (selectedMenuIdsRef.current ?? []).filter((id) => !taken.has(id))
-        );
-      })
-      .catch((error) => {
-        if (cancelled) return;
-        toast.error(
-          apiErrorMessage(error, "Couldn't check which menus this role already has.")
-        );
-      })
-      .finally(() => !cancelled && setAssignedLoading(false));
-
-    return () => {
-      cancelled = true;
-    };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [open, editing, role]);
-
-
-  React.useEffect(() => {
-    if (!open || menus.length) return;
-    let cancelled = false;
-    setMenusLoading(true);
-    listMenus({ page: 1, limit: 500, filters: { menu_type: "dashboard" } })
-      .then((res) => !cancelled && setMenus(res.rows))
-      .catch((error) => {
-        if (cancelled) return;
-        toast.error(apiErrorMessage(error, "Couldn't load the menu list."));
-      })
-      .finally(() => !cancelled && setMenusLoading(false));
-    return () => {
-      cancelled = true;
-    };
-  }, [open, menus.length]);
-
-  React.useEffect(() => {
-    if (open) {
-      reset({
-        menu_ids: editing?.menu_id != null ? [Number(editing.menu_id)] : [],
-        role: editing?.role ?? "manager",
-        can_view: editing?.can_view ?? true,
-        can_create: editing?.can_create ?? false,
-        can_edit: editing?.can_edit ?? false,
-        can_delete: editing?.can_delete ?? false,
-      });
-    }
-  }, [open, editing, reset]);
-
-  const onSubmit = async (values: MenuRightValues) => {
-    const permissions = {
-      role: values.role,
-      can_view: values.can_view,
-      can_create: values.can_create,
-      can_edit: values.can_edit,
-      can_delete: values.can_delete,
-    };
-
-    if (editing) {
-      try {
-        toast.success(
-          await updateMenuRight(editing.id, {
-            menu_id: Number(editing.menu_id),
-            ...permissions,
-          })
-        );
-        onOpenChange(false);
-        onSaved();
-      } catch (error) {
-        toast.error(apiErrorMessage(error, "Couldn't update the menu right."));
-      }
-      return;
-    }
-
-    const results = await Promise.allSettled(
-      values.menu_ids.map((menu_id) => createMenuRight({ menu_id, ...permissions }))
-    );
-
-    const failed = results.flatMap((result, i) =>
-      result.status === "rejected"
-        ? [{ menu_id: values.menu_ids[i], reason: result.reason }]
-        : []
-    );
-    const created = results.length - failed.length;
-
-    if (created) {
-      toast.success(`Added ${created} menu right${created === 1 ? "" : "s"}.`);
-    }
-    failed.forEach(({ menu_id, reason }) => {
-      const name = menus.find((m) => Number(m.id) === menu_id)?.name ?? `Menu #${menu_id}`;
-      toast.error(`${name}: ${apiErrorMessage(reason, "couldn't be added.")}`);
-    });
-
-    if (created) {
-      onOpenChange(false);
-      onSaved();
-    }
-  };
-
-  const [confirmOpen, setConfirmOpen] = React.useState(false);
-  const [deleting, setDeleting] = React.useState(false);
-
-  const handleDelete = async () => {
-    if (!editing) return;
-    setDeleting(true);
-    try {
-      const message = await deleteRecord("menuRight", editing.id);
-      toast.success(message);
-      setConfirmOpen(false);
-      onOpenChange(false);
-      onSaved();
-    } catch (error) {
-      toast.error(apiErrorMessage(error, "Couldn't delete the menu right."));
-    } finally {
-      setDeleting(false);
-    }
-  };
-
-  const perm = (
-    id: "can_view" | "can_create" | "can_edit" | "can_delete",
-    label: string
-  ) => (
-    <label className="flex cursor-pointer items-center gap-2 rounded-lg border border-input bg-card px-3 py-2 text-sm">
-      <input type="checkbox" className="accent-primary" {...register(id)} />
-      {label}
-    </label>
-  );
-
-  return (
-    <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-h-[90vh] overflow-y-auto sm:max-w-lg">
-        <DialogHeader>
-          <DialogTitle>{editing ? "Edit menu right" : "Add menu right"}</DialogTitle>
-          <DialogDescription>
-            {editing
-              ? `Update permissions for ${humanizeRole(editing.role)}.`
-              : "Assign permissions for a role on a menu item."}
-          </DialogDescription>
-        </DialogHeader>
-        <form onSubmit={handleSubmit(onSubmit)} className="space-y-4" noValidate>
-          <div className="space-y-1.5">
-            <Label>{editing ? "Menu" : "Menus"}</Label>
-            <Controller
-              control={control}
-              name="menu_ids"
-              render={({ field }) => (
-                <MenuPicker
-                  menus={menus}
-                  loading={menusLoading}
-                  value={field.value}
-                  onChange={field.onChange}
-                  disabled={!!editing}
-                  assigned={editing ? undefined : assigned}
-                  assignedLoading={assignedLoading}
-                />
-              )}
-            />
-            {errors.menu_ids && (
-              <p className="text-sm text-destructive">{errors.menu_ids.message}</p>
-            )}
-            {!editing && (
-              <p className="text-xs text-muted-foreground">
-                Pick as many as you like — the same permissions are applied to each.
-              </p>
-            )}
-          </div>
-
-          <div className="space-y-1.5">
-            <Label>Role</Label>
-            <Controller
-              control={control}
-              name="role"
-              render={({ field }) => (
-                <Select items={ROLE_FORM_ITEMS} value={field.value} onValueChange={field.onChange}>
-                  <SelectTrigger className="w-full">
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {STAFF_ROLES.map((r) => (
-                      <SelectItem key={r} value={r}>
-                        {humanizeRole(r)}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-              )}
-            />
-          </div>
-
-          <div className="space-y-1.5">
-            <Label>Permissions</Label>
-            <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
-              {perm("can_view", "View")}
-              {perm("can_create", "Create")}
-              {perm("can_edit", "Edit")}
-              {perm("can_delete", "Delete")}
-            </div>
-          </div>
-
-          <DialogFooter className="gap-2">
-            {editing && (
-              <Button
-                type="button"
-                variant="destructive"
-                className="mr-auto"
-                onClick={() => setConfirmOpen(true)}
-              >
-                <Trash2 className="size-4" />
-                Delete
-              </Button>
-            )}
-            <Button type="button" variant="outline" onClick={() => onOpenChange(false)}>
-              Cancel
-            </Button>
-            <Button type="submit" disabled={isSubmitting}>
-              {isSubmitting && <Loader2 className="size-4 animate-spin" />}
-              {editing ? "Save changes" : "Save right"}
-            </Button>
-          </DialogFooter>
-        </form>
-      </DialogContent>
-      <ConfirmDeleteDialog
-        open={confirmOpen}
-        onOpenChange={setConfirmOpen}
-        loading={deleting}
-        onConfirm={handleDelete}
-        title="Delete this menu right?"
-        description="This can't be undone."
-      />
-    </Dialog>
   );
 }

@@ -107,6 +107,7 @@ export default function DraftOrdersPage() {
   const [rows, setRows] = React.useState<DraftOrderRow[]>([]);
   const [loading, setLoading] = React.useState(true);
   const [page, setPage] = React.useState(0);
+  const [refreshKey, setRefreshKey] = React.useState(0);
   const [pageSize, setPageSize] = React.useState<number>(DEFAULT_PAGE_SIZE);
   const [pageCount, setPageCount] = React.useState(1);
   const [total, setTotal] = React.useState(0);
@@ -141,23 +142,6 @@ export default function DraftOrdersPage() {
     [debounced, dateRange, statuses, channels]
   );
 
-  const columnFilterValues = React.useMemo(() => {
-    const values: Record<string, string[]> = {};
-    if (search) values.draft_number = [search];
-    if (statuses.length) values.status = statuses;
-    if (channels.length) values.channel = channels;
-    return values;
-  }, [search, statuses, channels]);
-
-  const applyColumnFilters = React.useCallback(
-    (next: Record<string, string[]>) => {
-      setSearch(next.draft_number?.[0] ?? "");
-      setStatuses(next.status ?? []);
-      setChannels(next.channel ?? []);
-    },
-    []
-  );
-
   const load = React.useCallback(() => {
     setLoading(true);
     listDraftOrders({
@@ -182,7 +166,7 @@ export default function DraftOrdersPage() {
         toast.error(apiErrorMessage(error, "Couldn't load draft orders."));
       })
       .finally(() => setLoading(false));
-  }, [page, pageSize, activeFilters]);
+  }, [page, pageSize, activeFilters, refreshKey]);
 
   React.useEffect(() => { load(); }, [load]);
 
@@ -375,6 +359,7 @@ export default function DraftOrdersPage() {
       )}
 
       <DataTable
+        onRefresh={() => setRefreshKey((k) => k + 1)}
         columns={columns}
         data={rows}
         loading={loading}
@@ -382,7 +367,6 @@ export default function DraftOrdersPage() {
         clearSelectionKey={clearKey}
         onRowClick={(row) => router.push(`/orders/drafts/${row.id}`)}
         columnFilterDefs={COLUMN_FILTERS}
-        serverColumnFilters={{ value: columnFilterValues, onChange: applyColumnFilters }}
         serverPagination={{
           pageIndex: page,
           pageCount,

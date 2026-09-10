@@ -51,6 +51,7 @@ export function ActivityLogSection() {
   const [rows, setRows] = React.useState<ActivityLogRow[]>([]);
   const [loading, setLoading] = React.useState(true);
   const [page, setPage] = React.useState(0);
+  const [refreshKey, setRefreshKey] = React.useState(0);
   const [pageSize, setPageSize] = React.useState<number>(DEFAULT_PAGE_SIZE);
   const [pageCount, setPageCount] = React.useState(1);
   const [total, setTotal] = React.useState(0);
@@ -78,21 +79,6 @@ export function ActivityLogSection() {
     [debounced]
   );
 
-  const columnFilterValues = React.useMemo(() => {
-    const values: Record<string, string[]> = {};
-    if (action) values.action = [action];
-    if (entityType) values.entity_type = [entityType];
-    return values;
-  }, [action, entityType]);
-
-  const applyColumnFilters = React.useCallback(
-    (next: Record<string, string[]>) => {
-      setAction(next.action?.[0] ?? "");
-      setEntityType(next.entity_type?.[0] ?? "");
-    },
-    []
-  );
-
   React.useEffect(() => {
     let cancelled = false;
     setLoading(true);
@@ -117,7 +103,7 @@ export function ActivityLogSection() {
     return () => {
       cancelled = true;
     };
-  }, [page, pageSize, buildFilters, dateRange]);
+  }, [page, pageSize, buildFilters, dateRange, refreshKey]);
 
   const runExport = async (fileFormat: ExportFormat) => {
     setExportBusy(true);
@@ -227,11 +213,11 @@ export function ActivityLogSection() {
       </div>
 
       <DataTable
+        onRefresh={() => setRefreshKey((k) => k + 1)}
         columns={columns}
         data={rows}
         loading={loading}
         columnFilterDefs={COLUMN_FILTERS}
-        serverColumnFilters={{ value: columnFilterValues, onChange: applyColumnFilters }}
         serverPagination={{
           pageIndex: page,
           pageCount,

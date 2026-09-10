@@ -242,21 +242,6 @@ export default function ReviewsPage() {
     [dateRange, debounced, statuses]
   );
 
-  const columnFilterValues = React.useMemo(() => {
-    const values: Record<string, string[]> = {};
-    if (search) values.title = [search];
-    if (statuses.length) values.status = statuses;
-    return values;
-  }, [search, statuses]);
-
-  const applyColumnFilters = React.useCallback(
-    (next: Record<string, string[]>) => {
-      setSearch(next.title?.[0] ?? "");
-      setStatuses(next.status ?? []);
-    },
-    []
-  );
-
   React.useEffect(() => {
     let cancelled = false;
     setLoading(true);
@@ -369,6 +354,7 @@ export default function ReviewsPage() {
       />
 
       <DataTable
+        onRefresh={() => setRefreshKey((k) => k + 1)}
         columns={columns}
         data={rows}
         loading={loading}
@@ -376,7 +362,6 @@ export default function ReviewsPage() {
         clearSelectionKey={clearKey}
         onRowClick={openReview}
         columnFilterDefs={COLUMN_FILTERS}
-        serverColumnFilters={{ value: columnFilterValues, onChange: applyColumnFilters }}
         serverPagination={{
           pageIndex: page,
           pageCount,

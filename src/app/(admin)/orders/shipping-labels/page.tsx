@@ -135,6 +135,7 @@ const columns: ColumnDef<ShipmentRow>[] = [
 export default function ShippingLabelsPage() {
   const router = useRouter();
   const [page, setPage] = React.useState(1);
+  const [refreshKey, setRefreshKey] = React.useState(0);
   const [pageSize, setPageSize] = React.useState<number>(DEFAULT_PAGE_SIZE);
   const [rows, setRows] = React.useState<ShipmentRow[]>([]);
   const [total, setTotal] = React.useState(0);
@@ -157,21 +158,6 @@ export default function ShippingLabelsPage() {
     [dateRange, statuses, search]
   );
 
-  const columnFilterValues = React.useMemo(() => {
-    const values: Record<string, string[]> = {};
-    if (search) values.shipment_number = [search];
-    if (statuses.length) values.status = statuses;
-    return values;
-  }, [search, statuses]);
-
-  const applyColumnFilters = React.useCallback(
-    (next: Record<string, string[]>) => {
-      setSearch(next.shipment_number?.[0] ?? "");
-      setStatuses(next.status ?? []);
-    },
-    []
-  );
-
   const load = React.useCallback(() => {
     setLoading(true);
     listShipments({
@@ -183,7 +169,7 @@ export default function ShippingLabelsPage() {
       })
       .catch((e) => toast.error(apiErrorMessage(e, "Couldn't load shipments.")))
       .finally(() => setLoading(false));
-  }, [page, pageSize, activeFilters]);
+  }, [page, pageSize, activeFilters, refreshKey]);
 
   React.useEffect(() => { load(); }, [load]);
 
@@ -277,6 +263,7 @@ export default function ShippingLabelsPage() {
 
       {}
       <DataTable
+        onRefresh={() => setRefreshKey((k) => k + 1)}
         columns={columns}
         data={rows}
         loading={loading}
@@ -284,7 +271,6 @@ export default function ShippingLabelsPage() {
         clearSelectionKey={clearKey}
         onRowClick={(row) => router.push(`/orders/${row.order_id}`)}
         columnFilterDefs={COLUMN_FILTERS}
-        serverColumnFilters={{ value: columnFilterValues, onChange: applyColumnFilters }}
         serverPagination={{
           pageIndex: page - 1,
           pageCount: totalPages,

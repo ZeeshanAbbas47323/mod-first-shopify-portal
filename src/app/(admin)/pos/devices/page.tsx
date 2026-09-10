@@ -76,22 +76,6 @@ export default function PosDevicesPage() {
   const [editing, setEditing] = React.useState<PosDeviceRow | null>(null);
   const [refreshKey, setRefreshKey] = React.useState(0);
 
-  const columnFilterValues = React.useMemo(() => {
-    const values: Record<string, string[]> = {};
-    if (search) values.name = [search];
-    if (status !== "all") values.is_active = [status];
-    return values;
-  }, [search, status]);
-
-  const applyColumnFilters = React.useCallback(
-    (next: Record<string, string[]>) => {
-      setSearch(next.name?.[0] ?? "");
-      const picked = next.is_active ?? [];
-      setStatus(picked.length === 1 ? picked[0] : "all");
-    },
-    []
-  );
-
   React.useEffect(() => {
     listBranches({ page: 1, limit: 100 })
       .then((res) => setBranches(res.rows))
@@ -274,6 +258,7 @@ export default function PosDevicesPage() {
       </div>
 
       <DataTable
+        onRefresh={() => setRefreshKey((k) => k + 1)}
         columns={columns}
         data={rows}
         loading={loading}
@@ -282,7 +267,6 @@ export default function PosDevicesPage() {
           setDialogOpen(true);
         }}
         columnFilterDefs={COLUMN_FILTERS}
-        serverColumnFilters={{ value: columnFilterValues, onChange: applyColumnFilters }}
         serverPagination={{
           pageIndex: page,
           pageCount,

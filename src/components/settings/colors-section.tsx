@@ -129,22 +129,6 @@ export function ColorsSection() {
     [debouncedSearch, status]
   );
 
-  const columnFilterValues = React.useMemo(() => {
-    const values: Record<string, string[]> = {};
-    if (search) values.name = [search];
-    if (status !== "all") values.status = [status];
-    return values;
-  }, [search, status]);
-
-  const applyColumnFilters = React.useCallback(
-    (next: Record<string, string[]>) => {
-      setSearch(next.name?.[0] ?? "");
-      const picked = next.status ?? [];
-      setStatus(picked.length === 1 ? picked[0] : "all");
-    },
-    []
-  );
-
   React.useEffect(() => {
     let cancelled = false;
     setLoading(true);
@@ -239,12 +223,12 @@ export function ColorsSection() {
       />
 
       <DataTable
+        onRefresh={() => setRefreshKey((k) => k + 1)}
         columns={columns}
         data={rows}
         loading={loading}
         onRowClick={(row) => { setEditing(row); setDialogOpen(true); }}
         columnFilterDefs={COLUMN_FILTERS}
-        serverColumnFilters={{ value: columnFilterValues, onChange: applyColumnFilters }}
         serverPagination={{
           pageIndex: page,
           pageCount,

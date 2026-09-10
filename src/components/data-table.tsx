@@ -21,6 +21,7 @@ import {
   ChevronRight,
   ChevronsUpDown,
   FilterX,
+  RefreshCw,
   Search,
   SlidersHorizontal,
 } from "lucide-react";
@@ -72,10 +73,11 @@ export type ColumnFilterDef =
       placeholder?: string;
     };
 
-export interface ServerColumnFilters {
-  value: Record<string, string[]>;
-  onChange: (next: Record<string, string[]>) => void;
-}
+/**
+ * Column filters run against the rows already in the table - changing one must
+ * never trigger a request. Server-side narrowing belongs to the page toolbar
+ * (search, date range, status), which owns its own fetch.
+ */
 
 const columnFilter: FilterFn<unknown> = (row, columnId, filterValue) => {
   if (filterValue == null || filterValue === "") return true;
@@ -153,10 +155,11 @@ interface DataTableProps<TData, TValue> {
   serverPagination?: ServerPagination;
   serverSort?: ServerSort;
   columnFilterDefs?: Record<string, ColumnFilterDef>;
-  serverColumnFilters?: ServerColumnFilters;
   onSelectionChange?: (rows: TData[]) => void;
   clearSelectionKey?: number;
   loading?: boolean;
+  /** Refetches the current view. Renders a Refresh button when provided. */
+  onRefresh?: () => void | Promise<unknown>;
 }
 
 export function DataTable<TData, TValue>({
@@ -169,10 +172,10 @@ export function DataTable<TData, TValue>({
   serverPagination,
   serverSort,
   columnFilterDefs,
-  serverColumnFilters,
   loading = false,
   onSelectionChange,
   clearSelectionKey,
+  onRefresh,
 }: DataTableProps<TData, TValue>) {
   const [sorting, setSorting] = React.useState<SortingState>([]);
   const [columnFilters, setColumnFilters] = React.useState<ColumnFiltersState>([]);
@@ -221,8 +224,7 @@ export function DataTable<TData, TValue>({
     Record<string, string[]>
   >({});
 
-  const columnFilterValues =
-    serverColumnFilters?.value ?? localColumnFilterValues;
+  const columnFilterValues = localColumnFilterValues;
 
   const table = useReactTable({
     data,
@@ -243,13 +245,6 @@ export function DataTable<TData, TValue>({
 
   const setColumnFilterValue = React.useCallback(
     (columnId: string, values: string[]) => {
-      if (serverColumnFilters) {
-        const next = { ...serverColumnFilters.value };
-        if (values.length) next[columnId] = values;
-        else delete next[columnId];
-        serverColumnFilters.onChange(next);
-        return;
-      }
       setLocalColumnFilterValues((prev) => {
         const next = { ...prev };
         if (values.length) next[columnId] = values;
@@ -265,22 +260,18 @@ export function DataTable<TData, TValue>({
       table.getColumn(columnId)?.setFilterValue(filterValue);
     },
     // eslint-disable-next-line react-hooks/exhaustive-deps
-    [serverColumnFilters, columnFilterDefs]
+    [columnFilterDefs]
   );
 
   const activeColumnFilterCount = Object.keys(columnFilterValues).length;
 
   const clearColumnFilters = React.useCallback(() => {
-    if (serverColumnFilters) {
-      serverColumnFilters.onChange({});
-      return;
-    }
     setLocalColumnFilterValues({});
     Object.keys(columnFilterDefs ?? {}).forEach((id) =>
       table.getColumn(id)?.setFilterValue(undefined)
     );
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [serverColumnFilters, columnFilterDefs]);
+  }, [columnFilterDefs]);
 
   React.useEffect(() => {
     if (!serverPagination) table.setPageSize(clientPageSize);
@@ -304,9 +295,23 @@ export function DataTable<TData, TValue>({
     if (clearSelectionKey !== undefined) setRowSelection({});
   }, [clearSelectionKey]);
 
+  const [refreshing, setRefreshing] = React.useState(false);
+
+  const handleRefresh = React.useCallback(async () => {
+    if (!onRefresh || refreshing) return;
+    setRefreshing(true);
+    try {
+      await onRefresh();
+    } finally {
+      setRefreshing(false);
+    }
+  }, [onRefresh, refreshing]);
+
+  const spinning = refreshing || loading;
+
   return (
     <div className="flex flex-col gap-3">
-      <div className="flex items-center gap-2">
+      <div className="flex flex-wrap items-center gap-2">
         {searchKey && (
           <div className="relative flex-1 max-w-sm">
             <Search className="absolute left-2.5 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" />
@@ -334,10 +339,25 @@ export function DataTable<TData, TValue>({
             </span>
           </Button>
         )}
-        <DropdownMenu>
+        <div className="ml-auto flex items-center gap-2">
+          {onRefresh && (
+            <Button
+              variant="outline"
+              size="icon"
+              onClick={handleRefresh}
+              disabled={spinning}
+              aria-label="Refresh"
+              title="Refresh"
+            >
+              <RefreshCw
+                className={`size-4${spinning ? " animate-spin" : ""}`}
+              />
+            </Button>
+          )}
+          <DropdownMenu>
           <DropdownMenuTrigger
             render={
-              <Button variant="outline" className="ml-auto">
+              <Button variant="outline">
                 <SlidersHorizontal className="size-4" />
                 <span className="hidden sm:inline">Columns</span>
               </Button>
@@ -358,7 +378,8 @@ export function DataTable<TData, TValue>({
                 </DropdownMenuCheckboxItem>
               ))}
           </DropdownMenuContent>
-        </DropdownMenu>
+          </DropdownMenu>
+        </div>
       </div>
 
       <div className="rounded-lg bg-card ring-1 ring-black/8">

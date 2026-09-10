@@ -54,6 +54,7 @@ export default function WishlistsPage() {
   const [rows, setRows] = React.useState<WishlistRow[]>([]);
   const [loading, setLoading] = React.useState(true);
   const [page, setPage] = React.useState(0);
+  const [refreshKey, setRefreshKey] = React.useState(0);
   const [pageSize, setPageSize] = React.useState<number>(DEFAULT_PAGE_SIZE);
   const [pageCount, setPageCount] = React.useState(1);
   const [total, setTotal] = React.useState(0);
@@ -84,21 +85,6 @@ export default function WishlistsPage() {
     [dateRange, debouncedProduct, statuses]
   );
 
-  const columnFilterValues = React.useMemo(() => {
-    const values: Record<string, string[]> = {};
-    if (productId) values.product_id = [productId];
-    if (statuses.length) values.is_active = statuses;
-    return values;
-  }, [productId, statuses]);
-
-  const applyColumnFilters = React.useCallback(
-    (next: Record<string, string[]>) => {
-      setProductId(next.product_id?.[0] ?? "");
-      setStatuses(next.is_active ?? []);
-    },
-    []
-  );
-
   React.useEffect(() => {
     let cancelled = false;
     setLoading(true);
@@ -123,7 +109,7 @@ export default function WishlistsPage() {
     return () => {
       cancelled = true;
     };
-  }, [page, pageSize, activeFilters]);
+  }, [page, pageSize, activeFilters, refreshKey]);
 
   const fetchAllForExport = async () =>
     fetchAllPages((page, limit) => listWishlists({
@@ -303,13 +289,13 @@ export default function WishlistsPage() {
       )}
 
       <DataTable
+        onRefresh={() => setRefreshKey((k) => k + 1)}
         columns={columns}
         data={rows}
         loading={loading}
         onSelectionChange={setSelected}
         clearSelectionKey={clearKey}
         columnFilterDefs={COLUMN_FILTERS}
-        serverColumnFilters={{ value: columnFilterValues, onChange: applyColumnFilters }}
         serverPagination={{
           pageIndex: page,
           pageCount,

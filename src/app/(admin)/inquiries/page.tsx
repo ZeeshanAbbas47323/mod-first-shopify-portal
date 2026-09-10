@@ -113,21 +113,6 @@ export default function ContactSubmissionsPage() {
     [dateRange, debounced, statuses, topics]
   );
 
-  const columnFilterValues = React.useMemo(() => {
-    const values: Record<string, string[]> = {};
-    if (topics.length) values.help_topic = topics;
-    if (statuses.length) values.status = statuses;
-    return values;
-  }, [topics, statuses]);
-
-  const applyColumnFilters = React.useCallback(
-    (next: Record<string, string[]>) => {
-      setTopics(next.help_topic ?? []);
-      setStatuses(next.status ?? []);
-    },
-    []
-  );
-
   React.useEffect(() => {
     let cancelled = false;
     setLoading(true);
@@ -305,6 +290,7 @@ export default function ContactSubmissionsPage() {
       )}
 
       <DataTable
+        onRefresh={() => setRefreshKey((k) => k + 1)}
         columns={columns}
         data={rows}
         loading={loading}
@@ -312,7 +298,6 @@ export default function ContactSubmissionsPage() {
         clearSelectionKey={clearKey}
         onRowClick={setDetail}
         columnFilterDefs={COLUMN_FILTERS}
-        serverColumnFilters={{ value: columnFilterValues, onChange: applyColumnFilters }}
         serverPagination={{
           pageIndex: page,
           pageCount,

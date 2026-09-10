@@ -88,22 +88,6 @@ export default function PosShiftsPage() {
 
   const [detail, setDetail] = React.useState<ShiftRow | null>(null);
 
-  const columnFilterValues = React.useMemo(() => {
-    const values: Record<string, string[]> = {};
-    if (search) values.shift_code = [search];
-    if (status !== "all") values.status = [status];
-    return values;
-  }, [search, status]);
-
-  const applyColumnFilters = React.useCallback(
-    (next: Record<string, string[]>) => {
-      setSearch(next.shift_code?.[0] ?? "");
-      const picked = next.status ?? [];
-      setStatus(picked.length === 1 ? picked[0] : "all");
-    },
-    []
-  );
-
   React.useEffect(() => {
     setCurrentLoading(true);
     getCurrentShift()
@@ -303,6 +287,7 @@ export default function PosShiftsPage() {
       </div>
 
       <DataTable
+        onRefresh={() => setRefreshKey((k) => k + 1)}
         columns={columns}
         data={rows}
         loading={loading}
@@ -313,7 +298,6 @@ export default function PosShiftsPage() {
             .catch(() => {});
         }}
         columnFilterDefs={COLUMN_FILTERS}
-        serverColumnFilters={{ value: columnFilterValues, onChange: applyColumnFilters }}
         serverPagination={{
           pageIndex: page,
           pageCount,

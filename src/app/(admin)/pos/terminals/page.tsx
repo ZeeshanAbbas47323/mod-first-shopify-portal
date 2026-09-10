@@ -86,19 +86,6 @@ function ReadersTab({ branches }: { branches: BranchRow[] }) {
   const [total, setTotal] = React.useState(0);
   const [status, setStatus] = React.useState("all");
 
-  const columnFilterValues = React.useMemo(() => {
-    const values: Record<string, string[]> = {};
-    if (status !== "all") values.status = [status];
-    return values;
-  }, [status]);
-
-  const applyColumnFilters = React.useCallback(
-    (next: Record<string, string[]>) => {
-      const picked = next.status ?? [];
-      setStatus(picked.length === 1 ? picked[0] : "all");
-    },
-    []
-  );
   const [dialogOpen, setDialogOpen] = React.useState(false);
   const [deleteTarget, setDeleteTarget] = React.useState<TerminalReaderRow | null>(null);
   const [deleting, setDeleting] = React.useState(false);
@@ -252,11 +239,11 @@ function ReadersTab({ branches }: { branches: BranchRow[] }) {
       </div>
 
       <DataTable
+        onRefresh={() => setRefreshKey((k) => k + 1)}
         columns={columns}
         data={rows}
         loading={loading}
         columnFilterDefs={COLUMN_FILTERS}
-        serverColumnFilters={{ value: columnFilterValues, onChange: applyColumnFilters }}
         serverPagination={{
           pageIndex: page,
           pageCount,

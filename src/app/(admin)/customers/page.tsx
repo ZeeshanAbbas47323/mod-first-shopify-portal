@@ -181,6 +181,7 @@ export default function CustomersPage() {
   const permissions = usePermissions("/customers");
   const [unlockingId, setUnlockingId] = React.useState<string | number | null>(null);
   const [page, setPage] = React.useState(1);
+  const [refreshKey, setRefreshKey] = React.useState(0);
   const [pageSize, setPageSize] = React.useState<number>(DEFAULT_PAGE_SIZE);
   const [rows, setRows] = React.useState<UserRow[]>([]);
   const [total, setTotal] = React.useState(0);
@@ -226,7 +227,7 @@ export default function CustomersPage() {
       })
       .catch((e) => toast.error(apiErrorMessage(e, "Couldn't load customers.")))
       .finally(() => setLoading(false));
-  }, [page, pageSize, dateRange, buildFilters]);
+  }, [page, pageSize, dateRange, buildFilters, refreshKey]);
 
   React.useEffect(() => { load(); }, [load]);
 
@@ -345,6 +346,7 @@ export default function CustomersPage() {
 
       {}
       <DataTable
+        onRefresh={() => setRefreshKey((k) => k + 1)}
         columns={columns}
         data={rows}
         loading={loading}
@@ -352,7 +354,6 @@ export default function CustomersPage() {
         clearSelectionKey={clearKey}
         onRowClick={(row) => router.push(`/customers/${row.id}`)}
         columnFilterDefs={COLUMN_FILTERS}
-        serverColumnFilters={{ value: columnFilters, onChange: setColumnFilters }}
         serverPagination={{
           pageIndex: page - 1,
           pageCount: totalPages,

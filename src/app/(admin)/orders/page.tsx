@@ -224,6 +224,7 @@ export default function OrdersPage() {
   const router = useRouter();
   const [tab, setTab] = React.useState("all");
   const [page, setPage] = React.useState(1);
+  const [refreshKey, setRefreshKey] = React.useState(0);
   const [pageSize, setPageSize] = React.useState<number>(DEFAULT_PAGE_SIZE);
   const [selected, setSelected] = React.useState<OrderRow[]>([]);
   const [clearKey, setClearKey] = React.useState(0);
@@ -264,27 +265,6 @@ export default function OrdersPage() {
     [dateRange, tab, payStatuses, deliveryTypes, channels, search, statuses, orderNumber]
   );
 
-  const columnFilterValues = React.useMemo(() => {
-    const values: Record<string, string[]> = {};
-    if (orderNumber) values.order_number = [orderNumber];
-    if (search) values.customer = [search];
-    if (channels.length) values.channel = channels;
-    if (payStatuses.length) values.payment_status = payStatuses;
-    if (statuses.length) values.status = statuses;
-    if (deliveryTypes.length) values.delivery_type = deliveryTypes;
-    return values;
-  }, [orderNumber, search, channels, payStatuses, statuses, deliveryTypes]);
-
-  const applyColumnFilters = React.useCallback((next: Record<string, string[]>) => {
-    setOrderNumber(next.order_number?.[0] ?? "");
-    setSearch(next.customer?.[0] ?? "");
-    setSearchInput(next.customer?.[0] ?? "");
-    setChannels(next.channel ?? []);
-    setPayStatuses(next.payment_status ?? []);
-    setStatuses(next.status ?? []);
-    setDeliveryTypes(next.delivery_type ?? []);
-  }, []);
-
   const load = React.useCallback(() => {
     setLoading(true);
     listOrders({ page, limit: pageSize, ...activeFilters })
@@ -293,7 +273,7 @@ export default function OrdersPage() {
       })
       .catch((e) => toast.error(apiErrorMessage(e, "Couldn't load orders.")))
       .finally(() => setLoading(false));
-  }, [page, pageSize, activeFilters]);
+  }, [page, pageSize, activeFilters, refreshKey]);
 
   React.useEffect(() => { load(); }, [load]);
 
@@ -492,6 +472,7 @@ export default function OrdersPage() {
 
       {}
       <DataTable
+        onRefresh={() => setRefreshKey((k) => k + 1)}
         columns={columns}
         data={rows}
         loading={loading}
@@ -499,7 +480,6 @@ export default function OrdersPage() {
         clearSelectionKey={clearKey}
         onRowClick={(row) => router.push(`/orders/${row.id}`)}
         columnFilterDefs={COLUMN_FILTERS}
-        serverColumnFilters={{ value: columnFilterValues, onChange: applyColumnFilters }}
         serverPagination={{
           pageIndex: page - 1,
           pageCount: totalPages,

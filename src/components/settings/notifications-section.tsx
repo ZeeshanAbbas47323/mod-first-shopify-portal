@@ -233,6 +233,7 @@ export function NotificationsSection() {
       </div>
 
       <DataTable
+        onRefresh={() => setRefreshKey((k) => k + 1)}
         columns={columns}
         data={rows}
         loading={loading}

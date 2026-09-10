@@ -114,19 +114,6 @@ export function PickupLocationsSection() {
     [debounced]
   );
 
-  const columnFilterValues = React.useMemo(() => {
-    const values: Record<string, string[]> = {};
-    if (search) values.name = [search];
-    return values;
-  }, [search]);
-
-  const applyColumnFilters = React.useCallback(
-    (next: Record<string, string[]>) => {
-      setSearch(next.name?.[0] ?? "");
-    },
-    []
-  );
-
   React.useEffect(() => {
     let cancelled = false;
     setLoading(true);
@@ -197,10 +184,10 @@ export function PickupLocationsSection() {
       />
 
       <DataTable
+        onRefresh={() => setRefreshKey((k) => k + 1)}
         columns={columns} data={rows} loading={loading}
         onRowClick={(row) => { setEditing(row); setDialogOpen(true); }}
         columnFilterDefs={COLUMN_FILTERS}
-        serverColumnFilters={{ value: columnFilterValues, onChange: applyColumnFilters }}
         serverPagination={{
           pageIndex: page,
           pageCount,

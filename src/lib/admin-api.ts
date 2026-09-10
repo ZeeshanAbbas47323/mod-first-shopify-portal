@@ -920,6 +920,57 @@ export const createMenuRight = (body: Json) =>
 export const updateMenuRight = (id: number | string, body: Json) =>
   updateRecord(`menu-rights/${id}`, body, "Menu right updated.");
 
+export interface MenuPermissionRow {
+  id: number;
+  name: string;
+  slug: string;
+  icon?: string | null;
+  parent_id: number | null;
+  sort_order?: number | null;
+  menu_type?: string;
+  is_active?: boolean;
+  menu_right_id: number | null;
+  can_view: boolean;
+  can_create: boolean;
+  can_edit: boolean;
+  can_delete: boolean;
+}
+
+export interface MenuPermissionMatrix {
+  role: string;
+  menu_type: string;
+  items: MenuPermissionRow[];
+}
+
+export async function getMenuRightMatrix(
+  role: string,
+  menuType = "dashboard"
+): Promise<MenuPermissionMatrix> {
+  const { data } = await api.get(`menu-rights/matrix/${role}`, {
+    params: { menu_type: menuType },
+  });
+  const p = (data?.payload ?? data?.data ?? data) as Json;
+  return {
+    role: p?.role ?? role,
+    menu_type: p?.menu_type ?? menuType,
+    items: Array.isArray(p?.items) ? (p.items as MenuPermissionRow[]) : [],
+  };
+}
+
+export async function saveMenuRightMatrix(
+  role: string,
+  items: {
+    menu_id: number;
+    can_view: boolean;
+    can_create: boolean;
+    can_edit: boolean;
+    can_delete: boolean;
+  }[]
+): Promise<string> {
+  const { data } = await api.post("menu-rights/bulk", { role, items });
+  return (data?.message as string) ?? "Permissions saved.";
+}
+
 export async function listMenuRights(
   params: ListParams
 ): Promise<ListResult<MenuRightRow>> {
