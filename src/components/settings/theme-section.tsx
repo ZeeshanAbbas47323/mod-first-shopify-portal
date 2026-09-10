@@ -37,10 +37,6 @@ import {
 } from "@/components/ui/dialog";
 import { ConfirmDeleteDialog } from "@/components/confirm-delete-dialog";
 import { MediaUpload } from "@/components/media-upload";
-import {
-  ThemePreview,
-  storefrontUrl,
-} from "@/components/settings/theme-preview";
 import { Thumb } from "@/components/thumb";
 import { StatusBadge, StatusToggle } from "@/components/status-badge";
 import { apiErrorMessage } from "@/lib/auth-api";
@@ -94,6 +90,10 @@ const LAYOUT_HINTS = [
   "hero", "hero_full", "banner", "grid", "carousel", "slider", "features", "cta",
 ];
 
+/** How a full-width mosaic tile is stored on the item's extra_data. */
+const WIDE_SPAN = "col-span-2";
+const WIDE_SPAN_PATTERN = /col-span-2|full|wide/i;
+
 /** Select values cannot be empty strings, so "not set" needs its own token. */
 const NO_LAYOUT = "__none__";
 
@@ -113,11 +113,6 @@ export function ThemeSection() {
 
   const [search, setSearch] = React.useState("");
   const [showHidden, setShowHidden] = React.useState(true);
-  const [showPreview, setShowPreview] = React.useState(true);
-
-  // Without a storefront URL there is nothing to frame, so the toggle and the
-  // panel both stay out of the way.
-  const hasStorefront = !!storefrontUrl();
 
   const activeCount = React.useMemo(
     () => sections.filter((s) => s.is_active !== false).length,
@@ -274,18 +269,6 @@ export function ThemeSection() {
             </span>
           </Button>
 
-          {hasStorefront && (
-            <Button
-              variant="outline"
-              onClick={() => setShowPreview((v) => !v)}
-              aria-pressed={showPreview}
-            >
-              <Layers className="size-4" />
-              <span className="hidden sm:inline">
-                {showPreview ? "Hide preview" : "Show preview"}
-              </span>
-            </Button>
-          )}
 
           <Button
             variant="outline"
@@ -493,7 +476,11 @@ export function ThemeSection() {
         </div>
       )}
 
-      {showPreview && hasStorefront && <ThemePreview reloadKey={refreshKey} />}
+      {/* Live preview is hidden for now. To bring it back, restore the import
+          of ThemePreview + storefrontUrl, the showPreview state and the toggle
+          button, then render:
+            {showPreview && hasStorefront && <ThemePreview reloadKey={refreshKey} />}
+          The component itself is still in components/settings/theme-preview.tsx. */}
 
       <SectionDialog
         editing={editing}
@@ -905,6 +892,8 @@ function ItemDialog({
 
   const [form, setForm] = React.useState(empty);
   const [isActive, setIsActive] = React.useState(true);
+  const [altText, setAltText] = React.useState("");
+  const [fullWidth, setFullWidth] = React.useState(false);
   const [image, setImage] = React.useState<string | null>(null);
   const [mobileImage, setMobileImage] = React.useState<string | null>(null);
   const [saving, setSaving] = React.useState(false);
@@ -923,6 +912,11 @@ function ItemDialog({
       sort_order: String(item?.sort_order ?? (target.section.items?.length ?? 0) + 1),
     });
     setIsActive(item ? item.is_active !== false : true);
+
+    const extra = (item?.extra_data ?? {}) as Record<string, unknown>;
+    setAltText(typeof extra.alt === "string" ? extra.alt : "");
+    setFullWidth(WIDE_SPAN_PATTERN.test(String(extra.span ?? extra.role ?? "")));
+
     setImage(item?.image_url ?? null);
     setMobileImage(item?.mobile_image_url ?? null);
   }, [target, item]);
@@ -945,6 +939,13 @@ function ItemDialog({
         badge: form.badge.trim() || undefined,
         sort_order: Number(form.sort_order) || 0,
         is_active: isActive,
+        // Merged, not replaced: these rows carry other keys (role, and
+        // whatever a section adds later) that this form does not edit.
+        extra_data: {
+          ...((item?.extra_data as Record<string, unknown>) ?? {}),
+          alt: altText.trim() || form.title.trim(),
+          span: fullWidth ? WIDE_SPAN : "",
+        },
       };
       const action: HomeSectionItemAction = item
         ? { _action: "update", id: item.id, ...fields }
@@ -1017,6 +1018,34 @@ function ItemDialog({
             title="Media"
             description="A separate mobile image is used on narrow screens when set."
           >
+          <div className="grid gap-3 sm:grid-cols-2">
+            <div className="space-y-1.5">
+              <Label htmlFor="hi-alt">Alt text</Label>
+              <Input
+                id="hi-alt"
+                value={altText}
+                onChange={(e) => setAltText(e.target.value)}
+                placeholder="Describe the image for screen readers"
+              />
+              <p className="text-xs text-muted-foreground">
+                Falls back to the title when left empty.
+              </p>
+            </div>
+            <div className="space-y-1.5">
+              <Label>Tile width</Label>
+              <div className="flex h-9 items-center justify-between rounded-lg border border-border px-3">
+                <span className="text-sm">Full width</span>
+                <StatusToggle
+                  isActive={fullWidth}
+                  onToggle={setFullWidth}
+                />
+              </div>
+              <p className="text-xs text-muted-foreground">
+                Spans both columns in the image mosaic.
+              </p>
+            </div>
+          </div>
+
           <div className="grid gap-3 sm:grid-cols-2">
             <div className="space-y-1.5">
               <Label>Image</Label>

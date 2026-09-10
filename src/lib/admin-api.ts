@@ -2543,6 +2543,8 @@ export interface HomeSectionItemRow {
   badge?: string | null;
   sort_order?: number;
   is_active?: boolean;
+  /** Per-section extras: mosaic alt text, tile span, layout role. */
+  extra_data?: Record<string, unknown> | null;
   [k: string]: unknown;
 }
 
