@@ -1151,9 +1151,12 @@ export async function getProduct(id: number | string): Promise<ProductDetailRow>
     compare_at_price: raw.compare_at_price ?? raw.sale_price ?? null,
     cost_per_item: raw.cost_per_item ?? raw.cost_price ?? null,
     meta_description: raw.meta_description ?? raw.meta_desc ?? null,
+    // The form binds to `vendor` as an id string. The API may send the
+    // relation, a bare name, or only `vendor_id` - fall through all three so
+    // editing a product shows the vendor it actually has.
     vendor: typeof raw.vendor === "object" && raw.vendor !== null
       ? String((raw.vendor as { id?: number | string }).id ?? "")
-      : raw.vendor ?? null,
+      : raw.vendor ?? (raw.vendor_id != null ? String(raw.vendor_id) : null),
     vendor_id: raw.vendor_id
       ?? (typeof raw.vendor === "object" && raw.vendor !== null
         ? (raw.vendor as { id?: number | string }).id ?? null
@@ -1187,7 +1190,9 @@ export const updateProduct = (id: number | string, body: Json) =>
 
 export interface VendorRow {
   id: number | string;
+  /** Normalised by `fetchAllVendors`; the API column is `vendor_name`. */
   name: string;
+  vendor_name?: string;
   slug?: string;
   is_active?: boolean;
   created_at?: string;
@@ -1213,9 +1218,15 @@ export async function createVendorAndReturn(name: string): Promise<VendorRow> {
 }
 
 export async function fetchAllVendors(): Promise<VendorRow[]> {
-  const { data } = await api.post("vendors/list", { page: 1, limit: 200 });
-  const result = parseList<VendorRow>(data, 200);
-  return result.rows;
+  const { data } = await api.post("vendors/list", { page: 1, limit: 500 });
+  const result = parseList<VendorRow>(data, 500);
+
+  // The column is `vendor_name`; every caller reads `name`, so normalise once
+  // here rather than leaving the dropdown rendering `undefined`.
+  return result.rows.map((row) => ({
+    ...row,
+    name: row.name ?? row.vendor_name ?? `#${row.id}`,
+  }));
 }
 
 

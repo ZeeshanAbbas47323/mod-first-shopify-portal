@@ -497,10 +497,14 @@ export function VariantsSection({
                   indexes.map((idx) => {
                     const v = variants[idx];
                     if (!v) return null;
+                    // A product with no colour/size still has one variant.
+                    // "Untitled" told you nothing; fall back to the SKU, which
+                    // is the only thing that identifies it.
+                    const optionLabel = [colorName(v.color_id), sizeName(v.size_id)]
+                      .filter(Boolean)
+                      .join(" / ");
                     const label =
-                      [colorName(v.color_id), sizeName(v.size_id)]
-                        .filter(Boolean)
-                        .join(" / ") || "Untitled variant";
+                      optionLabel || (v.sku as string | undefined)?.trim() || "Default variant";
 
                     return (
                       <div
@@ -736,6 +740,32 @@ function VariantDetailPopover({
               placeholder="0.00"
               className="h-8 text-sm"
               {...register(`variants.${index}.sale_price`)}
+            />
+          </div>
+          <div className="space-y-1">
+            <Label className="text-xs">Discount %</Label>
+            <Input
+              type="number"
+              step="0.01"
+              min="0"
+              max="100"
+              placeholder="0"
+              className="h-8 text-sm"
+              {...register(`variants.${index}.discount_percent`)}
+            />
+          </div>
+        </div>
+
+        <div className="grid grid-cols-2 gap-2">
+          <div className="space-y-1">
+            <Label className="text-xs">Discount amount</Label>
+            <Input
+              type="number"
+              step="0.01"
+              min="0"
+              placeholder="0.00"
+              className="h-8 text-sm"
+              {...register(`variants.${index}.discount_amount`)}
             />
           </div>
           <div className="space-y-1">
