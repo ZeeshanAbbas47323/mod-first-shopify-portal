@@ -4,6 +4,7 @@ import * as React from "react";
 import {
   ChevronDown,
   ChevronRight,
+  ImageOff,
   Eye,
   EyeOff,
   Layers,
@@ -27,13 +28,17 @@ import {
 } from "@/components/ui/dialog";
 import { ConfirmDeleteDialog } from "@/components/confirm-delete-dialog";
 import { MediaUpload } from "@/components/media-upload";
-import { ThemePreview } from "@/components/settings/theme-preview";
+import {
+  ThemePreview,
+  storefrontUrl,
+} from "@/components/settings/theme-preview";
+import { Thumb } from "@/components/thumb";
 import { StatusBadge, StatusToggle } from "@/components/status-badge";
 import { apiErrorMessage } from "@/lib/auth-api";
 import { persistOrder } from "@/lib/sort-order";
 import { DragHandle } from "@/components/drag-handle";
 import { useDragReorder, moveItem as moveArrayItem } from "@/hooks/use-drag-reorder";
-import { cn, imgUrl } from "@/lib/utils";
+import { cn } from "@/lib/utils";
 import {
   createHomeSection,
   deleteRecord,
@@ -62,6 +67,10 @@ export function ThemeSection() {
   const [search, setSearch] = React.useState("");
   const [showHidden, setShowHidden] = React.useState(true);
   const [showPreview, setShowPreview] = React.useState(true);
+
+  // Without a storefront URL there is nothing to frame, so the toggle and the
+  // panel both stay out of the way.
+  const hasStorefront = !!storefrontUrl();
 
   const activeCount = React.useMemo(
     () => sections.filter((s) => s.is_active !== false).length,
@@ -218,16 +227,18 @@ export function ThemeSection() {
             </span>
           </Button>
 
-          <Button
-            variant="outline"
-            onClick={() => setShowPreview((v) => !v)}
-            aria-pressed={showPreview}
-          >
-            <Layers className="size-4" />
-            <span className="hidden sm:inline">
-              {showPreview ? "Hide preview" : "Show preview"}
-            </span>
-          </Button>
+          {hasStorefront && (
+            <Button
+              variant="outline"
+              onClick={() => setShowPreview((v) => !v)}
+              aria-pressed={showPreview}
+            >
+              <Layers className="size-4" />
+              <span className="hidden sm:inline">
+                {showPreview ? "Hide preview" : "Show preview"}
+              </span>
+            </Button>
+          )}
 
           <Button
             variant="outline"
@@ -331,21 +342,12 @@ export function ThemeSection() {
                     )}
                   </button>
 
-                  {section.background_image ? (
-                    // eslint-disable-next-line @next/next/no-img-element
-                    <img
-                      src={imgUrl(section.background_image)}
-                      alt=""
-                      className="size-9 rounded-lg border border-border object-cover"
-                    />
-                  ) : (
-                    <span
-                      className="flex size-9 items-center justify-center rounded-lg border border-border"
-                      style={{ background: section.background_color ?? undefined }}
-                    >
-                      <Layers className="size-4 text-muted-foreground" />
-                    </span>
-                  )}
+                  <Thumb
+                    src={section.background_image}
+                    background={section.background_color}
+                    className="size-9"
+                    fallback={<Layers className="size-4" />}
+                  />
 
                   <div className="min-w-0 flex-1">
                     <div className="flex flex-wrap items-center gap-1.5">
@@ -444,9 +446,7 @@ export function ThemeSection() {
         </div>
       )}
 
-      {showPreview && !loading && sections.length > 0 && (
-        <ThemePreview sections={sections} />
-      )}
+      {showPreview && hasStorefront && <ThemePreview reloadKey={refreshKey} />}
 
       <SectionDialog
         editing={editing}
@@ -1006,16 +1006,11 @@ function SectionItemList({
             disabled={dnd.saving}
             {...dnd.handleProps(i, items.length)}
           />
-          {item.image_url ? (
-            // eslint-disable-next-line @next/next/no-img-element
-            <img
-              src={imgUrl(item.image_url)}
-              alt=""
-              className="size-8 rounded border border-border object-cover"
-            />
-          ) : (
-            <span className="size-8 rounded border border-border bg-muted" />
-          )}
+          <Thumb
+            src={item.image_url}
+            className="size-8 rounded"
+            fallback={<ImageOff className="size-3.5" />}
+          />
           <div className="min-w-0 flex-1">
             <div className="flex items-center gap-1.5">
               <p className="truncate text-sm font-medium">{item.title}</p>
