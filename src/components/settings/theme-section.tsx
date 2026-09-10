@@ -82,6 +82,75 @@ function FormGroup({
   );
 }
 
+/**
+ * Hex colour with a swatch picker beside it. Banner cards carry several of
+ * these, and a bare text box makes them tedious to get right.
+ */
+function ColorField({
+  id,
+  label,
+  value,
+  onChange,
+  placeholder,
+}: {
+  id: string;
+  label: string;
+  value: string;
+  onChange: (value: string) => void;
+  placeholder?: string;
+}) {
+  return (
+    <div className="space-y-1.5">
+      <Label htmlFor={id}>{label}</Label>
+      <div className="flex items-center gap-2">
+        <input
+          type="color"
+          value={/^#[0-9a-f]{6}$/i.test(value) ? value : "#ffffff"}
+          onChange={(e) => onChange(e.target.value)}
+          className="size-9 shrink-0 cursor-pointer rounded border border-input bg-transparent"
+          aria-label={`Pick ${label.toLowerCase()}`}
+        />
+        <Input
+          id={id}
+          value={value}
+          onChange={(e) => onChange(e.target.value)}
+          placeholder={placeholder}
+          className="font-mono"
+        />
+        {value && (
+          <Button
+            type="button"
+            variant="ghost"
+            size="icon"
+            aria-label={`Clear ${label.toLowerCase()}`}
+            onClick={() => onChange("")}
+          >
+            <X className="size-4" />
+          </Button>
+        )}
+      </div>
+    </div>
+  );
+}
+
+/** extra_data keys a banner card uses, beyond alt and span. */
+const CARD_STYLE_KEYS = [
+  "background_color",
+  "text_color",
+  "description_color",
+  "accent_color",
+  "eyebrow",
+  "highlight",
+  "price_label",
+  "price_value",
+] as const;
+
+type CardStyleKey = (typeof CARD_STYLE_KEYS)[number];
+
+const EMPTY_CARD_STYLE = Object.fromEntries(
+  CARD_STYLE_KEYS.map((k) => [k, ""])
+) as Record<CardStyleKey, string>;
+
 function Required() {
   return <span className="text-destructive"> *</span>;
 }
@@ -894,6 +963,8 @@ function ItemDialog({
   const [isActive, setIsActive] = React.useState(true);
   const [altText, setAltText] = React.useState("");
   const [fullWidth, setFullWidth] = React.useState(false);
+  const [cardStyle, setCardStyle] =
+    React.useState<Record<CardStyleKey, string>>(EMPTY_CARD_STYLE);
   const [image, setImage] = React.useState<string | null>(null);
   const [mobileImage, setMobileImage] = React.useState<string | null>(null);
   const [saving, setSaving] = React.useState(false);
@@ -916,6 +987,12 @@ function ItemDialog({
     const extra = (item?.extra_data ?? {}) as Record<string, unknown>;
     setAltText(typeof extra.alt === "string" ? extra.alt : "");
     setFullWidth(WIDE_SPAN_PATTERN.test(String(extra.span ?? extra.role ?? "")));
+
+    setCardStyle(
+      Object.fromEntries(
+        CARD_STYLE_KEYS.map((k) => [k, typeof extra[k] === "string" ? extra[k] : ""])
+      ) as Record<CardStyleKey, string>
+    );
 
     setImage(item?.image_url ?? null);
     setMobileImage(item?.mobile_image_url ?? null);
@@ -945,6 +1022,14 @@ function ItemDialog({
           ...((item?.extra_data as Record<string, unknown>) ?? {}),
           alt: altText.trim() || form.title.trim(),
           span: fullWidth ? WIDE_SPAN : "",
+          // Only non-empty styling keys are written, so a plain item does not
+          // accumulate a pile of blank banner fields.
+          ...Object.fromEntries(
+            CARD_STYLE_KEYS.filter((k) => cardStyle[k].trim()).map((k) => [
+              k,
+              cardStyle[k].trim(),
+            ])
+          ),
         },
       };
       const action: HomeSectionItemAction = item
@@ -1128,6 +1213,105 @@ function ItemDialog({
             </div>
             <StatusToggle isActive={isActive} onToggle={setIsActive} />
           </div>
+
+          <details
+            className="rounded-lg border border-border px-3 py-2.5"
+            open={CARD_STYLE_KEYS.some((k) => cardStyle[k])}
+          >
+            <summary className="cursor-pointer text-sm font-medium">
+              Banner card styling
+            </summary>
+            <p className="mt-1 text-xs text-muted-foreground">
+              Used by promotional banner cards. Leave empty for every other kind
+              of item.
+            </p>
+
+            <div className="mt-3 space-y-3">
+              <div className="grid gap-3 sm:grid-cols-2">
+                <div className="space-y-1.5">
+                  <Label htmlFor="hi-eyebrow">Eyebrow</Label>
+                  <Input
+                    id="hi-eyebrow"
+                    value={cardStyle.eyebrow}
+                    onChange={(e) =>
+                      setCardStyle((c) => ({ ...c, eyebrow: e.target.value }))
+                    }
+                    placeholder="Sale up to"
+                  />
+                </div>
+                <div className="space-y-1.5">
+                  <Label htmlFor="hi-highlight">Highlight</Label>
+                  <Input
+                    id="hi-highlight"
+                    value={cardStyle.highlight}
+                    onChange={(e) =>
+                      setCardStyle((c) => ({ ...c, highlight: e.target.value }))
+                    }
+                    placeholder="25% off"
+                  />
+                </div>
+                <div className="space-y-1.5">
+                  <Label htmlFor="hi-price-label">Price label</Label>
+                  <Input
+                    id="hi-price-label"
+                    value={cardStyle.price_label}
+                    onChange={(e) =>
+                      setCardStyle((c) => ({ ...c, price_label: e.target.value }))
+                    }
+                    placeholder="Only Price"
+                  />
+                </div>
+                <div className="space-y-1.5">
+                  <Label htmlFor="hi-price-value">Price value</Label>
+                  <Input
+                    id="hi-price-value"
+                    value={cardStyle.price_value}
+                    onChange={(e) =>
+                      setCardStyle((c) => ({ ...c, price_value: e.target.value }))
+                    }
+                    placeholder="$24.00"
+                  />
+                </div>
+              </div>
+
+              <div className="grid gap-3 sm:grid-cols-2">
+                <ColorField
+                  id="hi-bg-color"
+                  label="Card background"
+                  value={cardStyle.background_color}
+                  onChange={(v) =>
+                    setCardStyle((c) => ({ ...c, background_color: v }))
+                  }
+                  placeholder="#F8D5F0"
+                />
+                <ColorField
+                  id="hi-text-color"
+                  label="Title colour"
+                  value={cardStyle.text_color}
+                  onChange={(v) => setCardStyle((c) => ({ ...c, text_color: v }))}
+                  placeholder="#000000"
+                />
+                <ColorField
+                  id="hi-desc-color"
+                  label="Description colour"
+                  value={cardStyle.description_color}
+                  onChange={(v) =>
+                    setCardStyle((c) => ({ ...c, description_color: v }))
+                  }
+                  placeholder="#464545"
+                />
+                <ColorField
+                  id="hi-accent-color"
+                  label="Accent colour"
+                  value={cardStyle.accent_color}
+                  onChange={(v) =>
+                    setCardStyle((c) => ({ ...c, accent_color: v }))
+                  }
+                  placeholder="#E92B2B"
+                />
+              </div>
+            </div>
+          </details>
           </FormGroup>
         </div>
 
