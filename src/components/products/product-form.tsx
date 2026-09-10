@@ -86,15 +86,6 @@ const variantSchema = z
     quantity: z.string().optional(),
     image_url: z.string().nullable().optional(),
     status: z.enum(VARIANT_STATUSES),
-  })
-  .superRefine((v, ctx) => {
-    if (!v.color_id && !v.size_id) {
-      ctx.addIssue({
-        code: "custom",
-        path: ["color_id"],
-        message: "Pick a colour or a size",
-      });
-    }
   });
 
 const faqSchema = z.object({
@@ -138,7 +129,24 @@ const productFormSchema = z.object({
   meta_description: z.string().optional(),
   variants: z.array(variantSchema),
   faqs: z.array(faqSchema),
-});
+})
+  .superRefine((values, ctx) => {
+    // A product with a single variant and no options is the ordinary "simple
+    // product" case - it needs no colour or size. Options only become
+    // required once there is more than one variant, because that is the point
+    // at which they have to be told apart.
+    if (values.variants.length < 2) return;
+
+    values.variants.forEach((variant, index) => {
+      if (!variant.color_id && !variant.size_id) {
+        ctx.addIssue({
+          code: "custom",
+          path: ["variants", index, "color_id"],
+          message: "Pick a colour or a size",
+        });
+      }
+    });
+  });
 
 type ProductFormValues = z.infer<typeof productFormSchema>;
 
@@ -668,13 +676,21 @@ export function ProductForm({ product }: { product?: ProductDetailRow }) {
   };
 
   const onInvalid = (formErrors: typeof errors) => {
-    const variantIssue = Array.isArray(formErrors.variants)
-      ? formErrors.variants.find((v) => v)
-      : undefined;
+    // The colour/size field lives inside a popover, so an error there is
+    // invisible until you open the right row. Naming the row is the only way
+    // the message is actionable.
+    const variantIndex = Array.isArray(formErrors.variants)
+      ? formErrors.variants.findIndex((v) => v)
+      : -1;
+    const variantIssue =
+      variantIndex >= 0 ? formErrors.variants?.[variantIndex] : undefined;
+    const variantLabel = `Variant ${variantIndex + 1}`;
     const message = variantIssue
-      ? (variantIssue.price?.message ??
-          variantIssue.color_id?.message ??
-          "Check the variants — each one needs a price and a colour or size.")
+      ? variantIssue.price?.message
+        ? `${variantLabel}: ${variantIssue.price.message}`
+        : variantIssue.color_id?.message
+          ? `${variantLabel}: ${variantIssue.color_id.message}`
+          : `${variantLabel} needs attention.`
       : (Object.values(formErrors).find(
           (e) => e && typeof e === "object" && "message" in e && e.message
         ) as { message?: string } | undefined)?.message;

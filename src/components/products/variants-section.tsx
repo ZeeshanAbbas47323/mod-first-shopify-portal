@@ -273,15 +273,25 @@ export function VariantsSection({
 
   const addColor = (colorId: string) => {
     if (!colorId || usedColors.includes(colorId)) return;
-    if (usedSizes.length === 0) addCombination(colorId, "");
-    else usedSizes.forEach((sizeId) => addCombination(colorId, sizeId));
+    if (usedSizes.length === 0) {
+      // Same as addSize: fill in the bare variant instead of duplicating it.
+      const bare = variants.findIndex((v) => !v.color_id && !v.size_id);
+      if (bare >= 0) update(bare, { ...variants[bare], color_id: colorId });
+      else addCombination(colorId, "");
+    } else {
+      usedSizes.forEach((sizeId) => addCombination(colorId, sizeId));
+    }
     setPendingColor("");
   };
 
   const addSize = (sizeId: string) => {
     if (!sizeId || usedSizes.includes(sizeId)) return;
     if (usedColors.length === 0) {
-      addCombination("", sizeId);
+      // A product that already has one option-less variant should have the
+      // size applied to it, not gain a second row alongside it.
+      const bare = variants.findIndex((v) => !v.color_id && !v.size_id);
+      if (bare >= 0) update(bare, { ...variants[bare], size_id: sizeId });
+      else addCombination("", sizeId);
     } else {
       usedColors.forEach((colorId) => {
         const bare = variants.findIndex(
