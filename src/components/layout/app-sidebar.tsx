@@ -124,8 +124,13 @@ const fallbackNav: NavItem[] = [
   { title: "Analytics", href: "/analytics", icon: BarChart3 },
 ];
 
+/**
+ * The active pill takes its colours from the sidebar tokens rather than a
+ * hardcoded white: on a dark sidebar a white background left the label - which
+ * is `text-sidebar-accent-foreground`, and white in dark mode - unreadable.
+ */
 const itemClasses =
-  "cursor-pointer font-medium transition-colors duration-150 hover:bg-muted active:bg-muted data-active:bg-white data-active:shadow-sm data-active:hover:bg-white";
+  "cursor-pointer font-medium transition-colors duration-150 hover:bg-sidebar-accent/15 active:bg-sidebar-accent/20 data-active:shadow-sm";
 
 const FOOTER_ROUTE = "/settings";
 
@@ -196,7 +201,7 @@ export function AppSidebar() {
                       <span>{item.title}</span>
                     </SidebarMenuButton>
                     {item.badge ? (
-                      <SidebarMenuBadge className="rounded-full bg-white text-[11px] font-semibold text-foreground shadow-sm">
+                      <SidebarMenuBadge className="rounded-full bg-sidebar-accent text-[11px] font-semibold text-sidebar-accent-foreground shadow-sm">
                         {item.badge}
                       </SidebarMenuBadge>
                     ) : null}

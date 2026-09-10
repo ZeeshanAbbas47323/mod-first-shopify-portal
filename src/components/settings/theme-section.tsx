@@ -4,9 +4,13 @@ import * as React from "react";
 import {
   ChevronDown,
   ChevronRight,
+  Eye,
+  EyeOff,
   Layers,
   Loader2,
   Plus,
+  RefreshCw,
+  Search,
   Trash2,
 } from "lucide-react";
 import { toast } from "sonner";
@@ -23,6 +27,7 @@ import {
 } from "@/components/ui/dialog";
 import { ConfirmDeleteDialog } from "@/components/confirm-delete-dialog";
 import { MediaUpload } from "@/components/media-upload";
+import { ThemePreview } from "@/components/settings/theme-preview";
 import { StatusBadge, StatusToggle } from "@/components/status-badge";
 import { apiErrorMessage } from "@/lib/auth-api";
 import { persistOrder } from "@/lib/sort-order";
@@ -53,6 +58,38 @@ export function ThemeSection() {
   const [loading, setLoading] = React.useState(true);
   const [expanded, setExpanded] = React.useState<Set<string>>(new Set());
   const [refreshKey, setRefreshKey] = React.useState(0);
+
+  const [search, setSearch] = React.useState("");
+  const [showHidden, setShowHidden] = React.useState(true);
+  const [showPreview, setShowPreview] = React.useState(true);
+
+  const activeCount = React.useMemo(
+    () => sections.filter((s) => s.is_active !== false).length,
+    [sections]
+  );
+
+  const itemCount = React.useMemo(
+    () => sections.reduce((sum, s) => sum + (s.items?.length ?? 0), 0),
+    [sections]
+  );
+
+  /** The editor list respects the search box and the active-only filter; the
+   *  preview always reflects the whole set, since it stands in for the page. */
+  const isFiltered = React.useMemo(
+    () => !!search.trim() || !showHidden,
+    [search, showHidden]
+  );
+
+  const visibleSections = React.useMemo(() => {
+    const term = search.trim().toLowerCase();
+    return sections.filter((s) => {
+      if (!showHidden && s.is_active === false) return false;
+      if (!term) return true;
+      return [s.section_name, s.title, s.section_key, s.layout_type]
+        .filter(Boolean)
+        .some((v) => String(v).toLowerCase().includes(term));
+    });
+  }, [sections, search, showHidden]);
 
   const [editing, setEditing] = React.useState<HomeSectionRow | null>(null);
   const [dialogOpen, setDialogOpen] = React.useState(false);
@@ -147,19 +184,88 @@ export function ThemeSection() {
 
   return (
     <div className="flex flex-col gap-3">
-      <div className="flex flex-wrap items-center justify-between gap-2">
+      <div className="flex flex-col gap-2">
         <p className="text-sm text-muted-foreground">
           Blocks that make up the storefront home page, in the order they appear.
+          Drag a row to reorder it.
         </p>
-        <Button
-          onClick={() => {
-            setEditing(null);
-            setDialogOpen(true);
-          }}
-        >
-          <Plus className="size-4" />
-          Add section
-        </Button>
+
+        <div className="flex flex-wrap items-center gap-2">
+          <div className="relative min-w-44 flex-1 sm:max-w-64 sm:flex-none">
+            <Search className="absolute left-2.5 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" />
+            <Input
+              value={search}
+              onChange={(e) => setSearch(e.target.value)}
+              placeholder="Search sections…"
+              aria-label="Search sections"
+              className="pl-8"
+            />
+          </div>
+
+          <Button
+            variant="outline"
+            onClick={() => setShowHidden((v) => !v)}
+            aria-pressed={showHidden}
+            title={showHidden ? "Hiding nothing" : "Showing active only"}
+          >
+            {showHidden ? (
+              <Eye className="size-4" />
+            ) : (
+              <EyeOff className="size-4" />
+            )}
+            <span className="hidden sm:inline">
+              {showHidden ? "All" : "Active only"}
+            </span>
+          </Button>
+
+          <Button
+            variant="outline"
+            onClick={() => setShowPreview((v) => !v)}
+            aria-pressed={showPreview}
+          >
+            <Layers className="size-4" />
+            <span className="hidden sm:inline">
+              {showPreview ? "Hide preview" : "Show preview"}
+            </span>
+          </Button>
+
+          <Button
+            variant="outline"
+            size="icon"
+            onClick={() => setRefreshKey((k) => k + 1)}
+            disabled={loading}
+            aria-label="Refresh"
+            title="Refresh"
+          >
+            <RefreshCw className={cn("size-4", loading && "animate-spin")} />
+          </Button>
+
+          <Button
+            className="ml-auto"
+            onClick={() => {
+              setEditing(null);
+              setDialogOpen(true);
+            }}
+          >
+            <Plus className="size-4" />
+            Add section
+          </Button>
+        </div>
+
+        <div className="flex flex-wrap items-center gap-3 text-xs text-muted-foreground">
+          <span>
+            <strong className="font-medium text-foreground">{sections.length}</strong>{" "}
+            section{sections.length === 1 ? "" : "s"}
+          </span>
+          <span>
+            <strong className="font-medium text-foreground">{activeCount}</strong>{" "}
+            active
+          </span>
+          <span>
+            <strong className="font-medium text-foreground">{itemCount}</strong>{" "}
+            item{itemCount === 1 ? "" : "s"}
+          </span>
+        </div>
       </div>
 
       {loading ? (
@@ -168,28 +274,41 @@ export function ThemeSection() {
             <Skeleton key={i} className="h-16 w-full rounded-xl" />
           ))}
         </div>
-      ) : sections.length === 0 ? (
+      ) : visibleSections.length === 0 ? (
         <Card className="shadow-none">
           <CardContent className="flex flex-col items-center gap-2 py-14 text-center">
             <Layers className="size-6 text-muted-foreground" />
-            <p className="text-sm font-medium">No home sections yet</p>
+            <p className="text-sm font-medium">
+              {sections.length ? "No matching sections" : "No home sections yet"}
+            </p>
             <p className="text-xs text-muted-foreground">
-              Add a hero, banner or product grid to build the home page.
+              {sections.length
+                ? "Try a different search, or show hidden sections."
+                : "Add a hero, banner or product grid to build the home page."}
             </p>
           </CardContent>
         </Card>
       ) : (
         <div className="space-y-2">
-          {sections.map((section, index) => {
+          {isFiltered && (
+            <p className="rounded-md bg-info-subtle px-2.5 py-1.5 text-xs text-info-subtle-foreground">
+              Showing {visibleSections.length} of {sections.length}. Clear the
+              filter to drag sections into a new order.
+            </p>
+          )}
+          {visibleSections.map((section) => {
             const id = String(section.id);
             const isOpen = expanded.has(id);
+            // Drag works against the full list, so a filtered row still knows
+            // where it really sits.
+            const index = sections.findIndex((s) => String(s.id) === id);
             const items = [...(section.items ?? [])].sort(
               (a, b) => (a.sort_order ?? 0) - (b.sort_order ?? 0)
             );
             return (
               <Card
                 key={id}
-                {...dnd.dropProps(index)}
+                {...(isFiltered ? {} : dnd.dropProps(index))}
                 className={cn(
                   "overflow-hidden py-0 shadow-none transition",
                   section.is_active === false && "opacity-70",
@@ -258,7 +377,7 @@ export function ThemeSection() {
                     </span>
                     <DragHandle
                       label={section.title ?? "section"}
-                      disabled={dnd.saving}
+                      disabled={dnd.saving || isFiltered}
                       {...dnd.handleProps(index, sections.length)}
                     />
                     <Button
@@ -300,6 +419,7 @@ export function ThemeSection() {
                       </p>
                     ) : (
                       <SectionItemList
+                        sectionId={section.id}
                         items={items}
                         onReload={reload}
                         onEdit={(item) => setItemTarget({ section, item })}
@@ -322,6 +442,10 @@ export function ThemeSection() {
             );
           })}
         </div>
+      )}
+
+      {showPreview && !loading && sections.length > 0 && (
+        <ThemePreview sections={sections} />
       )}
 
       <SectionDialog
@@ -640,7 +764,9 @@ function ItemDialog({
     badge: "",
     sort_order: "0",
   };
+
   const [form, setForm] = React.useState(empty);
+  const [isActive, setIsActive] = React.useState(true);
   const [image, setImage] = React.useState<string | null>(null);
   const [mobileImage, setMobileImage] = React.useState<string | null>(null);
   const [saving, setSaving] = React.useState(false);
@@ -658,6 +784,7 @@ function ItemDialog({
       badge: item?.badge ?? "",
       sort_order: String(item?.sort_order ?? (target.section.items?.length ?? 0) + 1),
     });
+    setIsActive(item ? item.is_active !== false : true);
     setImage(item?.image_url ?? null);
     setMobileImage(item?.mobile_image_url ?? null);
   }, [target, item]);
@@ -679,7 +806,7 @@ function ItemDialog({
         button_url: form.button_url.trim() || undefined,
         badge: form.badge.trim() || undefined,
         sort_order: Number(form.sort_order) || 0,
-        is_active: true,
+        is_active: isActive,
       };
       const action: HomeSectionItemAction = item
         ? { _action: "update", id: item.id, ...fields }
@@ -798,6 +925,16 @@ function ItemDialog({
               />
             </div>
           </div>
+
+          <div className="flex items-center justify-between rounded-lg border border-border px-3 py-2.5">
+            <div>
+              <Label className="text-sm">Visible on the storefront</Label>
+              <p className="text-xs text-muted-foreground">
+                Hidden items stay saved but are not rendered.
+              </p>
+            </div>
+            <StatusToggle isActive={isActive} onToggle={setIsActive} />
+          </div>
         </div>
 
         <DialogFooter>
@@ -819,11 +956,13 @@ function ItemDialog({
  * can only be dropped among its siblings, never into another section.
  */
 function SectionItemList({
+  sectionId,
   items,
   onReload,
   onEdit,
   onDelete,
 }: {
+  sectionId: number | string;
   items: HomeSectionItemRow[];
   onReload: () => void;
   onEdit: (item: HomeSectionItemRow) => void;
@@ -836,6 +975,18 @@ function SectionItemList({
       onReload();
     },
   });
+
+  const toggleItem = async (item: HomeSectionItemRow, next: boolean) => {
+    try {
+      await manageHomeSectionItems(sectionId, [
+        { _action: "update", id: item.id, title: item.title, is_active: next },
+      ]);
+      toast.success(next ? "Item shown." : "Item hidden.");
+      onReload();
+    } catch (error) {
+      toast.error(apiErrorMessage(error, "Couldn't update the item."));
+    }
+  };
 
   return (
     <div className="space-y-1.5">
@@ -875,6 +1026,11 @@ function SectionItemList({
               {item.button_url ? ` \u00b7 ${item.button_url}` : ""}
             </p>
           </div>
+          <StatusToggle
+            isActive={item.is_active !== false}
+            onToggle={(next) => toggleItem(item, next)}
+          />
+
           <div className="flex items-center gap-0.5">
             <Button size="sm" variant="outline" onClick={() => onEdit(item)}>
               Edit
