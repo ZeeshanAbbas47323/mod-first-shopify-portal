@@ -5,6 +5,7 @@ import {
   ChevronDown,
   ChevronRight,
   ImageOff,
+  X,
   Eye,
   EyeOff,
   Layers,
@@ -21,6 +22,14 @@ import { Card, CardContent } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
+import { Separator } from "@/components/ui/separator";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 import { Skeleton } from "@/components/ui/skeleton";
 import {
   Dialog, DialogContent, DialogDescription,
@@ -51,9 +60,47 @@ import {
   type HomeSectionRow,
 } from "@/lib/admin-api";
 
+/**
+ * A titled group of fields. The section form carries a dozen inputs; grouping
+ * them by what they do keeps the dialog scannable instead of a flat wall.
+ */
+function FormGroup({
+  title,
+  description,
+  children,
+}: {
+  title: string;
+  description?: string;
+  children: React.ReactNode;
+}) {
+  return (
+    <section className="space-y-3">
+      <div className="space-y-0.5">
+        <h3 className="text-sm font-semibold">{title}</h3>
+        {description && (
+          <p className="text-xs text-muted-foreground">{description}</p>
+        )}
+      </div>
+      {children}
+    </section>
+  );
+}
+
+function Required() {
+  return <span className="text-destructive"> *</span>;
+}
+
 const LAYOUT_HINTS = [
   "hero", "hero_full", "banner", "grid", "carousel", "slider", "features", "cta",
 ];
+
+/** Select values cannot be empty strings, so "not set" needs its own token. */
+const NO_LAYOUT = "__none__";
+
+const LAYOUT_ITEMS = {
+  [NO_LAYOUT]: "Not set",
+  ...Object.fromEntries(LAYOUT_HINTS.map((l) => [l, l])),
+};
 
 const slugKey = (s: string) =>
   s.toLowerCase().trim().replace(/[^a-z0-9\s_]/g, "").replace(/\s+/g, "_").replace(/_+/g, "_");
@@ -505,6 +552,7 @@ function SectionDialog({
   };
   const [form, setForm] = React.useState(empty);
   const [background, setBackground] = React.useState<string | null>(null);
+  const [isActive, setIsActive] = React.useState(true);
   const [settings, setSettings] = React.useState("");
   const [settingsError, setSettingsError] = React.useState<string | null>(null);
   const [saving, setSaving] = React.useState(false);
@@ -524,6 +572,7 @@ function SectionDialog({
       sort_order: String(editing?.sort_order ?? nextSortOrder),
     });
     setBackground(editing?.background_image ?? null);
+    setIsActive(editing ? editing.is_active !== false : true);
     setSettings(
       editing?.section_settings
         ? JSON.stringify(editing.section_settings, null, 2)
@@ -569,6 +618,7 @@ function SectionDialog({
         layout_type: form.layout_type.trim() || undefined,
         sort_order: Number(form.sort_order) || 0,
         section_settings: parsedSettings,
+        is_active: isActive,
       };
       const message = editing
         ? await updateHomeSection(editing.id, body)
@@ -587,7 +637,7 @@ function SectionDialog({
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-h-[85vh] overflow-y-auto sm:max-w-lg">
+      <DialogContent className="max-h-[88vh] overflow-y-auto sm:max-w-2xl">
         <DialogHeader>
           <DialogTitle>{editing ? "Edit section" : "Add home section"}</DialogTitle>
           <DialogDescription>
@@ -597,138 +647,226 @@ function SectionDialog({
           </DialogDescription>
         </DialogHeader>
 
-        <div className="space-y-4">
-          <div className="grid gap-3 sm:grid-cols-2">
-            <div className="space-y-1.5">
-              <Label htmlFor="hs-name">Section name</Label>
-              <Input
-                id="hs-name"
-                value={form.section_name}
-                onChange={(e) => onNameChange(e.target.value)}
-                placeholder="Hero Banner Section"
-              />
-            </div>
-            <div className="space-y-1.5">
-              <Label htmlFor="hs-key">Section key</Label>
-              <Input
-                id="hs-key"
-                value={form.section_key}
-                onChange={(e) => {
-                  keyDirty.current = true;
-                  set("section_key", slugKey(e.target.value));
-                }}
-                placeholder="home_hero"
-                className="font-mono"
-              />
-              <p className="text-xs text-muted-foreground">
-                Lowercase and underscores — the storefront looks the section up by this.
-              </p>
-            </div>
-          </div>
-
-          <div className="grid gap-3 sm:grid-cols-2">
-            <div className="space-y-1.5">
-              <Label htmlFor="hs-title">Title</Label>
-              <Input
-                id="hs-title"
-                value={form.title}
-                onChange={(e) => set("title", e.target.value)}
-                placeholder="Premium Custom Apparel"
-              />
-            </div>
-            <div className="space-y-1.5">
-              <Label htmlFor="hs-subtitle">Subtitle</Label>
-              <Input
-                id="hs-subtitle"
-                value={form.subtitle}
-                onChange={(e) => set("subtitle", e.target.value)}
-                placeholder="Made for You, Delivered Fast"
-              />
-            </div>
-          </div>
-
-          <div className="space-y-1.5">
-            <Label htmlFor="hs-desc">Description</Label>
-            <Textarea
-              id="hs-desc"
-              rows={2}
-              value={form.description}
-              onChange={(e) => set("description", e.target.value)}
-              placeholder="High-quality custom printing with DTF, embroidery & more."
-            />
-          </div>
-
-          <div className="space-y-1.5">
-            <Label>Background image</Label>
-            <MediaUpload value={background} onChange={setBackground} folder="home-sections" />
-          </div>
-
-          <div className="grid gap-3 sm:grid-cols-3">
-            <div className="space-y-1.5">
-              <Label htmlFor="hs-bg">Background colour</Label>
-              <div className="flex items-center gap-2">
-                <input
-                  type="color"
-                  value={/^#[0-9a-f]{6}$/i.test(form.background_color) ? form.background_color : "#ffffff"}
-                  onChange={(e) => set("background_color", e.target.value)}
-                  className="size-9 cursor-pointer rounded border border-input bg-transparent"
-                  aria-label="Pick background colour"
-                />
+        <div className="space-y-5">
+          <FormGroup
+            title="Basics"
+            description="How this block is identified in the admin and on the storefront."
+          >
+            <div className="grid gap-3 sm:grid-cols-2">
+              <div className="space-y-1.5">
+                <Label htmlFor="hs-name">Section name</Label>
                 <Input
-                  id="hs-bg"
-                  value={form.background_color}
-                  onChange={(e) => set("background_color", e.target.value)}
-                  placeholder="#030303"
+                  id="hs-name"
+                  value={form.section_name}
+                  onChange={(e) => onNameChange(e.target.value)}
+                  placeholder="Hero Banner Section"
+                />
+                <p className="text-xs text-muted-foreground">
+                  Shown in this list only.
+                </p>
+              </div>
+              <div className="space-y-1.5">
+                <Label htmlFor="hs-key">
+                  Section key
+                  <Required />
+                </Label>
+                <Input
+                  id="hs-key"
+                  value={form.section_key}
+                  onChange={(e) => {
+                    keyDirty.current = true;
+                    set("section_key", slugKey(e.target.value));
+                  }}
+                  placeholder="home_hero"
                   className="font-mono"
+                  aria-invalid={!form.section_key.trim()}
+                />
+                <p className="text-xs text-muted-foreground">
+                  Lowercase and underscores — the storefront looks the section up
+                  by this.
+                </p>
+              </div>
+            </div>
+
+            <div className="flex items-center justify-between rounded-lg border border-border px-3 py-2.5">
+              <div>
+                <Label className="text-sm">Visible on the storefront</Label>
+                <p className="text-xs text-muted-foreground">
+                  Hidden sections stay saved but are not rendered.
+                </p>
+              </div>
+              <StatusToggle isActive={isActive} onToggle={setIsActive} />
+            </div>
+          </FormGroup>
+
+          <Separator />
+
+          <FormGroup
+            title="Content"
+            description="The wording customers read at the top of the block."
+          >
+            <div className="grid gap-3 sm:grid-cols-2">
+              <div className="space-y-1.5">
+                <Label htmlFor="hs-title">Title</Label>
+                <Input
+                  id="hs-title"
+                  value={form.title}
+                  onChange={(e) => set("title", e.target.value)}
+                  placeholder="Premium Custom Apparel"
+                />
+              </div>
+              <div className="space-y-1.5">
+                <Label htmlFor="hs-subtitle">Subtitle</Label>
+                <Input
+                  id="hs-subtitle"
+                  value={form.subtitle}
+                  onChange={(e) => set("subtitle", e.target.value)}
+                  placeholder="Made for You, Delivered Fast"
                 />
               </div>
             </div>
-            <div className="space-y-1.5">
-              <Label htmlFor="hs-layout">Layout type</Label>
-              <Input
-                id="hs-layout"
-                value={form.layout_type}
-                onChange={(e) => set("layout_type", e.target.value)}
-                placeholder="hero"
-                list="layout-hints"
-              />
-              <datalist id="layout-hints">
-                {LAYOUT_HINTS.map((l) => (
-                  <option key={l} value={l} />
-                ))}
-              </datalist>
-            </div>
-            <div className="space-y-1.5">
-              <Label htmlFor="hs-order">Sort order</Label>
-              <Input
-                id="hs-order"
-                type="number"
-                min={0}
-                value={form.sort_order}
-                onChange={(e) => set("sort_order", e.target.value)}
-              />
-            </div>
-          </div>
 
-          <div className="space-y-1.5">
-            <Label htmlFor="hs-settings">Section settings (JSON)</Label>
-            <Textarea
-              id="hs-settings"
-              rows={4}
-              value={settings}
-              onChange={(e) => {
-                setSettings(e.target.value);
-                setSettingsError(null);
-              }}
-              placeholder={'{\n  "autoplay": true,\n  "interval": 5000\n}'}
-              className="font-mono text-xs"
-              spellCheck={false}
-            />
-            {settingsError && <p className="text-sm text-destructive">{settingsError}</p>}
-            <p className="text-xs text-muted-foreground">
-              Extra config the storefront reads — autoplay, interval, mobile layout, etc.
-            </p>
-          </div>
+            <div className="space-y-1.5">
+              <Label htmlFor="hs-desc">Description</Label>
+              <Textarea
+                id="hs-desc"
+                rows={2}
+                value={form.description}
+                onChange={(e) => set("description", e.target.value)}
+                placeholder="High-quality custom printing with DTF, embroidery & more."
+              />
+            </div>
+          </FormGroup>
+
+          <Separator />
+
+          <FormGroup
+            title="Appearance"
+            description="How the block is laid out and what sits behind it."
+          >
+            <div className="grid gap-3 sm:grid-cols-2">
+              <div className="space-y-1.5">
+                <Label htmlFor="hs-layout">Layout type</Label>
+                <Select
+                  items={LAYOUT_ITEMS}
+                  value={form.layout_type || NO_LAYOUT}
+                  onValueChange={(v) =>
+                    set("layout_type", v === NO_LAYOUT ? "" : String(v))
+                  }
+                >
+                  <SelectTrigger id="hs-layout" className="w-full">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value={NO_LAYOUT}>Not set</SelectItem>
+                    {LAYOUT_HINTS.map((l) => (
+                      <SelectItem key={l} value={l}>
+                        {l}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+                <p className="text-xs text-muted-foreground">
+                  Tells the storefront which component to render.
+                </p>
+              </div>
+
+              <div className="space-y-1.5">
+                <Label htmlFor="hs-bg">Background colour</Label>
+                <div className="flex items-center gap-2">
+                  <input
+                    type="color"
+                    value={
+                      /^#[0-9a-f]{6}$/i.test(form.background_color)
+                        ? form.background_color
+                        : "#ffffff"
+                    }
+                    onChange={(e) => set("background_color", e.target.value)}
+                    className="size-9 shrink-0 cursor-pointer rounded border border-input bg-transparent"
+                    aria-label="Pick background colour"
+                  />
+                  <Input
+                    id="hs-bg"
+                    value={form.background_color}
+                    onChange={(e) => set("background_color", e.target.value)}
+                    placeholder="#030303"
+                    className="font-mono"
+                  />
+                  {form.background_color && (
+                    <Button
+                      type="button"
+                      variant="ghost"
+                      size="icon"
+                      aria-label="Clear background colour"
+                      onClick={() => set("background_color", "")}
+                    >
+                      <X className="size-4" />
+                    </Button>
+                  )}
+                </div>
+              </div>
+            </div>
+
+            <div className="space-y-1.5">
+              <Label>Background image</Label>
+              <MediaUpload
+                value={background}
+                onChange={setBackground}
+                folder="home-sections"
+              />
+              <p className="text-xs text-muted-foreground">
+                Sits behind the block. Leave empty to use the colour above.
+              </p>
+            </div>
+          </FormGroup>
+
+          <Separator />
+
+          <FormGroup title="Advanced">
+            <div className="grid gap-3 sm:grid-cols-2">
+              <div className="space-y-1.5">
+                <Label htmlFor="hs-order">Sort order</Label>
+                <Input
+                  id="hs-order"
+                  type="number"
+                  min={0}
+                  value={form.sort_order}
+                  onChange={(e) => set("sort_order", e.target.value)}
+                />
+                <p className="text-xs text-muted-foreground">
+                  Or just drag the row in the list.
+                </p>
+              </div>
+            </div>
+
+            <details className="rounded-lg border border-border px-3 py-2.5">
+              <summary className="cursor-pointer text-sm font-medium">
+                Section settings (JSON)
+              </summary>
+              <div className="mt-3 space-y-1.5">
+                <Textarea
+                  id="hs-settings"
+                  rows={5}
+                  value={settings}
+                  onChange={(e) => {
+                    setSettings(e.target.value);
+                    setSettingsError(null);
+                  }}
+                  placeholder={'{\n  "autoplay": true,\n  "interval": 5000\n}'}
+                  className="font-mono text-xs"
+                  spellCheck={false}
+                  aria-invalid={!!settingsError}
+                />
+                {settingsError && (
+                  <p className="text-sm text-destructive">{settingsError}</p>
+                )}
+                <p className="text-xs text-muted-foreground">
+                  Extra config the storefront reads — autoplay, interval, mobile
+                  layout, etc.
+                </p>
+              </div>
+            </details>
+          </FormGroup>
         </div>
 
         <DialogFooter>
@@ -824,7 +962,7 @@ function ItemDialog({
 
   return (
     <Dialog open={!!target} onOpenChange={(next) => !next && onClose()}>
-      <DialogContent className="max-h-[85vh] overflow-y-auto sm:max-w-lg">
+      <DialogContent className="max-h-[88vh] overflow-y-auto sm:max-w-2xl">
         <DialogHeader>
           <DialogTitle>{item ? "Edit item" : "Add item"}</DialogTitle>
           <DialogDescription>
@@ -834,15 +972,20 @@ function ItemDialog({
           </DialogDescription>
         </DialogHeader>
 
-        <div className="space-y-4">
+        <div className="space-y-5">
+          <FormGroup title="Content" description="What this card says.">
           <div className="grid gap-3 sm:grid-cols-2">
             <div className="space-y-1.5">
-              <Label htmlFor="hi-title">Title</Label>
+              <Label htmlFor="hi-title">
+                Title
+                <Required />
+              </Label>
               <Input
                 id="hi-title"
                 value={form.title}
                 onChange={(e) => set("title", e.target.value)}
                 placeholder="Shop T-Shirts"
+                aria-invalid={!form.title.trim()}
               />
             </div>
             <div className="space-y-1.5">
@@ -866,7 +1009,14 @@ function ItemDialog({
               placeholder="Premium cotton tees with custom printing"
             />
           </div>
+          </FormGroup>
 
+          <Separator />
+
+          <FormGroup
+            title="Media"
+            description="A separate mobile image is used on narrow screens when set."
+          >
           <div className="grid gap-3 sm:grid-cols-2">
             <div className="space-y-1.5">
               <Label>Image</Label>
@@ -881,7 +1031,14 @@ function ItemDialog({
               />
             </div>
           </div>
+          </FormGroup>
 
+          <Separator />
+
+          <FormGroup
+            title="Call to action"
+            description="Where this card sends the customer."
+          >
           <div className="grid gap-3 sm:grid-cols-2">
             <div className="space-y-1.5">
               <Label htmlFor="hi-btn-text">Button text</Label>
@@ -903,7 +1060,11 @@ function ItemDialog({
               />
             </div>
           </div>
+          </FormGroup>
 
+          <Separator />
+
+          <FormGroup title="Display">
           <div className="grid gap-3 sm:grid-cols-2">
             <div className="space-y-1.5">
               <Label htmlFor="hi-badge">Badge</Label>
@@ -923,6 +1084,9 @@ function ItemDialog({
                 value={form.sort_order}
                 onChange={(e) => set("sort_order", e.target.value)}
               />
+              <p className="text-xs text-muted-foreground">
+                Or just drag the row in the list.
+              </p>
             </div>
           </div>
 
@@ -935,6 +1099,7 @@ function ItemDialog({
             </div>
             <StatusToggle isActive={isActive} onToggle={setIsActive} />
           </div>
+          </FormGroup>
         </div>
 
         <DialogFooter>
