@@ -190,7 +190,7 @@ function ProductImageGrid({
           <button
             type="button"
             onClick={() => onRemove(i)}
-            className="absolute top-1 right-1 hidden size-6 cursor-pointer items-center justify-center rounded-full bg-[#1a1a1a]/80 text-white transition-all duration-150 group-hover:flex"
+            className="absolute top-1 right-1 hidden size-6 cursor-pointer items-center justify-center rounded-full bg-chrome/80 text-white transition-all duration-150 group-hover:flex"
           >
             <X className="size-3" />
           </button>
@@ -241,11 +241,11 @@ function ProfitDisplay({ price, cost }: { price?: string; cost?: string }) {
   return (
     <p className="mt-1 text-xs text-muted-foreground">
       Profit:{" "}
-      <span className={profit >= 0 ? "text-[#29845a]" : "text-destructive"}>
+      <span className={profit >= 0 ? "text-success" : "text-destructive"}>
         ${profit.toFixed(2)}
       </span>{" "}
       · Margin:{" "}
-      <span className={margin >= 0 ? "text-[#29845a]" : "text-destructive"}>
+      <span className={margin >= 0 ? "text-success" : "text-destructive"}>
         {margin.toFixed(1)}%
       </span>
     </p>

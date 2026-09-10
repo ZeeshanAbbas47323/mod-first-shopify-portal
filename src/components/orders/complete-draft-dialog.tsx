@@ -209,7 +209,7 @@ export function CompleteDraftDialog({
         {result ? (
           <div className="space-y-3">
             <div className="flex items-start gap-2 rounded-xl border border-border bg-muted/30 p-3 text-sm">
-              <BadgeCheck className="mt-0.5 size-4 shrink-0 text-[#29845a]" />
+              <BadgeCheck className="mt-0.5 size-4 shrink-0 text-success" />
               <div className="space-y-1">
                 <p className="font-medium">{orderNumber ?? "Order created"}</p>
                 <p className="text-muted-foreground">
@@ -263,7 +263,7 @@ export function CompleteDraftDialog({
                   className={cn(
                     "flex w-full items-start gap-3 rounded-xl border p-3 text-left transition-colors",
                     option === o.value
-                      ? "border-[#005bd3] bg-[#e0f0ff]/40"
+                      ? "border-link bg-info-subtle/40"
                       : "border-border hover:bg-muted/40"
                   )}
                 >

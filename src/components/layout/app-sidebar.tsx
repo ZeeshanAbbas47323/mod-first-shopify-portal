@@ -125,7 +125,7 @@ const fallbackNav: NavItem[] = [
 ];
 
 const itemClasses =
-  "cursor-pointer font-medium transition-colors duration-150 hover:bg-[#e0e0e0] active:bg-[#e0e0e0] data-active:bg-white data-active:shadow-sm data-active:hover:bg-white";
+  "cursor-pointer font-medium transition-colors duration-150 hover:bg-muted active:bg-muted data-active:bg-white data-active:shadow-sm data-active:hover:bg-white";
 
 const FOOTER_ROUTE = "/settings";
 
@@ -164,7 +164,7 @@ export function AppSidebar() {
   return (
     <Sidebar
       collapsible="offcanvas"
-      className="top-14 !h-[calc(100svh-3.5rem)] bg-[#1a1a1a] **:data-[slot=sidebar-inner]:rounded-tl-xl"
+      className="top-14 !h-[calc(100svh-3.5rem)] bg-chrome **:data-[slot=sidebar-inner]:rounded-tl-xl"
     >
       <SidebarContent>
         <SidebarGroup className="pt-3">

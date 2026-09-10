@@ -99,8 +99,8 @@ function SummaryCard({
         <span
           className={cn(
             "text-lg font-semibold tracking-tight",
-            tone === "warning" && "text-[#b98900]",
-            tone === "critical" && "text-[#e51c00]"
+            tone === "warning" && "text-warning",
+            tone === "critical" && "text-destructive"
           )}
         >
           {value}
@@ -355,7 +355,7 @@ export default function InventoryPage() {
             <div
               className={cn(
                 "flex items-center justify-end gap-0.5 font-medium tabular-nums",
-                up ? "text-[#29845a]" : "text-[#e51c00]"
+                up ? "text-success" : "text-destructive"
               )}
             >
               {up ? <ArrowUp className="size-3.5" /> : <ArrowDown className="size-3.5" />}
@@ -468,7 +468,7 @@ export default function InventoryPage() {
             Stock on hand, low-stock alerts and every movement.
           </p>
         </div>
-        <div className="flex items-center gap-2">
+        <div className="flex flex-wrap items-center gap-2">
           <ExportFormatMenu onSelect={runExport} busy={exportBusy} />
           <Button
             variant="outline"

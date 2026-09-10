@@ -159,7 +159,7 @@ const columns: ColumnDef<ProductRow>[] = [
           className={cn(
             "text-sm",
             qty === 0 && "text-destructive",
-            qty > 0 && qty <= LOW_STOCK && "text-[#b98900]"
+            qty > 0 && qty <= LOW_STOCK && "text-warning"
           )}
         >
           {qty === 0 ? `Out of stock${suffix}` : `${qty} in stock${suffix}`}

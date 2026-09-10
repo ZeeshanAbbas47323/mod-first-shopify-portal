@@ -535,7 +535,7 @@ function ReviewDialog({
                 href={editing.video_url}
                 target="_blank"
                 rel="noopener noreferrer"
-                className="block truncate text-sm text-[#005bd3] hover:underline"
+                className="block truncate text-sm text-link hover:underline"
               >
                 {editing.video_url}
               </a>

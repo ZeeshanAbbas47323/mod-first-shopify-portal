@@ -70,13 +70,13 @@ export default function MarketingPage() {
         <TabsList className="bg-transparent p-0">
           <TabsTrigger
             value="campaigns"
-            className="cursor-pointer rounded-lg px-3 data-active:bg-[#e3e3e3] data-active:shadow-none"
+            className="cursor-pointer rounded-lg px-3 data-active:bg-neutral-subtle data-active:shadow-none"
           >
             Campaigns
           </TabsTrigger>
           <TabsTrigger
             value="subscribers"
-            className="cursor-pointer rounded-lg px-3 data-active:bg-[#e3e3e3] data-active:shadow-none"
+            className="cursor-pointer rounded-lg px-3 data-active:bg-neutral-subtle data-active:shadow-none"
           >
             Subscribers
           </TabsTrigger>
@@ -573,7 +573,7 @@ const subscriberColumns: ColumnDef<SubscriberRow>[] = [
       return (
         <div className="flex items-center gap-3">
           <Avatar className="size-8">
-            <AvatarFallback className="bg-[#e0f0ff] text-xs font-semibold text-[#00527c]">
+            <AvatarFallback className="bg-info-subtle text-xs font-semibold text-info-subtle-foreground">
               {initials}
             </AvatarFallback>
           </Avatar>

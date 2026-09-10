@@ -12,6 +12,7 @@ import {
 import { toast } from "sonner";
 
 import { Button } from "@/components/ui/button";
+import { EmptyState } from "@/components/empty-state";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -333,9 +334,10 @@ export default function OrderDetailPage() {
             <CardContent className="p-0">
               <div className="divide-y">
                 {items.length === 0 && (
-                  <p className="px-6 py-8 text-center text-sm text-muted-foreground">
-                    No items found.
-                  </p>
+                  <EmptyState
+                    title="No items on this order"
+                    hint="Line items appear here once the order has products."
+                  />
                 )}
                 {items.map((item) => {
                   const unitPrice = n(item.unit_price) ?? 0;
@@ -1019,7 +1021,7 @@ function ItemDesigns({ designs }: { designs: OrderDesignUpload[] }) {
               render={
                 <button
                   type="button"
-                  className="flex max-w-52 items-center gap-1.5 rounded-lg border border-border bg-muted/40 px-2 py-1 text-xs text-[#005bd3] transition-colors hover:bg-muted"
+                  className="flex max-w-52 items-center gap-1.5 rounded-lg border border-border bg-muted/40 px-2 py-1 text-xs text-link transition-colors hover:bg-muted"
                 >
                   <FileImage className="size-3.5 shrink-0" />
                   <span className="truncate">{name}</span>

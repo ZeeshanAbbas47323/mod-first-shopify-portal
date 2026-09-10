@@ -39,8 +39,8 @@ import { exportRows as writeExport, type ExportFormat } from "@/lib/export";
 import { ExportFormatMenu } from "@/components/export-menu";
 
 
-const CHART_BLUE = "#005bd3";
-const CHART_COLORS = ["#005bd3","#1a9ba1","#8456cd","#b98900","#29845a","#e51c00","#637381"];
+const CHART_BLUE = "var(--chart-1)";
+const CHART_COLORS = ["var(--chart-1)","var(--chart-6)","var(--chart-4)","var(--chart-3)","var(--chart-2)","var(--chart-5)","var(--chart-7)"];
 
 const defaultRange = (): DateRange => ({
   from: subDays(new Date(), 29),
@@ -69,8 +69,8 @@ function SummaryCard({
     <div className="flex items-center gap-3 rounded-xl border border-border bg-card p-4">
       <span className={cn(
         "flex size-9 shrink-0 items-center justify-center rounded-lg",
-        tone === "green" && "bg-[#ccf2e0] text-[#1a6644] dark:bg-[#1a6644]/20 dark:text-[#4ade80]",
-        tone === "red" && "bg-[#ffe5e5] text-[#b91c1c] dark:bg-[#b91c1c]/20 dark:text-[#f87171]",
+        tone === "green" && "bg-success-subtle text-success-subtle-foreground dark:bg-success-subtle-foreground/20 dark:text-success",
+        tone === "red" && "bg-critical-subtle text-critical-subtle-foreground dark:bg-critical-subtle-foreground/20 dark:text-destructive",
         tone === "default" && "bg-muted text-muted-foreground",
       )}>
         {icon}
@@ -160,7 +160,7 @@ function TabBar({ tabs, active, onChange }: {
           className={cn(
             "shrink-0 px-4 py-2.5 text-sm font-medium transition-colors border-b-2 -mb-px",
             active === t.value
-              ? "border-[#005bd3] text-[#005bd3]"
+              ? "border-link text-link"
               : "border-transparent text-muted-foreground hover:text-foreground",
           )}
         >
@@ -651,7 +651,7 @@ function CustomersTab() {
                       <td className="px-4 py-2.5 font-medium whitespace-nowrap">{r.full_name ?? r.name ?? "—"}</td>
                       <td className="px-4 py-2.5 text-muted-foreground">{r.email ?? "—"}</td>
                       <td className="px-4 py-2.5 text-right">{fmtN(r.total_orders)}</td>
-                      <td className="px-4 py-2.5 text-right font-semibold text-[#29845a]">{fmt$(r.total_spent)}</td>
+                      <td className="px-4 py-2.5 text-right font-semibold text-success">{fmt$(r.total_spent)}</td>
                       <td className="px-4 py-2.5 text-right">{fmt$(r.avg_order_value)}</td>
                       <td className="px-4 py-2.5 text-xs text-muted-foreground whitespace-nowrap">
                         {r.last_order_at ? format(new Date(r.last_order_at), "MMM d, yyyy") : "—"}
@@ -726,7 +726,7 @@ function ProductPerfTab() {
                 <YAxis type="category" dataKey="name" tick={{ fontSize: 10, fill: "var(--muted-foreground)" }} axisLine={false} tickLine={false} width={110} />
                 <Tooltip content={<ChartTip currency />} />
                 <Bar dataKey="revenue" fill={CHART_BLUE} radius={[0, 3, 3, 0]} maxBarSize={12} name="Revenue" />
-                <Bar dataKey="profit" fill="#29845a" radius={[0, 3, 3, 0]} maxBarSize={12} name="Profit" />
+                <Bar dataKey="profit" fill="var(--chart-2)" radius={[0, 3, 3, 0]} maxBarSize={12} name="Profit" />
               </BarChart>
             </ResponsiveContainer>
           </CardContent>
@@ -754,8 +754,8 @@ function ProductPerfTab() {
                       <td className="px-4 py-2.5 text-right">{fmtN(r.units_sold)}</td>
                       <td className="px-4 py-2.5 text-right font-semibold">{fmt$(r.revenue)}</td>
                       <td className="px-4 py-2.5 text-right text-muted-foreground">{fmt$(r.cost)}</td>
-                      <td className={cn("px-4 py-2.5 text-right font-medium", (r.profit ?? 0) >= 0 ? "text-[#29845a]" : "text-destructive")}>{fmt$(r.profit)}</td>
-                      <td className={cn("px-4 py-2.5 text-right font-medium", (r.margin ?? 0) >= 0 ? "text-[#29845a]" : "text-destructive")}>{fmtPct(r.margin)}</td>
+                      <td className={cn("px-4 py-2.5 text-right font-medium", (r.profit ?? 0) >= 0 ? "text-success" : "text-destructive")}>{fmt$(r.profit)}</td>
+                      <td className={cn("px-4 py-2.5 text-right font-medium", (r.margin ?? 0) >= 0 ? "text-success" : "text-destructive")}>{fmtPct(r.margin)}</td>
                     </tr>
                   ))}
                 </tbody>
@@ -835,7 +835,7 @@ function FinancialTab() {
                       <td className="px-4 py-2.5 text-right">{fmtN(r.transactions)}</td>
                       <td className="px-4 py-2.5 text-right">{fmt$(r.amount)}</td>
                       <td className="px-4 py-2.5 text-right text-destructive">{fmt$(r.gateway_fee)}</td>
-                      <td className={cn("px-4 py-2.5 text-right font-semibold", (r.net ?? 0) >= 0 ? "text-[#29845a]" : "text-destructive")}>{fmt$(r.net)}</td>
+                      <td className={cn("px-4 py-2.5 text-right font-semibold", (r.net ?? 0) >= 0 ? "text-success" : "text-destructive")}>{fmt$(r.net)}</td>
                     </tr>
                   ))}
                 </tbody>

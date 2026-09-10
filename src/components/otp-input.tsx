@@ -112,7 +112,7 @@ export function OtpInput({
             "size-11 rounded-lg border bg-card text-center",
             "text-lg font-semibold text-foreground caret-transparent",
             "outline-none transition-colors",
-            "focus:border-[#005bd3] focus:ring-3 focus:ring-[#005bd3]/20",
+            "focus:border-link focus:ring-3 focus:ring-link/20",
             "disabled:cursor-not-allowed disabled:opacity-60",
             invalid ? "border-destructive" : "border-input"
           )}

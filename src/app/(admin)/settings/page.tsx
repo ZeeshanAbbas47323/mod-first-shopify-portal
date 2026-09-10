@@ -254,7 +254,7 @@ export default function SettingsPage() {
   const initials = (user?.name ?? "MF").slice(0, 2).toUpperCase();
 
   return (
-    <div className="fixed inset-x-0 top-14 bottom-0 z-40 bg-[#1a1a1a]">
+    <div className="fixed inset-x-0 top-14 bottom-0 z-40 bg-chrome">
       <div className="size-full overflow-y-auto rounded-t-xl bg-background">
         <button
           onClick={() => router.push("/")}
@@ -273,6 +273,15 @@ export default function SettingsPage() {
                 alt="ModFirst"
                 width={120}
                 height={26}
+                className="dark:hidden"
+              />
+              <Image
+                src="/images/branding/logo_white.png"
+                alt=""
+                aria-hidden="true"
+                width={120}
+                height={26}
+                className="hidden dark:block"
               />
               <p className="text-xs text-muted-foreground">1 store</p>
             </div>
@@ -295,8 +304,8 @@ export default function SettingsPage() {
                   className={cn(
                     "flex w-full cursor-pointer items-center gap-2.5 rounded-lg px-2 py-1.5 text-left text-sm font-medium transition-colors duration-150",
                     item.key === section
-                      ? "bg-[#f1f1f1] text-foreground"
-                      : "text-foreground/80 hover:bg-[#f1f1f1]/70"
+                      ? "bg-muted text-foreground"
+                      : "text-foreground/80 hover:bg-muted/70"
                   )}
                 >
                   <item.icon className="size-4 text-muted-foreground" />
@@ -338,7 +347,7 @@ export default function SettingsPage() {
                   className={cn(
                     "shrink-0 cursor-pointer rounded-lg px-3 py-1.5 text-sm font-medium transition-colors duration-150",
                     key === section
-                      ? "bg-[#e3e3e3] text-foreground"
+                      ? "bg-neutral-subtle text-foreground"
                       : "bg-card text-foreground/80 ring-1 ring-black/8"
                   )}
                 >

@@ -11,9 +11,10 @@ import { MultiSelectFilter } from "@/components/multi-select-filter";
 import { Skeleton } from "@/components/ui/skeleton";
 import {
   CategoryTree, buildCategoryTree, flattenCategoryTree, type CategoryTreeNode,
+  type CategoryDragState,
 } from "@/components/category-tree";
 import { ExportMenu } from "@/components/export-menu";
-import { moveRow } from "@/lib/sort-order";
+import { moveRow, persistOrder } from "@/lib/sort-order";
 import { apiErrorMessage } from "@/lib/auth-api";
 import { usePermissions } from "@/stores/menu-store";
 import {
@@ -126,6 +127,27 @@ export default function ProductCategoriesPage() {
     });
   };
 
+  const [drag, setDrag] = React.useState<CategoryDragState>(null);
+
+  const handleReorder = async (
+    siblings: CategoryTreeNode[],
+    from: number,
+    to: number
+  ) => {
+    const next = [...siblings];
+    const [moved] = next.splice(from, 1);
+    next.splice(to, 0, moved);
+    try {
+      await persistOrder("productCategory", next);
+      toast.success("Order updated.");
+    } catch (error) {
+      toast.error(apiErrorMessage(error, "Couldn't reorder the categories."));
+    } finally {
+      // Refetch either way, so a failed save snaps back to the stored order.
+      setRefreshKey((k) => k + 1);
+    }
+  };
+
   const handleMove = async (
     node: CategoryTreeNode,
     siblings: CategoryTreeNode[],
@@ -234,6 +256,9 @@ export default function ProductCategoriesPage() {
           onRowClick={(row) => router.push(`/products/categories/${row.id}`)}
           matchedIds={matchedIds}
           onMove={permissions.can_edit ? handleMove : undefined}
+          onReorder={permissions.can_edit ? handleReorder : undefined}
+          drag={drag}
+          setDrag={setDrag}
         />
       )}
     </div>

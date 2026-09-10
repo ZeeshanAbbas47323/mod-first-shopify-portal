@@ -181,7 +181,7 @@ export default function ForgotPasswordPage() {
               type="button"
               onClick={resend}
               disabled={resending}
-              className="cursor-pointer font-medium text-[#005bd3] hover:underline disabled:opacity-50"
+              className="cursor-pointer font-medium text-link hover:underline disabled:opacity-50"
             >
               {resending ? "Sending…" : "Resend code"}
             </button>

@@ -103,7 +103,7 @@ function buildColumns(
       return (
         <div className="flex items-center gap-3">
           <Avatar className="size-8">
-            <AvatarFallback className="bg-[#e0f0ff] text-xs font-semibold text-[#00527c]">
+            <AvatarFallback className="bg-info-subtle text-xs font-semibold text-info-subtle-foreground">
               {initials(name)}
             </AvatarFallback>
           </Avatar>
@@ -181,7 +181,6 @@ export default function CustomersPage() {
   const permissions = usePermissions("/customers");
   const [unlockingId, setUnlockingId] = React.useState<string | number | null>(null);
   const [page, setPage] = React.useState(1);
-  const [refreshKey, setRefreshKey] = React.useState(0);
   const [pageSize, setPageSize] = React.useState<number>(DEFAULT_PAGE_SIZE);
   const [rows, setRows] = React.useState<UserRow[]>([]);
   const [total, setTotal] = React.useState(0);
@@ -197,26 +196,16 @@ export default function CustomersPage() {
   const [subscriptions, setSubscriptions] = React.useState<string[]>([]);
   const [searchInput, setSearchInput] = React.useState("");
   const [search, setSearch] = React.useState("");
-  const [columnFilters, setColumnFilters] = React.useState<Record<string, string[]>>({});
 
-  React.useEffect(() => { setPage(1); }, [dateRange, statuses, subscriptions, search, columnFilters]);
+  React.useEffect(() => { setPage(1); }, [dateRange, statuses, subscriptions, search]);
 
   const buildFilters = React.useCallback((): Record<string, unknown> => {
     const filters: Record<string, unknown> = { role: "customer" };
     if (statuses.length === 1) filters.is_active = statuses[0] === "active";
     if (subscriptions.length === 1) filters.email_subscribed = subscriptions[0] === "subscribed";
     if (search) filters.full_name = { contains: search };
-
-    const name = columnFilters.full_name?.[0];
-    if (name) filters.full_name = { contains: name };
-    if (columnFilters.email_subscription?.length === 1) {
-      filters.email_subscribed = columnFilters.email_subscription[0] === "subscribed";
-    }
-    if (columnFilters.is_locked?.length === 1) {
-      filters.is_locked = columnFilters.is_locked[0] === "yes";
-    }
     return filters;
-  }, [statuses, subscriptions, search, columnFilters]);
+  }, [statuses, subscriptions, search]);
 
   const load = React.useCallback(() => {
     setLoading(true);
@@ -227,7 +216,7 @@ export default function CustomersPage() {
       })
       .catch((e) => toast.error(apiErrorMessage(e, "Couldn't load customers.")))
       .finally(() => setLoading(false));
-  }, [page, pageSize, dateRange, buildFilters, refreshKey]);
+  }, [page, pageSize, dateRange, buildFilters]);
 
   React.useEffect(() => { load(); }, [load]);
 
@@ -346,7 +335,7 @@ export default function CustomersPage() {
 
       {}
       <DataTable
-        onRefresh={() => setRefreshKey((k) => k + 1)}
+        onRefresh={load}
         columns={columns}
         data={rows}
         loading={loading}

@@ -474,7 +474,7 @@ export function DraftOrderForm({ draft }: { draft?: DraftOrderRow }) {
                     )}
                   </div>
                 </div>
-                <span className="tabular-nums text-[#e51c00]">
+                <span className="tabular-nums text-destructive">
                   {manualDiscount > 0 ? `−${money(manualDiscount)}` : money(0)}
                 </span>
               </div>
@@ -679,7 +679,7 @@ export function DraftOrderForm({ draft }: { draft?: DraftOrderRow }) {
                           className={cn(
                             "flex w-full items-start gap-2 rounded-xl border p-2.5 text-left text-sm transition-colors",
                             String(a.id) === shippingAddressId
-                              ? "border-[#005bd3] bg-[#e0f0ff]/40"
+                              ? "border-link bg-info-subtle/40"
                               : "border-border hover:bg-muted/40"
                           )}
                         >
@@ -805,7 +805,7 @@ function LineRow({
           <button
             type="button"
             onClick={() => setExpanded((v) => !v)}
-            className="text-xs text-[#005bd3] hover:underline"
+            className="text-xs text-link hover:underline"
           >
             {expanded ? "Hide options" : "Print options"}
           </button>
@@ -994,7 +994,7 @@ function CustomerSearch({
                   setOpen(false);
                   setSearch("");
                 }}
-                className="flex w-full items-center gap-2 border-t border-border px-3 py-2.5 text-left text-sm font-medium text-[#005bd3] hover:bg-muted"
+                className="flex w-full items-center gap-2 border-t border-border px-3 py-2.5 text-left text-sm font-medium text-link hover:bg-muted"
               >
                 <Plus className="size-4" />
                 Create a new customer

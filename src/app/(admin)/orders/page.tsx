@@ -224,7 +224,6 @@ export default function OrdersPage() {
   const router = useRouter();
   const [tab, setTab] = React.useState("all");
   const [page, setPage] = React.useState(1);
-  const [refreshKey, setRefreshKey] = React.useState(0);
   const [pageSize, setPageSize] = React.useState<number>(DEFAULT_PAGE_SIZE);
   const [selected, setSelected] = React.useState<OrderRow[]>([]);
   const [clearKey, setClearKey] = React.useState(0);
@@ -245,24 +244,21 @@ export default function OrdersPage() {
   const [channels, setChannels] = React.useState<string[]>([]);
   const [search, setSearch] = React.useState("");
   const [searchInput, setSearchInput] = React.useState("");
-  const [statuses, setStatuses] = React.useState<string[]>([]);
-  const [orderNumber, setOrderNumber] = React.useState("");
 
   React.useEffect(() => {
     setPage(1);
-  }, [tab, dateRange, payStatuses, deliveryTypes, channels, search, statuses, orderNumber]);
+  }, [tab, dateRange, payStatuses, deliveryTypes, channels, search]);
 
   const activeFilters = React.useMemo(
     () => ({
       dateRange,
-      status: statuses.length ? statuses : TAB_STATUS[tab],
+      status: TAB_STATUS[tab],
       payment_status: payStatuses,
       delivery_type: deliveryTypes,
       channel: channels,
       search: search || undefined,
-      order_number: orderNumber || undefined,
     }),
-    [dateRange, tab, payStatuses, deliveryTypes, channels, search, statuses, orderNumber]
+    [dateRange, tab, payStatuses, deliveryTypes, channels, search]
   );
 
   const load = React.useCallback(() => {
@@ -273,7 +269,7 @@ export default function OrdersPage() {
       })
       .catch((e) => toast.error(apiErrorMessage(e, "Couldn't load orders.")))
       .finally(() => setLoading(false));
-  }, [page, pageSize, activeFilters, refreshKey]);
+  }, [page, pageSize, activeFilters]);
 
   React.useEffect(() => { load(); }, [load]);
 
@@ -369,7 +365,7 @@ export default function OrdersPage() {
             <TabsTrigger
               key={t.value}
               value={t.value}
-              className="cursor-pointer rounded-lg px-3 data-active:bg-[#e3e3e3] data-active:shadow-none"
+              className="cursor-pointer rounded-lg px-3 data-active:bg-neutral-subtle data-active:shadow-none"
             >
               {t.label}
             </TabsTrigger>
@@ -472,7 +468,7 @@ export default function OrdersPage() {
 
       {}
       <DataTable
-        onRefresh={() => setRefreshKey((k) => k + 1)}
+        onRefresh={load}
         columns={columns}
         data={rows}
         loading={loading}

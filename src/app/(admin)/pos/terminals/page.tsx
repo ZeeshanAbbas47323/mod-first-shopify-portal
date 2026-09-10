@@ -156,7 +156,7 @@ function ReadersTab({ branches }: { branches: BranchRow[] }) {
           return (
             <span className="flex items-center gap-1.5">
               {online ? (
-                <Wifi className="size-3.5 text-[#29845a]" />
+                <Wifi className="size-3.5 text-success" />
               ) : (
                 <WifiOff className="size-3.5 text-muted-foreground" />
               )}

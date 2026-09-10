@@ -160,7 +160,7 @@ export function ContentPageForm({ page }: { page?: ContentPageRow }) {
               <button
                 type="button"
                 onClick={() => router.push(LIST_HREF)}
-                className="mb-1 flex items-center gap-1 text-sm text-[#005bd3] hover:underline"
+                className="mb-1 flex items-center gap-1 text-sm text-link hover:underline"
               >
                 ← Pages
               </button>

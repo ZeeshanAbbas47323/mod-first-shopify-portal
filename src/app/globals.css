@@ -9,6 +9,24 @@
   --color-foreground: var(--foreground);
   --color-brand: var(--brand);
   --color-brand-foreground: var(--brand-foreground);
+  --color-link: var(--link);
+  --color-chrome: var(--chrome);
+  --color-chrome-elevated: var(--chrome-elevated);
+  --color-chrome-hover: var(--chrome-hover);
+  --color-success: var(--success);
+  --color-warning: var(--warning);
+  --color-success-subtle: var(--success-subtle);
+  --color-success-subtle-foreground: var(--success-subtle-foreground);
+  --color-warning-subtle: var(--warning-subtle);
+  --color-warning-subtle-foreground: var(--warning-subtle-foreground);
+  --color-critical-subtle: var(--critical-subtle);
+  --color-critical-subtle-foreground: var(--critical-subtle-foreground);
+  --color-info-subtle: var(--info-subtle);
+  --color-info-subtle-foreground: var(--info-subtle-foreground);
+  --color-attention-subtle: var(--attention-subtle);
+  --color-attention-subtle-foreground: var(--attention-subtle-foreground);
+  --color-neutral-subtle: var(--neutral-subtle);
+  --color-neutral-subtle-foreground: var(--neutral-subtle-foreground);
   --font-sans: var(--font-sans);
   --font-mono: var(--font-geist-mono);
   --font-heading: var(--font-sans);
@@ -20,6 +38,8 @@
   --color-sidebar-primary: var(--sidebar-primary);
   --color-sidebar-foreground: var(--sidebar-foreground);
   --color-sidebar: var(--sidebar);
+  --color-chart-7: var(--chart-7);
+  --color-chart-6: var(--chart-6);
   --color-chart-5: var(--chart-5);
   --color-chart-4: var(--chart-4);
   --color-chart-3: var(--chart-3);
@@ -78,6 +98,8 @@
   --chart-3: #ffb800;
   --chart-4: #8051ff;
   --chart-5: #e51c00;
+  --chart-6: #1a9ba1;
+  --chart-7: #637381;
   --radius: 0.5rem;
   --sidebar: #ebebeb;
   --sidebar-foreground: #303030;
@@ -87,6 +109,32 @@
   --sidebar-accent-foreground: #1a1a1a;
   --sidebar-border: #e3e3e3;
   --sidebar-ring: #005bd3;
+
+  /* Semantic accents. Polaris uses a solid tone for text and icons, and a
+     tinted background paired with a dark foreground for status pills. */
+
+  /* The admin chrome (top bar, sidebar shell, lock screen) is dark in both
+     themes by design, the way Shopify's admin frame is. Tokenised so the
+     value lives in one place, not because it changes. */
+  --chrome: #1a1a1a;
+  --chrome-elevated: #303030;
+  --chrome-hover: #3a3a3a;
+  --link: #005bd3;
+  --success: #29845a;
+  --warning: #b98900;
+
+  --success-subtle: #affebf;
+  --success-subtle-foreground: #014b40;
+  --warning-subtle: #ffd6a4;
+  --warning-subtle-foreground: #5e4200;
+  --critical-subtle: #fed1cd;
+  --critical-subtle-foreground: #8e1f0b;
+  --info-subtle: #e0f0ff;
+  --info-subtle-foreground: #00527c;
+  --attention-subtle: #ffeb78;
+  --attention-subtle-foreground: #4f4700;
+  --neutral-subtle: #e3e3e3;
+  --neutral-subtle-foreground: #303030;
 }
 
 .dark {
@@ -108,11 +156,15 @@
   --border: oklch(1 0 0 / 10%);
   --input: oklch(1 0 0 / 15%);
   --ring: oklch(0.556 0 0);
-  --chart-1: oklch(0.87 0 0);
-  --chart-2: oklch(0.556 0 0);
-  --chart-3: oklch(0.439 0 0);
-  --chart-4: oklch(0.371 0 0);
-  --chart-5: oklch(0.269 0 0);
+  /* Charts keep their hues in dark mode - a greyscale ramp would make every
+     series indistinguishable. Lightened so they read on a dark ground. */
+  --chart-1: #57a9f0;
+  --chart-2: #4db97e;
+  --chart-3: #e3b341;
+  --chart-4: #a98bff;
+  --chart-5: #f4705c;
+  --chart-6: #45b8bf;
+  --chart-7: #9aa5b1;
   --sidebar: oklch(0.205 0 0);
   --sidebar-foreground: oklch(0.985 0 0);
   --sidebar-primary: oklch(0.488 0.243 264.376);
@@ -121,6 +173,29 @@
   --sidebar-accent-foreground: oklch(0.985 0 0);
   --sidebar-border: oklch(1 0 0 / 10%);
   --sidebar-ring: oklch(0.556 0 0);
+
+  /* Dark counterparts: the solid tones lighten so they stay legible on a dark
+     ground, and the pill backgrounds invert to deep tints with light text. */
+  --chrome: #1a1a1a;
+  --chrome-elevated: #303030;
+  --chrome-hover: #3a3a3a;
+
+  --link: #8ab4f8;
+  --success: #4db97e;
+  --warning: #e3b341;
+
+  --success-subtle: #0d3d28;
+  --success-subtle-foreground: #a7f3d0;
+  --warning-subtle: #4a3410;
+  --warning-subtle-foreground: #fde3b0;
+  --critical-subtle: #4d1a12;
+  --critical-subtle-foreground: #fecaca;
+  --info-subtle: #12324a;
+  --info-subtle-foreground: #bae0ff;
+  --attention-subtle: #443d0a;
+  --attention-subtle-foreground: #fdf0a5;
+  --neutral-subtle: oklch(0.269 0 0);
+  --neutral-subtle-foreground: oklch(0.985 0 0);
 }
 
 @layer base {

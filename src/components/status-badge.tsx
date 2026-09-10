@@ -3,12 +3,12 @@ import { Loader2 } from "lucide-react";
 import { cn } from "@/lib/utils";
 
 const tones = {
-  success: "bg-[#affebf] text-[#014b40]",
-  warning: "bg-[#ffd6a4] text-[#5e4200]",
-  critical: "bg-[#fed1cd] text-[#8e1f0b]",
-  info: "bg-[#e0f0ff] text-[#00527c]",
-  neutral: "bg-[#e3e3e3] text-[#303030]",
-  attention: "bg-[#ffeb78] text-[#4f4700]",
+  success: "bg-success-subtle text-success-subtle-foreground",
+  warning: "bg-warning-subtle text-warning-subtle-foreground",
+  critical: "bg-critical-subtle text-critical-subtle-foreground",
+  info: "bg-info-subtle text-info-subtle-foreground",
+  neutral: "bg-neutral-subtle text-foreground",
+  attention: "bg-attention-subtle text-attention-subtle-foreground",
 } as const;
 
 export type BadgeTone = keyof typeof tones;

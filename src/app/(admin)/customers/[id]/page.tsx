@@ -16,6 +16,7 @@ import {
 import { toast } from "sonner";
 
 import { Button } from "@/components/ui/button";
+import { EmptyState } from "@/components/empty-state";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { SummaryStatStrip } from "@/components/summary-stat-strip";
 import { StatusBadge } from "@/components/status-badge";
@@ -126,7 +127,7 @@ export default function CustomerDetailPage() {
         >
           <ArrowLeft className="size-4" />
         </Button>
-        <span className="flex size-10 items-center justify-center rounded-full bg-[#e0f0ff] text-sm font-semibold text-[#00527c]">
+        <span className="flex size-10 items-center justify-center rounded-full bg-info-subtle text-sm font-semibold text-info-subtle-foreground">
           {initials}
         </span>
         <div className="min-w-0">
@@ -166,9 +167,10 @@ export default function CustomerDetailPage() {
             </CardHeader>
             <CardContent className="p-0">
               {orders.length === 0 ? (
-                <p className="py-8 text-center text-sm text-muted-foreground">
-                  No orders yet.
-                </p>
+                <EmptyState
+                  title="No orders yet"
+                  hint="This customer hasn't placed an order."
+                />
               ) : (
                 <div className="divide-y">
                   {orders.map((o) => (
@@ -303,7 +305,7 @@ export default function CustomerDetailPage() {
             <CardContent className="space-y-2 text-sm">
               <a
                 href={`mailto:${customer.email}`}
-                className="flex items-center gap-2 text-[#005bd3] hover:underline"
+                className="flex items-center gap-2 text-link hover:underline"
               >
                 <Mail className="size-3.5 shrink-0" />
                 <span className="truncate">{customer.email}</span>
@@ -311,7 +313,7 @@ export default function CustomerDetailPage() {
               {customer.phone && (
                 <a
                   href={`tel:${customer.phone}`}
-                  className="flex items-center gap-2 text-[#005bd3] hover:underline"
+                  className="flex items-center gap-2 text-link hover:underline"
                 >
                   <Phone className="size-3.5 shrink-0" />
                   {customer.phone}
@@ -337,7 +339,7 @@ export default function CustomerDetailPage() {
                     key={String(a.id)}
                     className={cn(
                       "rounded-xl border border-border p-3 text-sm",
-                      a.is_default && "border-[#005bd3]"
+                      a.is_default && "border-link"
                     )}
                   >
                     <div className="flex items-center gap-1.5">

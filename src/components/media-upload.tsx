@@ -73,7 +73,7 @@ export function MediaUpload({
             type="button"
             aria-label="Remove file"
             onClick={() => onChange(null)}
-            className="absolute -top-1.5 -right-1.5 flex size-5 cursor-pointer items-center justify-center rounded-full bg-[#1a1a1a] text-white transition-colors duration-150 hover:bg-[#303030]"
+            className="absolute -top-1.5 -right-1.5 flex size-5 cursor-pointer items-center justify-center rounded-full bg-chrome text-white transition-colors duration-150 hover:bg-foreground"
           >
             <X className="size-3" />
           </button>

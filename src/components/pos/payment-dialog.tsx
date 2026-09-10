@@ -288,7 +288,7 @@ export function PosPaymentDialog({
                   </div>
                 )}
                 {method === "cash" && changeDue > 0 && (
-                  <p className="text-sm font-medium text-[#29845a] tabular-nums">
+                  <p className="text-sm font-medium text-success tabular-nums">
                     Change due {money(changeDue)}
                   </p>
                 )}
@@ -348,10 +348,10 @@ export function PosPaymentDialog({
 
         {phase === "done" && (
           <div className="flex flex-col items-center gap-2 py-6 text-center">
-            <CheckCircle2 className="size-10 text-[#29845a]" />
+            <CheckCircle2 className="size-10 text-success" />
             <p className="text-sm font-medium">{statusText || "Payment recorded."}</p>
             {method === "cash" && changeDue > 0 && (
-              <p className="text-lg font-bold tabular-nums text-[#29845a]">
+              <p className="text-lg font-bold tabular-nums text-success">
                 Change {money(changeDue)}
               </p>
             )}

@@ -2,10 +2,12 @@
 
 import * as React from "react";
 import {
-  ChevronDown, ChevronRight, ChevronUp, LayoutGrid,
+  ChevronDown, ChevronRight, LayoutGrid,
 } from "lucide-react";
 
 import { Checkbox } from "@/components/ui/checkbox";
+import { DragHandle } from "@/components/drag-handle";
+import { EmptyState } from "@/components/empty-state";
 import { StatusToggle } from "@/components/status-badge";
 import { cn, imgUrl } from "@/lib/utils";
 import type { ProductCategoryRow } from "@/lib/admin-api";
@@ -59,6 +61,11 @@ export function flattenCategoryTree(nodes: CategoryTreeNode[]): CategoryTreeNode
 const imgSrc = (row: ProductCategoryRow) =>
   imgUrl(row.image_url ?? row.image ?? row.banner ?? row.icon ?? null) || null;
 
+/** The row being dragged, the level it belongs to, and the row it is over. */
+export type CategoryDragState =
+  | { id: string; parentKey: string; overId: string | null }
+  | null;
+
 interface CategoryTreeProps {
   nodes: CategoryTreeNode[];
   expanded: Set<string>;
@@ -73,22 +80,30 @@ interface CategoryTreeProps {
     siblings: CategoryTreeNode[],
     direction: "up" | "down"
   ) => void;
+  onReorder?: (
+    siblings: CategoryTreeNode[],
+    from: number,
+    to: number
+  ) => void;
+  drag?: CategoryDragState;
+  setDrag?: (next: CategoryDragState) => void;
 }
 
 export function CategoryTree({
   nodes, expanded, onToggleExpand, selected, onToggleSelect,
-  onToggleStatus, onRowClick, matchedIds, onMove,
+  onToggleStatus, onRowClick, matchedIds, onMove, onReorder, drag, setDrag,
 }: CategoryTreeProps) {
   if (!nodes.length) {
     return (
-      <div className="flex h-32 items-center justify-center text-sm text-muted-foreground">
-        No categories found.
-      </div>
+      <EmptyState
+        title="No categories found"
+        hint="Adjust your search, or create a category to start organising products."
+      />
     );
   }
   return (
     <div className="rounded-lg bg-card ring-1 ring-black/8">
-      <div className="flex items-center gap-3 border-b border-border bg-[#f7f7f7] px-3 py-2 text-xs font-medium text-muted-foreground">
+      <div className="flex items-center gap-3 border-b border-border bg-secondary px-3 py-2 text-xs font-medium text-muted-foreground">
         <span className="w-4" />
         <span className="w-4" />
         <span className="flex-1">Category</span>
@@ -109,6 +124,10 @@ export function CategoryTree({
             onRowClick={onRowClick}
             matchedIds={matchedIds}
             onMove={onMove}
+            onReorder={onReorder}
+            drag={drag}
+            setDrag={setDrag}
+            parentKey="root"
             siblings={nodes}
           />
         ))}
@@ -119,15 +138,25 @@ export function CategoryTree({
 
 function CategoryTreeRow({
   node, expanded, onToggleExpand, selected, onToggleSelect,
-  onToggleStatus, onRowClick, matchedIds, onMove, siblings,
+  onToggleStatus, onRowClick, matchedIds, onMove, onReorder, drag, setDrag,
+  parentKey, siblings,
 }: {
   node: CategoryTreeNode;
   siblings: CategoryTreeNode[];
+  /** Identifies the sibling group, so a row only accepts drops from its own level. */
+  parentKey: string;
   onMove?: (
     node: CategoryTreeNode,
     siblings: CategoryTreeNode[],
     direction: "up" | "down"
   ) => void;
+  onReorder?: (
+    siblings: CategoryTreeNode[],
+    from: number,
+    to: number
+  ) => void;
+  drag?: CategoryDragState;
+  setDrag?: (next: CategoryDragState) => void;
   expanded: Set<string>;
   onToggleExpand: (id: string) => void;
   selected: Set<string>;
@@ -147,9 +176,29 @@ function CategoryTreeRow({
     <>
       <div
         onClick={() => onRowClick(node)}
+        onDragOver={(e) => {
+          if (!drag || !setDrag || drag.parentKey !== parentKey) return;
+          e.preventDefault();
+          if (drag.overId !== id) setDrag({ ...drag, overId: id });
+        }}
+        onDrop={(e) => {
+          if (!drag || !setDrag || !onReorder || drag.parentKey !== parentKey) return;
+          e.preventDefault();
+          const from = siblings.findIndex((s) => String(s.id) === drag.id);
+          if (from >= 0 && index >= 0 && from !== index) {
+            onReorder(siblings, from, index);
+          }
+          setDrag(null);
+        }}
         className={cn(
           "flex cursor-pointer items-center gap-3 px-3 py-2.5 transition-colors hover:bg-muted/60",
-          dimmed && "opacity-40"
+          dimmed && "opacity-40",
+          drag?.id === id && "opacity-40",
+          drag &&
+            drag.parentKey === parentKey &&
+            drag.overId === id &&
+            drag.id !== id &&
+            "bg-primary/5 ring-1 ring-inset ring-ring"
         )}
         style={{ paddingLeft: `${12 + node.depth * 24}px` }}
       >
@@ -207,24 +256,26 @@ function CategoryTreeRow({
             className="flex w-12 shrink-0 items-center justify-end gap-0.5"
             onClick={(e) => e.stopPropagation()}
           >
-            <button
-              type="button"
-              aria-label="Move up"
-              disabled={index <= 0}
-              onClick={() => onMove(node, siblings, "up")}
-              className="rounded p-1 text-muted-foreground hover:bg-muted hover:text-foreground disabled:pointer-events-none disabled:opacity-25"
-            >
-              <ChevronUp className="size-3.5" />
-            </button>
-            <button
-              type="button"
-              aria-label="Move down"
-              disabled={index < 0 || index >= siblings.length - 1}
-              onClick={() => onMove(node, siblings, "down")}
-              className="rounded p-1 text-muted-foreground hover:bg-muted hover:text-foreground disabled:pointer-events-none disabled:opacity-25"
-            >
-              <ChevronDown className="size-3.5" />
-            </button>
+            <DragHandle
+              label={node.name}
+              draggable
+              onDragStart={(e) => {
+                if (!setDrag) return;
+                setDrag({ id, parentKey, overId: null });
+                e.dataTransfer.effectAllowed = "move";
+                e.dataTransfer.setData("text/plain", id);
+              }}
+              onDragEnd={() => setDrag?.(null)}
+              onKeyDown={(e) => {
+                if (e.key === "ArrowUp") {
+                  e.preventDefault();
+                  onMove(node, siblings, "up");
+                } else if (e.key === "ArrowDown") {
+                  e.preventDefault();
+                  onMove(node, siblings, "down");
+                }
+              }}
+            />
           </span>
         )}
       </div>
@@ -233,6 +284,10 @@ function CategoryTreeRow({
         node.children.map((child) => (
           <CategoryTreeRow
             key={child.id}
+            parentKey={id}
+            onReorder={onReorder}
+            drag={drag}
+            setDrag={setDrag}
             node={child}
             expanded={expanded}
             onToggleExpand={onToggleExpand}

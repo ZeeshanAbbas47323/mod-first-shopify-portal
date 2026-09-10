@@ -516,7 +516,7 @@ export function WebsiteSettingsSection() {
           <label className="flex cursor-pointer items-center gap-3">
             <div className="relative">
               <input type="checkbox" className="sr-only peer" {...register("first_order_discount_enabled")} />
-              <div className="h-5 w-9 rounded-full bg-muted transition-colors peer-checked:bg-[#29845a]" />
+              <div className="h-5 w-9 rounded-full bg-muted transition-colors peer-checked:bg-success" />
               <div className="absolute left-0.5 top-0.5 size-4 rounded-full bg-white shadow transition-transform peer-checked:translate-x-4" />
             </div>
             <span className="text-sm font-medium">First order discount</span>

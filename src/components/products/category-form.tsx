@@ -222,7 +222,7 @@ export function CategoryForm({ category }: { category?: ProductCategoryRow }) {
             <button
               type="button"
               onClick={() => router.push("/products/categories")}
-              className="mb-1 flex items-center gap-1 text-sm text-[#005bd3] hover:underline"
+              className="mb-1 flex items-center gap-1 text-sm text-link hover:underline"
             >
               ← Product categories
             </button>
@@ -328,7 +328,7 @@ export function CategoryForm({ category }: { category?: ProductCategoryRow }) {
                       className="sr-only peer"
                       {...register("is_active")}
                     />
-                    <div className="h-5 w-9 rounded-full bg-muted transition-colors peer-checked:bg-[#29845a]" />
+                    <div className="h-5 w-9 rounded-full bg-muted transition-colors peer-checked:bg-success" />
                     <div className="absolute left-0.5 top-0.5 size-4 rounded-full bg-white shadow transition-transform peer-checked:translate-x-4" />
                   </div>
                   <span className="text-sm font-medium">Active</span>

@@ -397,7 +397,7 @@ export function DataTable<TData, TValue>({
                     return (
                       <TableHead
                         key={header.id}
-                        className="h-9 bg-[#f7f7f7] text-xs font-semibold text-muted-foreground first:rounded-tl-lg last:rounded-tr-lg lg:sticky lg:z-10"
+                        className="h-9 bg-secondary text-xs font-semibold text-muted-foreground first:rounded-tl-lg last:rounded-tr-lg lg:sticky lg:z-10"
                         aria-sort={
                           dir === "asc"
                             ? "ascending"
@@ -442,7 +442,7 @@ export function DataTable<TData, TValue>({
                     return (
                       <TableHead
                         key={`filter-${column.id}`}
-                        className="h-auto border-b bg-[#f7f7f7] px-2 pb-2 font-normal"
+                        className="h-auto border-b bg-secondary px-2 pb-2 font-normal"
                       >
                         {!def ? null : def.type === "text" ? (
                           <TextColumnFilter

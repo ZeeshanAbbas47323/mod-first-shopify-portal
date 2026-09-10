@@ -4,7 +4,6 @@ import * as React from "react";
 import {
   ChevronDown,
   ChevronRight,
-  GripVertical,
   Layers,
   Loader2,
   Plus,
@@ -26,7 +25,9 @@ import { ConfirmDeleteDialog } from "@/components/confirm-delete-dialog";
 import { MediaUpload } from "@/components/media-upload";
 import { StatusBadge, StatusToggle } from "@/components/status-badge";
 import { apiErrorMessage } from "@/lib/auth-api";
-import { moveRow } from "@/lib/sort-order";
+import { persistOrder } from "@/lib/sort-order";
+import { DragHandle } from "@/components/drag-handle";
+import { useDragReorder, moveItem as moveArrayItem } from "@/hooks/use-drag-reorder";
 import { cn, imgUrl } from "@/lib/utils";
 import {
   createHomeSection,
@@ -104,26 +105,13 @@ export function ThemeSection() {
     }
   };
 
-  const move = async (index: number, dir: "up" | "down") => {
-    try {
-      if (await moveRow("homeSection", sections, index, dir)) reload();
-    } catch (error) {
-      toast.error(apiErrorMessage(error, "Couldn't reorder sections."));
-    }
-  };
-
-  const moveItem = async (
-    section: HomeSectionRow,
-    items: HomeSectionItemRow[],
-    index: number,
-    dir: "up" | "down"
-  ) => {
-    try {
-      if (await moveRow("homeSectionItem", items, index, dir)) reload();
-    } catch (error) {
-      toast.error(apiErrorMessage(error, "Couldn't reorder items."));
-    }
-  };
+  const dnd = useDragReorder({
+    errorMessage: "Couldn't reorder sections.",
+    onReorder: async (from, to) => {
+      await persistOrder("homeSection", moveArrayItem(sections, from, to));
+      reload();
+    },
+  });
 
   const handleDelete = async () => {
     if (!deleteTarget) return;
@@ -201,9 +189,12 @@ export function ThemeSection() {
             return (
               <Card
                 key={id}
+                {...dnd.dropProps(index)}
                 className={cn(
-                  "overflow-hidden py-0 shadow-none",
-                  section.is_active === false && "opacity-70"
+                  "overflow-hidden py-0 shadow-none transition",
+                  section.is_active === false && "opacity-70",
+                  dnd.isDragging(index) && "opacity-40",
+                  dnd.isOver(index) && "ring-2 ring-ring"
                 )}
               >
                 {}
@@ -265,24 +256,11 @@ export function ThemeSection() {
                     <span className="w-6 text-right text-xs text-muted-foreground">
                       {section.sort_order ?? "—"}
                     </span>
-                    <button
-                      type="button"
-                      aria-label="Move up"
-                      disabled={index === 0}
-                      onClick={() => move(index, "up")}
-                      className="rounded p-1 text-muted-foreground hover:bg-muted disabled:pointer-events-none disabled:opacity-25"
-                    >
-                      <ChevronDown className="size-3.5 rotate-180" />
-                    </button>
-                    <button
-                      type="button"
-                      aria-label="Move down"
-                      disabled={index === sections.length - 1}
-                      onClick={() => move(index, "down")}
-                      className="rounded p-1 text-muted-foreground hover:bg-muted disabled:pointer-events-none disabled:opacity-25"
-                    >
-                      <ChevronDown className="size-3.5" />
-                    </button>
+                    <DragHandle
+                      label={section.title ?? "section"}
+                      disabled={dnd.saving}
+                      {...dnd.handleProps(index, sections.length)}
+                    />
                     <Button
                       size="sm"
                       variant="outline"
@@ -321,76 +299,12 @@ export function ThemeSection() {
                         No items in this section.
                       </p>
                     ) : (
-                      <div className="space-y-1.5">
-                        {items.map((item, i) => (
-                          <div
-                            key={String(item.id)}
-                            className={cn(
-                              "flex items-center gap-2 rounded-lg border border-border bg-card p-2",
-                              item.is_active === false && "opacity-60"
-                            )}
-                          >
-                            <GripVertical className="size-3.5 shrink-0 text-muted-foreground/50" />
-                            {item.image_url ? (
-                              // eslint-disable-next-line @next/next/no-img-element
-                              <img
-                                src={imgUrl(item.image_url)}
-                                alt=""
-                                className="size-8 rounded border border-border object-cover"
-                              />
-                            ) : (
-                              <span className="size-8 rounded border border-border bg-muted" />
-                            )}
-                            <div className="min-w-0 flex-1">
-                              <div className="flex items-center gap-1.5">
-                                <p className="truncate text-sm font-medium">{item.title}</p>
-                                {item.badge && (
-                                  <StatusBadge status={item.badge} tone="attention" />
-                                )}
-                              </div>
-                              <p className="truncate text-xs text-muted-foreground">
-                                {item.subtitle || "—"}
-                                {item.button_url ? ` · ${item.button_url}` : ""}
-                              </p>
-                            </div>
-                            <div className="flex items-center gap-0.5">
-                              <button
-                                type="button"
-                                aria-label="Move item up"
-                                disabled={i === 0}
-                                onClick={() => moveItem(section, items, i, "up")}
-                                className="rounded p-1 text-muted-foreground hover:bg-muted disabled:pointer-events-none disabled:opacity-25"
-                              >
-                                <ChevronDown className="size-3.5 rotate-180" />
-                              </button>
-                              <button
-                                type="button"
-                                aria-label="Move item down"
-                                disabled={i === items.length - 1}
-                                onClick={() => moveItem(section, items, i, "down")}
-                                className="rounded p-1 text-muted-foreground hover:bg-muted disabled:pointer-events-none disabled:opacity-25"
-                              >
-                                <ChevronDown className="size-3.5" />
-                              </button>
-                              <Button
-                                size="sm"
-                                variant="outline"
-                                onClick={() => setItemTarget({ section, item })}
-                              >
-                                Edit
-                              </Button>
-                              <button
-                                type="button"
-                                aria-label="Delete item"
-                                onClick={() => setItemDelete({ section, item })}
-                                className="rounded p-1 text-muted-foreground hover:bg-destructive/10 hover:text-destructive"
-                              >
-                                <Trash2 className="size-3.5" />
-                              </button>
-                            </div>
-                          </div>
-                        ))}
-                      </div>
+                      <SectionItemList
+                        items={items}
+                        onReload={reload}
+                        onEdit={(item) => setItemTarget({ section, item })}
+                        onDelete={(item) => setItemDelete({ section, item })}
+                      />
                     )}
 
                     <Button
@@ -897,5 +811,85 @@ function ItemDialog({
         </DialogFooter>
       </DialogContent>
     </Dialog>
+  );
+}
+
+/**
+ * Items belong to one section, so each list owns its own drag scope - a row
+ * can only be dropped among its siblings, never into another section.
+ */
+function SectionItemList({
+  items,
+  onReload,
+  onEdit,
+  onDelete,
+}: {
+  items: HomeSectionItemRow[];
+  onReload: () => void;
+  onEdit: (item: HomeSectionItemRow) => void;
+  onDelete: (item: HomeSectionItemRow) => void;
+}) {
+  const dnd = useDragReorder({
+    errorMessage: "Couldn't reorder items.",
+    onReorder: async (from, to) => {
+      await persistOrder("homeSectionItem", moveArrayItem(items, from, to));
+      onReload();
+    },
+  });
+
+  return (
+    <div className="space-y-1.5">
+      {items.map((item, i) => (
+        <div
+          key={String(item.id)}
+          {...dnd.dropProps(i)}
+          className={cn(
+            "flex items-center gap-2 rounded-lg border border-border bg-card p-2 transition",
+            item.is_active === false && "opacity-60",
+            dnd.isDragging(i) && "opacity-40",
+            dnd.isOver(i) && "ring-2 ring-ring"
+          )}
+        >
+          <DragHandle
+            label={item.title ?? "item"}
+            disabled={dnd.saving}
+            {...dnd.handleProps(i, items.length)}
+          />
+          {item.image_url ? (
+            // eslint-disable-next-line @next/next/no-img-element
+            <img
+              src={imgUrl(item.image_url)}
+              alt=""
+              className="size-8 rounded border border-border object-cover"
+            />
+          ) : (
+            <span className="size-8 rounded border border-border bg-muted" />
+          )}
+          <div className="min-w-0 flex-1">
+            <div className="flex items-center gap-1.5">
+              <p className="truncate text-sm font-medium">{item.title}</p>
+              {item.badge && <StatusBadge status={item.badge} tone="attention" />}
+            </div>
+            <p className="truncate text-xs text-muted-foreground">
+              {item.subtitle || "\u2014"}
+              {item.button_url ? ` \u00b7 ${item.button_url}` : ""}
+            </p>
+          </div>
+          <div className="flex items-center gap-0.5">
+            <Button size="sm" variant="outline" onClick={() => onEdit(item)}>
+              Edit
+            </Button>
+            <button
+              type="button"
+              aria-label="Delete item"
+              onClick={() => onDelete(item)}
+              className="rounded p-1 text-muted-foreground hover:bg-destructive/10 hover:text-destructive"
+            >
+              <Trash2 className="size-3.5" />
+            </button>
+          </div>
+        </div>
+      ))}
+    </div>
   );
 }

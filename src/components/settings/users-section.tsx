@@ -103,7 +103,7 @@ function getColumns(
     cell: ({ row }) => (
       <div className="flex items-center gap-3">
         <Avatar className="size-8">
-          <AvatarFallback className="bg-[#e0f0ff] text-xs font-semibold text-[#00527c]">
+          <AvatarFallback className="bg-info-subtle text-xs font-semibold text-info-subtle-foreground">
             {initialsOf(row.original.full_name ?? "?")}
           </AvatarFallback>
         </Avatar>

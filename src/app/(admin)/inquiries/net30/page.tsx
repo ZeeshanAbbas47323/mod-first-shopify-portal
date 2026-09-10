@@ -427,7 +427,7 @@ function ApplicationDialog({
             <div className="flex flex-wrap items-center gap-3 text-sm">
               <a
                 href={`mailto:${application.email}`}
-                className="flex items-center gap-1.5 text-[#005bd3] hover:underline"
+                className="flex items-center gap-1.5 text-link hover:underline"
               >
                 <Mail className="size-3.5" />
                 {application.email}
@@ -435,7 +435,7 @@ function ApplicationDialog({
               {phone && (
                 <a
                   href={`tel:${phone}`}
-                  className="flex items-center gap-1.5 text-[#005bd3] hover:underline"
+                  className="flex items-center gap-1.5 text-link hover:underline"
                 >
                   <Phone className="size-3.5" />
                   {phone}

@@ -135,7 +135,6 @@ const columns: ColumnDef<ShipmentRow>[] = [
 export default function ShippingLabelsPage() {
   const router = useRouter();
   const [page, setPage] = React.useState(1);
-  const [refreshKey, setRefreshKey] = React.useState(0);
   const [pageSize, setPageSize] = React.useState<number>(DEFAULT_PAGE_SIZE);
   const [rows, setRows] = React.useState<ShipmentRow[]>([]);
   const [total, setTotal] = React.useState(0);
@@ -169,7 +168,7 @@ export default function ShippingLabelsPage() {
       })
       .catch((e) => toast.error(apiErrorMessage(e, "Couldn't load shipments.")))
       .finally(() => setLoading(false));
-  }, [page, pageSize, activeFilters, refreshKey]);
+  }, [page, pageSize, activeFilters]);
 
   React.useEffect(() => { load(); }, [load]);
 
@@ -263,7 +262,7 @@ export default function ShippingLabelsPage() {
 
       {}
       <DataTable
-        onRefresh={() => setRefreshKey((k) => k + 1)}
+        onRefresh={load}
         columns={columns}
         data={rows}
         loading={loading}

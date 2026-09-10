@@ -12,12 +12,25 @@ export function AuthShell({ title, subtitle, children }: AuthShellProps) {
     <div className="flex min-h-screen flex-col items-center justify-center bg-background px-4">
       <div className="w-full max-w-[420px]">
         <div className="mb-6 flex items-center justify-center">
+          {/* The dark-ink mark disappears on a dark ground, so each theme gets
+              its own file. Swapped with CSS rather than the resolved theme, so
+              there is no post-hydration flash. */}
           <Image
             src="/images/branding/logo-dark.svg"
             alt="ModFirst"
             width={190}
             height={40}
             priority
+            className="dark:hidden"
+          />
+          <Image
+            src="/images/branding/logo_white.png"
+            alt=""
+            aria-hidden="true"
+            width={190}
+            height={40}
+            priority
+            className="hidden dark:block"
           />
         </div>
         <Card>

@@ -181,7 +181,7 @@ function LockOverlay({ onUnlock }: { onUnlock: () => void }) {
       role="dialog"
       aria-modal="true"
       aria-label="Screen locked"
-      className="fixed inset-0 z-[100] flex flex-col items-center justify-center gap-6 bg-[#1a1a1a]/98 backdrop-blur-sm"
+      className="fixed inset-0 z-[100] flex flex-col items-center justify-center gap-6 bg-chrome/98 backdrop-blur-sm"
     >
       <div className="flex flex-col items-center gap-2">
         <span className="flex size-14 items-center justify-center rounded-full bg-white/10 text-lg font-semibold text-white">
@@ -207,7 +207,7 @@ function LockOverlay({ onUnlock }: { onUnlock: () => void }) {
         ))}
       </div>
 
-      <p className="h-5 text-sm text-[#ff9a8a]">{error ?? ""}</p>
+      <p className="h-5 text-sm text-destructive">{error ?? ""}</p>
 
       {}
       <div className="grid grid-cols-3 gap-3">

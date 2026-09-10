@@ -46,7 +46,7 @@ export function CustomerPreviewPopover({ customer }: { customer: CustomerPreview
           <button
             type="button"
             onClick={(e) => e.stopPropagation()}
-            className="font-medium text-left hover:text-[#005bd3] hover:underline"
+            className="font-medium text-left hover:text-link hover:underline"
           >
             {customer.name}
           </button>
@@ -73,7 +73,7 @@ export function CustomerPreviewPopover({ customer }: { customer: CustomerPreview
             <a
               href={`mailto:${customer.email}`}
               onClick={(e) => e.stopPropagation()}
-              className="text-xs text-[#005bd3] hover:underline"
+              className="text-xs text-link hover:underline"
             >
               {customer.email}
             </a>
@@ -139,7 +139,7 @@ export function FulfillmentPreviewPopover({
           <button
             type="button"
             onClick={(e) => e.stopPropagation()}
-            className="flex items-center gap-1 text-sm hover:text-[#005bd3]"
+            className="flex items-center gap-1 text-sm hover:text-link"
           >
             {items.length} item{items.length !== 1 ? "s" : ""}
             <ChevronDown className="size-3.5" />

@@ -215,7 +215,7 @@ export default function PosShiftsPage() {
             <div
               className={cn(
                 "text-right font-medium tabular-nums",
-                balanced ? "text-[#29845a]" : d > 0 ? "text-[#b98900]" : "text-[#e51c00]"
+                balanced ? "text-success" : d > 0 ? "text-warning" : "text-destructive"
               )}
             >
               {balanced ? "Balanced" : `${d > 0 ? "+" : "−"}${money(Math.abs(d))}`}

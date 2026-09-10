@@ -42,14 +42,14 @@ export function SummaryStatStrip({
                         <AreaChart data={tile.sparkline.map((v, i) => ({ i, v }))}>
                           <defs>
                             <linearGradient id={`spark-${tile.label}`} x1="0" y1="0" x2="0" y2="1">
-                              <stop offset="5%" stopColor="#005bd3" stopOpacity={0.25} />
-                              <stop offset="95%" stopColor="#005bd3" stopOpacity={0} />
+                              <stop offset="5%" stopColor="var(--chart-1)" stopOpacity={0.25} />
+                              <stop offset="95%" stopColor="var(--chart-1)" stopOpacity={0} />
                             </linearGradient>
                           </defs>
                           <Area
                             type="monotone"
                             dataKey="v"
-                            stroke="#005bd3"
+                            stroke="var(--chart-1)"
                             strokeWidth={1.5}
                             fill={`url(#spark-${tile.label})`}
                             dot={false}
@@ -63,7 +63,7 @@ export function SummaryStatStrip({
                   <span
                     className={cn(
                       "flex items-center text-xs font-medium",
-                      tile.changePercent >= 0 ? "text-[#29845a]" : "text-[#e51c00]"
+                      tile.changePercent >= 0 ? "text-success" : "text-destructive"
                     )}
                   >
                     {tile.changePercent >= 0 ? (

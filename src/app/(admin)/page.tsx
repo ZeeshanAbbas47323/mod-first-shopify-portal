@@ -14,6 +14,7 @@ import {
 import { toast } from "sonner";
 
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { EmptyState } from "@/components/empty-state";
 import {
   Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
 } from "@/components/ui/select";
@@ -35,9 +36,9 @@ import {
 } from "@/lib/admin-api";
 
 
-const BLUE   = "#005bd3";
-const TEAL   = "#1a9ba1";
-const PIE_COLORS = ["#005bd3","#1a9ba1","#8456cd","#b98900","#29845a","#e51c00","#637381"];
+const BLUE   = "var(--chart-1)";
+const TEAL   = "var(--chart-6)";
+const PIE_COLORS = ["var(--chart-1)","var(--chart-6)","var(--chart-4)","var(--chart-3)","var(--chart-2)","var(--chart-5)","var(--chart-7)"];
 
 
 function Skeleton({ className }: { className?: string }) {
@@ -90,7 +91,7 @@ function KpiCard({
         <>
           <span className="text-lg font-semibold tracking-tight">{value}</span>
           {delta != null && (
-            <span className={cn("flex items-center text-xs font-medium", positive ? "text-[#29845a]" : "text-[#e51c00]")}>
+            <span className={cn("flex items-center text-xs font-medium", positive ? "text-success" : "text-destructive")}>
               {positive ? <ArrowUpRight className="size-3.5" /> : <ArrowDownRight className="size-3.5" />}
               {fmtPct(delta)}
             </span>
@@ -456,7 +457,7 @@ export default function HomePage() {
         <Card className="gap-0 py-0 shadow-none">
           <div className="flex items-center justify-between px-4 py-3">
             <h2 className="text-sm font-semibold">Recent orders</h2>
-            <Link href="/orders" className="flex items-center text-sm font-medium text-[#005bd3] hover:underline">
+            <Link href="/orders" className="flex items-center text-sm font-medium text-link hover:underline">
               View all <ChevronRight className="size-4" />
             </Link>
           </div>
@@ -467,7 +468,10 @@ export default function HomePage() {
                 {Array.from({ length: 4 }).map((_, i) => <Skeleton key={i} className="h-10 w-full" />)}
               </div>
             ) : recentOrders.length === 0 ? (
-              <div className="flex h-32 items-center justify-center text-sm text-muted-foreground">No orders yet</div>
+              <EmptyState
+                title="No orders yet"
+                hint="New orders will show up here as they come in."
+              />
             ) : (
               <ul className="divide-y">
                 {recentOrders.map((order, i) => {
@@ -499,7 +503,7 @@ export default function HomePage() {
         <Card className="gap-0 py-0 shadow-none">
           <div className="flex items-center justify-between px-4 py-3">
             <h2 className="text-sm font-semibold">Low stock alerts</h2>
-            <Link href="/products" className="flex items-center text-sm font-medium text-[#005bd3] hover:underline">
+            <Link href="/products" className="flex items-center text-sm font-medium text-link hover:underline">
               View all <ChevronRight className="size-4" />
             </Link>
           </div>

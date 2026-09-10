@@ -14,6 +14,7 @@ import {
 import { toast } from "sonner";
 
 import { Button } from "@/components/ui/button";
+import { EmptyState } from "@/components/empty-state";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Textarea } from "@/components/ui/textarea";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -241,9 +242,10 @@ export function OrderComments({ orderId }: { orderId: number | string }) {
               ))}
             </div>
           ) : comments.length === 0 ? (
-            <p className="py-6 text-center text-sm text-muted-foreground">
-              No comments yet.
-            </p>
+            <EmptyState
+              title="No comments yet"
+              hint="Leave a note so the rest of the team has the context."
+            />
           ) : (
             <div className="space-y-3">
               {comments.map((c) => {
@@ -259,7 +261,7 @@ export function OrderComments({ orderId }: { orderId: number | string }) {
                     )}
                   >
                     <div className="flex items-start gap-2.5">
-                      <span className="flex size-7 shrink-0 items-center justify-center rounded-full bg-[#e0f0ff] text-[11px] font-semibold text-[#00527c]">
+                      <span className="flex size-7 shrink-0 items-center justify-center rounded-full bg-info-subtle text-[11px] font-semibold text-info-subtle-foreground">
                         {initials(name)}
                       </span>
 
@@ -318,7 +320,7 @@ export function OrderComments({ orderId }: { orderId: number | string }) {
                             href={fileUrl(c.attachment_url)}
                             target="_blank"
                             rel="noreferrer"
-                            className="mt-1.5 inline-flex items-center gap-1 text-xs text-[#005bd3] hover:underline"
+                            className="mt-1.5 inline-flex items-center gap-1 text-xs text-link hover:underline"
                           >
                             <Paperclip className="size-3" />
                             Attachment

@@ -508,7 +508,7 @@ export function VariantsSection({
                         className={cn(
                           "flex items-center gap-2 border-b border-border px-3 py-2 last:border-b-0 hover:bg-muted/20",
                           grouped && "pl-9",
-                          selected.has(idx) && "bg-[#e0f0ff]/40"
+                          selected.has(idx) && "bg-info-subtle/40"
                         )}
                       >
                         <Checkbox

@@ -2,7 +2,6 @@
 
 import * as React from "react";
 import {
-  ChevronDown,
   HelpCircle,
   ImagePlus,
   Loader2,
@@ -26,7 +25,9 @@ import {
 import { ConfirmDeleteDialog } from "@/components/confirm-delete-dialog";
 import { apiErrorMessage } from "@/lib/auth-api";
 import { uploadImages } from "@/lib/upload-api";
-import { moveRow } from "@/lib/sort-order";
+import { persistOrder } from "@/lib/sort-order";
+import { DragHandle } from "@/components/drag-handle";
+import { useDragReorder, moveItem } from "@/hooks/use-drag-reorder";
 import { cn, imgUrl } from "@/lib/utils";
 import {
   createProductDescription,
@@ -43,39 +44,6 @@ import {
   type ProductFaqDetailRow,
   type ProductImageDetailRow,
 } from "@/lib/admin-api";
-
-function MoveButtons({
-  index,
-  count,
-  onMove,
-}: {
-  index: number;
-  count: number;
-  onMove: (dir: "up" | "down") => void;
-}) {
-  return (
-    <>
-      <button
-        type="button"
-        aria-label="Move up"
-        disabled={index === 0}
-        onClick={() => onMove("up")}
-        className="rounded p-1 text-muted-foreground hover:bg-muted disabled:pointer-events-none disabled:opacity-25"
-      >
-        <ChevronDown className="size-3.5 rotate-180" />
-      </button>
-      <button
-        type="button"
-        aria-label="Move down"
-        disabled={index === count - 1}
-        onClick={() => onMove("down")}
-        className="rounded p-1 text-muted-foreground hover:bg-muted disabled:pointer-events-none disabled:opacity-25"
-      >
-        <ChevronDown className="size-3.5" />
-      </button>
-    </>
-  );
-}
 
 export function ProductExtras({ productId }: { productId: number | string }) {
   return (
@@ -152,13 +120,13 @@ function GallerySection({ productId }: { productId: number | string }) {
     }
   };
 
-  const move = async (index: number, dir: "up" | "down") => {
-    try {
-      if (await moveRow("productImage", rows, index, dir)) reload();
-    } catch (e) {
-      toast.error(apiErrorMessage(e, "Couldn't reorder the images."));
-    }
-  };
+  const dnd = useDragReorder({
+    errorMessage: "Couldn't reorder the images.",
+    onReorder: async (from, to) => {
+      await persistOrder("productImage", moveItem(rows, from, to));
+      reload();
+    },
+  });
 
   const remove = async () => {
     if (!deleteTarget) return;
@@ -224,10 +192,13 @@ function GallerySection({ productId }: { productId: number | string }) {
               {rows.map((row, i) => (
                 <div
                   key={String(row.id)}
+                  {...dnd.dropProps(i)}
                   className={cn(
-                    "group relative overflow-hidden rounded-xl border border-border",
-                    row.is_primary && "ring-2 ring-[#005bd3]",
-                    row.is_active === false && "opacity-60"
+                    "group relative overflow-hidden rounded-xl border border-border transition",
+                    row.is_primary && "ring-2 ring-link",
+                    row.is_active === false && "opacity-60",
+                    dnd.isDragging(i) && "opacity-40",
+                    dnd.isOver(i) && "ring-2 ring-ring"
                   )}
                 >
                   {/* eslint-disable-next-line @next/next/no-img-element */}
@@ -237,15 +208,15 @@ function GallerySection({ productId }: { productId: number | string }) {
                     className="aspect-square w-full object-cover"
                   />
                   {row.is_primary && (
-                    <span className="absolute left-1.5 top-1.5 rounded-full bg-[#005bd3] px-2 py-0.5 text-[11px] font-medium text-white">
+                    <span className="absolute left-1.5 top-1.5 rounded-full bg-link px-2 py-0.5 text-[11px] font-medium text-white">
                       Primary
                     </span>
                   )}
                   <div className="absolute inset-x-0 bottom-0 flex items-center justify-center gap-0.5 bg-background/90 p-1 opacity-0 transition-opacity group-hover:opacity-100">
-                    <MoveButtons
-                      index={i}
-                      count={rows.length}
-                      onMove={(d) => move(i, d)}
+                    <DragHandle
+                      label="image"
+                      disabled={dnd.saving}
+                      {...dnd.handleProps(i, rows.length)}
                     />
                     {!row.is_primary && (
                       <button
@@ -314,13 +285,13 @@ function DescriptionsSection({ productId }: { productId: number | string }) {
     };
   }, [productId, key]);
 
-  const move = async (index: number, dir: "up" | "down") => {
-    try {
-      if (await moveRow("productDescription", rows, index, dir)) reload();
-    } catch (e) {
-      toast.error(apiErrorMessage(e, "Couldn't reorder the blocks."));
-    }
-  };
+  const dnd = useDragReorder({
+    errorMessage: "Couldn't reorder the blocks.",
+    onReorder: async (from, to) => {
+      await persistOrder("productDescription", moveItem(rows, from, to));
+      reload();
+    },
+  });
 
   const remove = async () => {
     if (!deleteTarget) return;
@@ -373,11 +344,20 @@ function DescriptionsSection({ productId }: { productId: number | string }) {
             rows.map((row, i) => (
               <div
                 key={String(row.id)}
+                {...dnd.dropProps(i)}
                 className={cn(
-                  "group flex items-start gap-2 rounded-xl border border-border p-3",
-                  row.is_active === false && "opacity-60"
+                  "group flex items-start gap-2 rounded-xl border border-border p-3 transition",
+                  row.is_active === false && "opacity-60",
+                  dnd.isDragging(i) && "opacity-40",
+                  dnd.isOver(i) && "ring-2 ring-ring"
                 )}
               >
+                <DragHandle
+                  label={row.heading ?? "block"}
+                  disabled={dnd.saving}
+                  className="mt-0.5"
+                  {...dnd.handleProps(i, rows.length)}
+                />
                 <div className="min-w-0 flex-1">
                   <p className="font-medium">{row.heading}</p>
                   <p className="line-clamp-2 text-sm text-muted-foreground">
@@ -385,7 +365,6 @@ function DescriptionsSection({ productId }: { productId: number | string }) {
                   </p>
                 </div>
                 <div className="flex shrink-0 items-center gap-0.5">
-                  <MoveButtons index={i} count={rows.length} onMove={(d) => move(i, d)} />
                   <Button
                     type="button"
                     size="sm"
@@ -560,13 +539,13 @@ function FaqsSection({ productId }: { productId: number | string }) {
     };
   }, [productId, key]);
 
-  const move = async (index: number, dir: "up" | "down") => {
-    try {
-      if (await moveRow("productFaq", rows, index, dir)) reload();
-    } catch (e) {
-      toast.error(apiErrorMessage(e, "Couldn't reorder the FAQs."));
-    }
-  };
+  const dnd = useDragReorder({
+    errorMessage: "Couldn't reorder the FAQs.",
+    onReorder: async (from, to) => {
+      await persistOrder("productFaq", moveItem(rows, from, to));
+      reload();
+    },
+  });
 
   const remove = async () => {
     if (!deleteTarget) return;
@@ -619,11 +598,20 @@ function FaqsSection({ productId }: { productId: number | string }) {
             rows.map((row, i) => (
               <div
                 key={String(row.id)}
+                {...dnd.dropProps(i)}
                 className={cn(
-                  "flex items-start gap-2 rounded-xl border border-border p-3",
-                  row.is_active === false && "opacity-60"
+                  "flex items-start gap-2 rounded-xl border border-border p-3 transition",
+                  row.is_active === false && "opacity-60",
+                  dnd.isDragging(i) && "opacity-40",
+                  dnd.isOver(i) && "ring-2 ring-ring"
                 )}
               >
+                <DragHandle
+                  label={row.question ?? "FAQ"}
+                  disabled={dnd.saving}
+                  className="mt-0.5"
+                  {...dnd.handleProps(i, rows.length)}
+                />
                 <div className="min-w-0 flex-1">
                   <p className="font-medium">{row.question}</p>
                   <p className="line-clamp-2 text-sm text-muted-foreground">
@@ -631,7 +619,6 @@ function FaqsSection({ productId }: { productId: number | string }) {
                   </p>
                 </div>
                 <div className="flex shrink-0 items-center gap-0.5">
-                  <MoveButtons index={i} count={rows.length} onMove={(d) => move(i, d)} />
                   <Button
                     type="button"
                     size="sm"

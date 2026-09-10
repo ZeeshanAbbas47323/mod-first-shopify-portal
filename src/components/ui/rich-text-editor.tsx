@@ -60,7 +60,7 @@ function ToolbarButton({
       onClick={onClick}
       className={cn(
         "flex size-7 cursor-pointer items-center justify-center rounded-md text-muted-foreground transition-colors duration-150 hover:bg-muted hover:text-foreground disabled:pointer-events-none disabled:opacity-40",
-        active && "bg-[#e3e3e3] text-foreground"
+        active && "bg-neutral-subtle text-foreground"
       )}
     >
       {children}
@@ -277,7 +277,7 @@ const proseClasses = [
   "[&_ul]:my-2 [&_ul]:list-disc [&_ul]:pl-5",
   "[&_ol]:my-2 [&_ol]:list-decimal [&_ol]:pl-5",
   "[&_li]:my-0.5",
-  "[&_a]:text-[#00527c] [&_a]:underline [&_a]:underline-offset-2",
+  "[&_a]:text-info-subtle-foreground [&_a]:underline [&_a]:underline-offset-2",
   "[&_img]:my-2 [&_img]:max-w-full [&_img]:rounded-lg",
   "[&_hr]:my-4 [&_hr]:border-border",
   "[&_blockquote]:my-2 [&_blockquote]:border-l-2 [&_blockquote]:border-border [&_blockquote]:pl-3 [&_blockquote]:text-muted-foreground",
@@ -340,7 +340,7 @@ export function RichTextEditor({
       onClick={() => setMode(m)}
       className={cn(
         "flex h-7 cursor-pointer items-center gap-1 rounded-md px-2 text-xs font-medium text-muted-foreground transition-colors duration-150 hover:bg-muted hover:text-foreground",
-        mode === m && "bg-[#e3e3e3] text-foreground"
+        mode === m && "bg-neutral-subtle text-foreground"
       )}
     >
       {icon}

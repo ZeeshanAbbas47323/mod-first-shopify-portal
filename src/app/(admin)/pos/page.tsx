@@ -14,6 +14,7 @@ import {
 import { toast } from "sonner";
 
 import { Button } from "@/components/ui/button";
+import { EmptyState } from "@/components/empty-state";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -273,9 +274,10 @@ export default function PosRegisterPage() {
                 ))}
               </div>
             ) : products.length === 0 ? (
-              <p className="py-12 text-center text-sm text-muted-foreground">
-                No products found.
-              </p>
+              <EmptyState
+                title="No products found"
+                hint="Try a different search term or barcode."
+              />
             ) : (
               <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 xl:grid-cols-4">
                 {products.map((p) => {

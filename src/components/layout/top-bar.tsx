@@ -27,6 +27,7 @@ import {
 import { SidebarTrigger } from "@/components/ui/sidebar";
 import { lockScreenNow } from "@/components/layout/screen-lock";
 import { NotificationsMenu } from "@/components/layout/notifications-menu";
+import { ThemeToggle } from "@/components/layout/theme-toggle";
 import { useMenuStore } from "@/stores/menu-store";
 import { useAuthStore } from "@/stores/auth-store";
 import {
@@ -190,7 +191,7 @@ export function TopBar() {
   }
 
   return (
-    <header className="fixed inset-x-0 top-0 z-50 flex h-14 items-center gap-3 bg-[#1a1a1a] px-3">
+    <header className="fixed inset-x-0 top-0 z-50 flex h-14 items-center gap-3 bg-chrome px-3">
       {}
       <div className="flex flex-1 items-center gap-2">
         <SidebarTrigger className="text-neutral-300 hover:bg-white/10 hover:text-white md:hidden" />
@@ -202,7 +203,7 @@ export function TopBar() {
       <div className="flex w-full max-w-xl justify-center">
         <button
           onClick={() => setOpen(true)}
-          className="flex h-9 w-full max-w-md cursor-pointer items-center gap-2 rounded-lg border border-neutral-600 bg-[#303030] px-3 text-sm text-neutral-400 transition-colors hover:border-neutral-500 hover:bg-[#3a3a3a]"
+          className="flex h-9 w-full max-w-md cursor-pointer items-center gap-2 rounded-lg border border-neutral-600 bg-chrome-elevated px-3 text-sm text-neutral-400 transition-colors hover:border-neutral-500 hover:bg-chrome-hover"
         >
           <Search className="size-4" />
           <span className="flex-1 text-left">Search</span>
@@ -214,6 +215,7 @@ export function TopBar() {
 
       {}
       <div className="flex flex-1 items-center justify-end gap-2">
+        <ThemeToggle />
         <NotificationsMenu />
 
         <DropdownMenu>

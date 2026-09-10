@@ -107,7 +107,6 @@ export default function DraftOrdersPage() {
   const [rows, setRows] = React.useState<DraftOrderRow[]>([]);
   const [loading, setLoading] = React.useState(true);
   const [page, setPage] = React.useState(0);
-  const [refreshKey, setRefreshKey] = React.useState(0);
   const [pageSize, setPageSize] = React.useState<number>(DEFAULT_PAGE_SIZE);
   const [pageCount, setPageCount] = React.useState(1);
   const [total, setTotal] = React.useState(0);
@@ -166,7 +165,7 @@ export default function DraftOrdersPage() {
         toast.error(apiErrorMessage(error, "Couldn't load draft orders."));
       })
       .finally(() => setLoading(false));
-  }, [page, pageSize, activeFilters, refreshKey]);
+  }, [page, pageSize, activeFilters]);
 
   React.useEffect(() => { load(); }, [load]);
 
@@ -359,7 +358,7 @@ export default function DraftOrdersPage() {
       )}
 
       <DataTable
-        onRefresh={() => setRefreshKey((k) => k + 1)}
+        onRefresh={load}
         columns={columns}
         data={rows}
         loading={loading}

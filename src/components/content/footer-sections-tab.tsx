@@ -24,7 +24,10 @@ import {
 } from "@/components/ui/dialog";
 import { ConfirmDeleteDialog } from "@/components/confirm-delete-dialog";
 import { apiErrorMessage } from "@/lib/auth-api";
-import { moveRow } from "@/lib/sort-order";
+import { cn } from "@/lib/utils";
+import { persistOrder } from "@/lib/sort-order";
+import { DragHandle } from "@/components/drag-handle";
+import { useDragReorder, moveItem } from "@/hooks/use-drag-reorder";
 import {
   listFooterSections,
   createFooterSection,
@@ -283,7 +286,7 @@ function SectionCard({ section, onSaved }: { section: FooterSectionRow; onSaved:
                 <label className="flex cursor-pointer items-center gap-2">
                   <div className="relative">
                     <input type="checkbox" className="sr-only peer" checked={isActive} onChange={(e) => setIsActive(e.target.checked)} />
-                    <div className="h-5 w-9 rounded-full bg-muted transition-colors peer-checked:bg-[#29845a]" />
+                    <div className="h-5 w-9 rounded-full bg-muted transition-colors peer-checked:bg-success" />
                     <div className="absolute left-0.5 top-0.5 size-4 rounded-full bg-white shadow transition-transform peer-checked:translate-x-4" />
                   </div>
                   <span className="text-sm font-medium">Active</span>
@@ -465,13 +468,13 @@ export function FooterSectionsTab() {
     [sections]
   );
 
-  const handleMove = async (index: number, direction: "up" | "down") => {
-    try {
-      if (await moveRow("footerSection", sorted, index, direction)) load();
-    } catch (e) {
-      toast.error(apiErrorMessage(e, "Couldn't update order."));
-    }
-  };
+  const dnd = useDragReorder({
+    errorMessage: "Couldn't update order.",
+    onReorder: async (from, to) => {
+      await persistOrder("footerSection", moveItem(sorted, from, to));
+      load();
+    },
+  });
 
   return (
     <div className="flex flex-col gap-3">
@@ -493,18 +496,21 @@ export function FooterSectionsTab() {
         </div>
       ) : (
         sorted.map((s, i) => (
-            <div key={s.id} className="flex items-start gap-2">
-              <div className="flex flex-col gap-0.5 pt-3">
-                <button type="button" disabled={i === 0}
-                  onClick={() => handleMove(i, "up")}
-                  className="rounded p-0.5 text-muted-foreground hover:text-foreground disabled:opacity-30">
-                  <ChevronUp className="size-4" />
-                </button>
-                <button type="button" disabled={i === sorted.length - 1}
-                  onClick={() => handleMove(i, "down")}
-                  className="rounded p-0.5 text-muted-foreground hover:text-foreground disabled:opacity-30">
-                  <ChevronDown className="size-4" />
-                </button>
+            <div
+              key={s.id}
+              {...dnd.dropProps(i)}
+              className={cn(
+                "flex items-start gap-2 rounded-lg transition",
+                dnd.isDragging(i) && "opacity-40",
+                dnd.isOver(i) && "ring-2 ring-ring"
+              )}
+            >
+              <div className="pt-3">
+                <DragHandle
+                  label={s.title ?? "section"}
+                  disabled={dnd.saving}
+                  {...dnd.handleProps(i, sorted.length)}
+                />
               </div>
               <div className="flex-1">
                 <SectionCard section={s} onSaved={load} />

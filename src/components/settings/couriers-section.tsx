@@ -66,7 +66,7 @@ function getColumns(
       if (!url) return <span className="text-muted-foreground">—</span>;
       return (
         <a href={url} target="_blank" rel="noopener noreferrer"
-          className="truncate text-sm text-[#005bd3] hover:underline max-w-[200px] block"
+          className="truncate text-sm text-link hover:underline max-w-[200px] block"
           onClick={(e) => e.stopPropagation()}>
           {url}
         </a>

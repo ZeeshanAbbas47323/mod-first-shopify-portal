@@ -444,10 +444,10 @@ function CloseShiftDialog({
                 className={cn(
                   "text-sm font-medium tabular-nums",
                   Math.abs(diff) < 0.005
-                    ? "text-[#29845a]"
+                    ? "text-success"
                     : diff > 0
-                      ? "text-[#b98900]"
-                      : "text-[#e51c00]"
+                      ? "text-warning"
+                      : "text-destructive"
                 )}
               >
                 {Math.abs(diff) < 0.005

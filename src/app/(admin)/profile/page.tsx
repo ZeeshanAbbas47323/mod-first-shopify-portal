@@ -20,6 +20,14 @@ import {
 import { toast } from "sonner";
 
 import { Badge } from "@/components/ui/badge";
+import {
+  Card,
+  CardContent,
+  CardFooter,
+  CardHeader,
+  CardTitle,
+  CardDescription,
+} from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -122,20 +130,16 @@ function SectionCard({
   footer?: React.ReactNode;
 }) {
   return (
-    <section className="overflow-hidden rounded-lg bg-card ring-1 ring-black/8">
-      <div className="border-b px-5 py-4">
-        <h2 className="text-sm font-semibold">{title}</h2>
-        {description && (
-          <p className="mt-0.5 text-xs text-muted-foreground">{description}</p>
-        )}
-      </div>
-      <div className="px-5 py-5">{children}</div>
+    <Card>
+      <CardHeader className="border-b">
+        <CardTitle>{title}</CardTitle>
+        {description && <CardDescription>{description}</CardDescription>}
+      </CardHeader>
+      <CardContent>{children}</CardContent>
       {footer && (
-        <div className="flex flex-wrap items-center justify-end gap-2 border-t bg-[#f7f7f7] px-5 py-3">
-          {footer}
-        </div>
+        <CardFooter className="flex-wrap justify-end gap-2">{footer}</CardFooter>
       )}
-    </section>
+    </Card>
   );
 }
 
@@ -212,14 +216,15 @@ export default function ProfilePage() {
   return (
     <div className="flex flex-col gap-4">
       <div>
-        <h1 className="text-xl font-semibold">My profile</h1>
+        <h1 className="text-lg font-semibold">My profile</h1>
         <p className="mt-0.5 text-sm text-muted-foreground">
           Manage your personal details and account security.
         </p>
       </div>
 
       <div className="grid gap-4 lg:grid-cols-[20rem_1fr]">
-        <section className="h-fit rounded-lg bg-card p-5 ring-1 ring-black/8">
+        <Card className="h-fit">
+          <CardContent>
           {loading ? (
             <div className="flex flex-col items-center gap-3">
               <Skeleton className="size-20 rounded-full" />
@@ -280,7 +285,8 @@ export default function ProfilePage() {
               </div>
             </>
           )}
-        </section>
+          </CardContent>
+        </Card>
 
         <div className="flex flex-col gap-4">
           <form onSubmit={handleSubmit(onSubmit)} noValidate>
