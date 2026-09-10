@@ -118,7 +118,10 @@ const fallbackNav: NavItem[] = [
     title: "Inquiries",
     href: "/inquiries",
     icon: Inbox,
-    children: [{ title: "Net 30 applications", href: "/inquiries/net30" }],
+    children: [
+      { title: "Net 30 applications", href: "/inquiries/net30" },
+      { title: "Apparel quotes", href: "/inquiries/apparel-quotes" },
+    ],
   },
   { title: "Reviews", href: "/reviews", icon: Star },
   { title: "Analytics", href: "/analytics", icon: BarChart3 },

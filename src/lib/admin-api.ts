@@ -3102,6 +3102,83 @@ export async function updateNet30Application(
 }
 
 
+export interface ApparelQuoteRequestRow {
+  id: number | string;
+  full_name: string;
+  business_name?: string | null;
+  email: string;
+  phone?: string;
+  phone_country_code?: string | null;
+
+  /** Checkbox groups, stored as JSON arrays. */
+  order_types?: string[] | null;
+  garment_types?: string[] | null;
+  print_locations?: string[] | null;
+  artwork_status?: string[] | null;
+
+  garment_colors?: string | null;
+  quantity?: string | null;
+  size_breakdown?: string | null;
+  personalization?: string | null;
+  artwork_url?: string | null;
+
+  date_needed?: string | null;
+  delivery_method?: string | null;
+  project_details?: string | null;
+
+  status?: InquiryStatus;
+  admin_notes?: string | null;
+  is_active?: boolean;
+  created_at?: string;
+  [k: string]: unknown;
+}
+
+export async function listApparelQuoteRequests(
+  params: ListParams
+): Promise<ListResult<ApparelQuoteRequestRow>> {
+  const { data } = await api.post("apparel-quote-requests/list", buildBody(params));
+  return parseList<ApparelQuoteRequestRow>(data, params.limit);
+}
+
+export interface ApparelQuoteRequestsSummary {
+  total: number;
+  new: number;
+  in_progress: number;
+  resolved: number;
+}
+
+const EMPTY_APPAREL_QUOTE_SUMMARY: ApparelQuoteRequestsSummary = {
+  total: 0, new: 0, in_progress: 0, resolved: 0,
+};
+
+export async function getApparelQuoteRequestsSummary(params: {
+  dateRange?: DateRange;
+  filters?: Json;
+}): Promise<ApparelQuoteRequestsSummary> {
+  const body: Json = {};
+  if (params.dateRange?.from) body.startDate = format(params.dateRange.from, "yyyy-MM-dd");
+  if (params.dateRange?.to) body.endDate = format(params.dateRange.to, "yyyy-MM-dd");
+  if (params.filters && Object.keys(params.filters).length) body.filters = params.filters;
+  const { data } = await api.post("apparel-quote-requests/summary", body);
+  return (dashParse<Json>(data) as ApparelQuoteRequestsSummary) ?? EMPTY_APPAREL_QUOTE_SUMMARY;
+}
+
+export async function getApparelQuoteRequest(
+  id: number | string
+): Promise<ApparelQuoteRequestRow> {
+  const { data } = await api.get(`apparel-quote-requests/${id}`);
+  return (data?.payload ?? data?.data ?? data) as ApparelQuoteRequestRow;
+}
+
+export async function updateApparelQuoteRequest(
+  id: number | string,
+  body: { status?: InquiryStatus; admin_notes?: string; is_active?: boolean }
+): Promise<string> {
+  const { data } = await api.put(`apparel-quote-requests/${id}`, body);
+  return (data?.message as string) ?? "Request updated.";
+}
+
+
 export interface ProductImageDetailRow {
   id: number | string;
   product_id: number | string;
