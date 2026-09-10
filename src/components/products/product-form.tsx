@@ -54,6 +54,7 @@ import {
   updateProduct,
   deleteRecord,
   fetchAllProductCategories,
+  createVendorAndReturn,
   fetchAllVendors,
   listColors,
   listSizes,
@@ -67,6 +68,7 @@ import {
 } from "@/lib/admin-api";
 import { api } from "@/lib/api";
 import { cn, imgUrl } from "@/lib/utils";
+import { fetchAllPages } from "@/lib/export";
 
 
 const VARIANT_STATUSES = ["active", "inactive", "out_of_stock"] as const;
@@ -262,6 +264,7 @@ function Combobox({
   emptyText = "No results found.",
   loading = false,
   disabled = false,
+  footer,
 }: {
   options: { value: string; label: string }[];
   value: string;
@@ -271,6 +274,8 @@ function Combobox({
   emptyText?: string;
   loading?: boolean;
   disabled?: boolean;
+  /** Rendered under the list - used for "create new" actions. */
+  footer?: (close: () => void) => React.ReactNode;
 }) {
   const [open, setOpen] = React.useState(false);
   const selected = options.find((o) => o.value === value);
@@ -303,6 +308,9 @@ function Combobox({
           <CommandInput placeholder={searchPlaceholder} />
           <CommandList>
             <CommandEmpty>{emptyText}</CommandEmpty>
+            {footer && (
+              <div className="border-b p-1">{footer(() => setOpen(false))}</div>
+            )}
             <CommandGroup>
               {options.map((opt) => (
                 <CommandItem
@@ -384,6 +392,9 @@ function VendorSelect({
 }) {
   const [vendors, setVendors] = React.useState<VendorRow[]>([]);
   const [loading, setLoading] = React.useState(true);
+  const [creating, setCreating] = React.useState(false);
+  const [newName, setNewName] = React.useState("");
+  const [saving, setSaving] = React.useState(false);
 
   React.useEffect(() => {
     fetchAllVendors()
@@ -391,6 +402,33 @@ function VendorSelect({
       .catch(() => setVendors([]))
       .finally(() => setLoading(false));
   }, []);
+
+  const createVendor = async (close: () => void) => {
+    const name = newName.trim();
+    if (name.length < 2) {
+      toast.error("Vendor name must be at least 2 characters.");
+      return;
+    }
+
+    setSaving(true);
+    try {
+      const created = await createVendorAndReturn(name);
+      setVendors((current) =>
+        current.some((v) => String(v.id) === String(created.id))
+          ? current
+          : [...current, created]
+      );
+      onChange(String(created.id));
+      toast.success(`Vendor "${created.name}" created.`);
+      setNewName("");
+      setCreating(false);
+      close();
+    } catch (error) {
+      toast.error(apiErrorMessage(error, "Couldn't create the vendor."));
+    } finally {
+      setSaving(false);
+    }
+  };
 
   const resolvedValue = value
     ? vendors.find((v) => String(v.id) === value || v.name === value)
@@ -411,6 +449,47 @@ function VendorSelect({
       placeholder="Select vendor"
       searchPlaceholder="Search vendors…"
       loading={loading}
+      footer={(close) =>
+        creating ? (
+          <div className="flex items-center gap-1.5 p-1">
+            <Input
+              autoFocus
+              value={newName}
+              onChange={(e) => setNewName(e.target.value)}
+              onKeyDown={(e) => {
+                if (e.key === "Enter") {
+                  e.preventDefault();
+                  void createVendor(close);
+                } else if (e.key === "Escape") {
+                  e.preventDefault();
+                  setCreating(false);
+                }
+              }}
+              placeholder="New vendor name"
+              className="h-8"
+            />
+            <Button
+              type="button"
+              size="sm"
+              disabled={saving || newName.trim().length < 2}
+              onClick={() => void createVendor(close)}
+            >
+              {saving ? <Loader2 className="size-3.5 animate-spin" /> : "Add"}
+            </Button>
+          </div>
+        ) : (
+          <Button
+            type="button"
+            variant="ghost"
+            size="sm"
+            className="w-full justify-start"
+            onClick={() => setCreating(true)}
+          >
+            <Plus className="size-3.5" />
+            Create vendor
+          </Button>
+        )
+      }
     />
   );
 }
@@ -451,11 +530,14 @@ export function ProductForm({ product }: { product?: ProductDetailRow }) {
   const [colors, setColors] = React.useState<ColorRow[]>([]);
   const [sizes, setSizes] = React.useState<SizeRow[]>([]);
   React.useEffect(() => {
-    listColors({ page: 1, limit: 200, filters: { is_active: true } })
-      .then((r) => setColors(r.rows))
+    // Every page, and inactive options too: these lists are what turn a
+    // variant's color_id / size_id into a readable name. Capping at 200 or
+    // filtering to active-only left existing variants showing a raw "#42".
+    fetchAllPages<ColorRow>((page, limit) => listColors({ page, limit }))
+      .then(setColors)
       .catch(() => {});
-    listSizes({ page: 1, limit: 200, filters: { is_active: true } })
-      .then((r) => setSizes(r.rows))
+    fetchAllPages<SizeRow>((page, limit) => listSizes({ page, limit }))
+      .then(setSizes)
       .catch(() => {});
   }, []);
 

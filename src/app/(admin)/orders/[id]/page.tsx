@@ -59,7 +59,9 @@ const n = (v?: string | number | null) => (v != null ? Number(v) : null);
 
 const fmt$ = (v?: string | number | null) => {
   const num = n(v);
-  return num != null ? `Rs ${num.toLocaleString("en-PK", { minimumFractionDigits: 2 })}` : "—";
+  return num != null
+    ? num.toLocaleString("en-US", { style: "currency", currency: "USD" })
+    : "—";
 };
 
 const fmtDate = (d?: string | null) =>

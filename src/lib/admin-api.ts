@@ -1193,6 +1193,25 @@ export interface VendorRow {
   created_at?: string;
 }
 
+/**
+ * Quick-create from the product form. The API only requires a name; the rest
+ * of a vendor's details are filled in later on the vendor page.
+ *
+ * The create response shape differs from the list row, so the new vendor is
+ * read back from the list rather than assumed.
+ */
+export async function createVendorAndReturn(name: string): Promise<VendorRow> {
+  await api.post("vendors", { vendor_name: name, is_active: true });
+
+  const vendors = await fetchAllVendors();
+  const match = vendors.find(
+    (v) => (v.name ?? "").trim().toLowerCase() === name.trim().toLowerCase()
+  );
+
+  if (!match) throw new Error("Vendor was created but could not be read back.");
+  return match;
+}
+
 export async function fetchAllVendors(): Promise<VendorRow[]> {
   const { data } = await api.post("vendors/list", { page: 1, limit: 200 });
   const result = parseList<VendorRow>(data, 200);

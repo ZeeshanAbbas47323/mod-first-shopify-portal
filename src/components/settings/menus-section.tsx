@@ -40,6 +40,7 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { StatusBadge, StatusToggle } from "@/components/status-badge";
 import { apiErrorMessage } from "@/lib/auth-api";
 import { moveRow, persistOrder } from "@/lib/sort-order";
+import { MenuTargetSelect } from "@/components/settings/menu-target-select";
 import { cn } from "@/lib/utils";
 import {
   createMenu,
@@ -654,6 +655,10 @@ const menuSchema = z.object({
   sort_order: z.number({ error: "Must be a number" }).int().min(0).optional(),
   icon: z.string().optional(),
   external_url: z.string().optional(),
+  link_value: z.string().optional(),
+  target_category_id: z.string().optional(),
+  target_product_id: z.string().optional(),
+  target_page_id: z.string().optional(),
   open_in_new_tab: z.boolean().optional(),
   visibility: z.enum(["visible", "hidden"]),
   status: z.enum(["active", "inactive"]),
@@ -696,6 +701,10 @@ function MenuDialog({
       sort_order: undefined,
       icon: "",
       external_url: "",
+      link_value: "",
+      target_category_id: "",
+      target_product_id: "",
+      target_page_id: "",
       open_in_new_tab: false,
       visibility: "visible",
       status: "active",
@@ -721,6 +730,13 @@ function MenuDialog({
         sort_order: editing?.sort_order,
         icon: editing?.icon ?? "",
         external_url: editing?.external_url ?? "",
+        link_value: editing?.link_value ?? "",
+        target_category_id:
+          editing?.target_category_id != null ? String(editing.target_category_id) : "",
+        target_product_id:
+          editing?.target_product_id != null ? String(editing.target_product_id) : "",
+        target_page_id:
+          editing?.target_page_id != null ? String(editing.target_page_id) : "",
         open_in_new_tab: editing?.open_in_new_tab ?? false,
         visibility: editing?.visibility === false ? "hidden" : "visible",
         status: editing?.is_active === false ? "inactive" : "active",
@@ -774,6 +790,22 @@ function MenuDialog({
       icon: values.icon || undefined,
       external_url:
         values.link_type === "external_url" ? values.external_url : undefined,
+      // Only the target that matches the chosen link type is sent; the others
+      // are cleared so a menu never carries a stale pointer from a previous
+      // type. `null` is what the API accepts for "no target".
+      link_value: values.link_value || null,
+      target_category_id:
+        values.link_type === "category" && values.target_category_id
+          ? Number(values.target_category_id)
+          : null,
+      target_product_id:
+        values.link_type === "product" && values.target_product_id
+          ? Number(values.target_product_id)
+          : null,
+      target_page_id:
+        values.link_type === "page" && values.target_page_id
+          ? Number(values.target_page_id)
+          : null,
       open_in_new_tab: values.open_in_new_tab,
       visibility: values.visibility === "visible",
       is_active: values.status === "active",
@@ -936,6 +968,87 @@ function MenuDialog({
                 placeholder="https://example.com"
                 {...register("external_url")}
               />
+            </div>
+          )}
+
+          {linkType === "category" && (
+            <div className="space-y-1.5">
+              <Label>Target category</Label>
+              <Controller
+                control={control}
+                name="target_category_id"
+                render={({ field }) => (
+                  <MenuTargetSelect
+                    kind="category"
+                    value={field.value ?? ""}
+                    onChange={field.onChange}
+                  />
+                )}
+              />
+              <p className="text-xs text-muted-foreground">
+                The category this menu opens.
+              </p>
+            </div>
+          )}
+
+          {linkType === "product" && (
+            <div className="space-y-1.5">
+              <Label>Target product</Label>
+              <Controller
+                control={control}
+                name="target_product_id"
+                render={({ field }) => (
+                  <MenuTargetSelect
+                    kind="product"
+                    value={field.value ?? ""}
+                    onChange={field.onChange}
+                  />
+                )}
+              />
+              <p className="text-xs text-muted-foreground">
+                The product this menu opens.
+              </p>
+            </div>
+          )}
+
+          {linkType === "page" && (
+            <div className="space-y-1.5">
+              <Label>Target page</Label>
+              <Controller
+                control={control}
+                name="target_page_id"
+                render={({ field }) => (
+                  <MenuTargetSelect
+                    kind="page"
+                    value={field.value ?? ""}
+                    onChange={field.onChange}
+                  />
+                )}
+              />
+              <p className="text-xs text-muted-foreground">
+                The content page this menu opens.
+              </p>
+            </div>
+          )}
+
+          {(linkType === "custom" || linkType === "collection") && (
+            <div className="space-y-1.5">
+              <Label htmlFor="menu-link-value">
+                {linkType === "collection" ? "Collection handle" : "Link path"}
+              </Label>
+              <Input
+                id="menu-link-value"
+                placeholder={
+                  linkType === "collection" ? "best-sellers" : "/shop/new-arrivals"
+                }
+                className="font-mono"
+                {...register("link_value")}
+              />
+              <p className="text-xs text-muted-foreground">
+                {linkType === "collection"
+                  ? "The collection the storefront should load."
+                  : "Where this menu points, relative to the site root."}
+              </p>
             </div>
           )}
 
