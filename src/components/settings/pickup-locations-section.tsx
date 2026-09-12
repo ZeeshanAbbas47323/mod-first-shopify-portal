@@ -51,8 +51,8 @@ function getColumns(
     id: "address",
     header: "Address",
     cell: ({ row }) => {
-      const { address, city, state, country } = row.original;
-      const parts = [address, city, state, country].filter(Boolean).join(", ");
+      const { address, city } = row.original;
+      const parts = [address, city].filter(Boolean).join(", ");
       return <span className="text-sm text-muted-foreground">{parts || "—"}</span>;
     },
   },
@@ -139,8 +139,6 @@ export function PickupLocationsSection() {
         { key: "name", label: "Location", value: (r: PickupLocationRow) => r.name ?? "" },
         { key: "address", label: "Address", value: (r: PickupLocationRow) => r.address ?? "" },
         { key: "city", label: "City", value: (r: PickupLocationRow) => r.city ?? "" },
-        { key: "state", label: "State", value: (r: PickupLocationRow) => r.state ?? "" },
-        { key: "country", label: "Country", value: (r: PickupLocationRow) => r.country ?? "" },
         { key: "phone", label: "Phone", value: (r: PickupLocationRow) => r.phone ?? "" },
         { key: "is_active", label: "Active", value: (r: PickupLocationRow) => (r.is_active === false ? "No" : "Yes") },
       ], exportRows);
@@ -202,14 +200,12 @@ export function PickupLocationsSection() {
 }
 
 const locationSchema = z.object({
-  name: z.string().min(1, "Name is required"),
-  address: z.string().optional(),
-  city: z.string().optional(),
-  state: z.string().optional(),
-  country: z.string().optional(),
-  postal_code: z.string().optional(),
-  phone: z.string().optional(),
-  email: z.string().email("Must be a valid email").optional().or(z.literal("")),
+  // Mirrors the backend's strict createPickupLocationSchema — it rejects any
+  // key the PickupLocation model doesn't have.
+  name: z.string().trim().min(2, "Name must be at least 2 characters").max(255),
+  address: z.string().trim().min(1, "Address is required").max(5000),
+  city: z.string().trim().min(2, "City must be at least 2 characters").max(255),
+  phone: z.string().trim().max(50, "Phone must not exceed 50 characters").optional(),
   status: z.enum(["active", "inactive"]),
 });
 type LocationValues = z.infer<typeof locationSchema>;
@@ -226,8 +222,7 @@ function PickupLocationDialog({
     useForm<LocationValues>({
       resolver: zodResolver(locationSchema),
       defaultValues: {
-        name: "", address: "", city: "", state: "", country: "",
-        postal_code: "", phone: "", email: "", status: "active",
+        name: "", address: "", city: "", phone: "", status: "active",
       },
     });
 
@@ -239,11 +234,7 @@ function PickupLocationDialog({
       name: editing?.name ?? "",
       address: (editing?.address as string) ?? "",
       city: (editing?.city as string) ?? "",
-      state: (editing?.state as string) ?? "",
-      country: (editing?.country as string) ?? "",
-      postal_code: (editing?.postal_code as string) ?? "",
       phone: (editing?.phone as string) ?? "",
-      email: (editing?.email as string) ?? "",
       status: editing?.is_active === false ? "inactive" : "active",
     });
   }, [open, editing, reset]);
@@ -251,13 +242,10 @@ function PickupLocationDialog({
   const onSubmit = async (values: LocationValues) => {
     const body: Partial<PickupLocationRow> = {
       name: values.name,
-      address: values.address || undefined,
-      city: values.city || undefined,
-      state: values.state || undefined,
-      country: values.country || undefined,
-      postal_code: values.postal_code || undefined,
-      phone: values.phone || undefined,
-      email: values.email || undefined,
+      address: values.address,
+      city: values.city,
+      // null clears a saved phone on edit; undefined would leave it unchanged.
+      phone: values.phone || null,
       is_active: values.status === "active",
     };
     try {
@@ -305,42 +293,21 @@ function PickupLocationDialog({
           </div>
 
           <div className="space-y-1.5">
-            <Label htmlFor="loc-address">Address</Label>
-            <Input id="loc-address" placeholder="123 Main St" {...register("address")} />
+            <Label htmlFor="loc-address">Address *</Label>
+            <Input id="loc-address" placeholder="123 Main St" aria-invalid={!!errors.address} {...register("address")} />
+            {errors.address && <p className="text-sm text-destructive">{errors.address.message}</p>}
           </div>
 
           <div className="grid grid-cols-2 gap-3">
             <div className="space-y-1.5">
-              <Label htmlFor="loc-city">City</Label>
-              <Input id="loc-city" placeholder="Karachi" {...register("city")} />
+              <Label htmlFor="loc-city">City *</Label>
+              <Input id="loc-city" placeholder="Karachi" aria-invalid={!!errors.city} {...register("city")} />
+              {errors.city && <p className="text-sm text-destructive">{errors.city.message}</p>}
             </div>
-            <div className="space-y-1.5">
-              <Label htmlFor="loc-state">State / Province</Label>
-              <Input id="loc-state" placeholder="Sindh" {...register("state")} />
-            </div>
-          </div>
-
-          <div className="grid grid-cols-2 gap-3">
-            <div className="space-y-1.5">
-              <Label htmlFor="loc-country">Country</Label>
-              <Input id="loc-country" placeholder="Pakistan" {...register("country")} />
-            </div>
-            <div className="space-y-1.5">
-              <Label htmlFor="loc-postal">Postal code</Label>
-              <Input id="loc-postal" placeholder="75000" {...register("postal_code")} />
-            </div>
-          </div>
-
-          <div className="grid grid-cols-2 gap-3">
             <div className="space-y-1.5">
               <Label htmlFor="loc-phone">Phone</Label>
-              <Input id="loc-phone" placeholder="+92 300 0000000" {...register("phone")} />
-            </div>
-            <div className="space-y-1.5">
-              <Label htmlFor="loc-email">Email</Label>
-              <Input id="loc-email" type="email" placeholder="store@example.com"
-                aria-invalid={!!errors.email} {...register("email")} />
-              {errors.email && <p className="text-sm text-destructive">{errors.email.message}</p>}
+              <Input id="loc-phone" placeholder="+92 300 0000000" aria-invalid={!!errors.phone} {...register("phone")} />
+              {errors.phone && <p className="text-sm text-destructive">{errors.phone.message}</p>}
             </div>
           </div>
 

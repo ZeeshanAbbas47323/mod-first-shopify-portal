@@ -2215,11 +2215,7 @@ export interface PickupLocationRow {
   name: string;
   address?: string | null;
   city?: string | null;
-  state?: string | null;
-  country?: string | null;
-  postal_code?: string | null;
   phone?: string | null;
-  email?: string | null;
   is_active?: boolean;
   created_at?: string;
   [k: string]: unknown;
