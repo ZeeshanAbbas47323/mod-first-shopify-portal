@@ -24,14 +24,19 @@ import { Skeleton } from "@/components/ui/skeleton";
 import {
   Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
 } from "@/components/ui/select";
+import {
+  Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle,
+} from "@/components/ui/dialog";
 import { apiErrorMessage } from "@/lib/auth-api";
 import { cn, imgUrl } from "@/lib/utils";
 import {
   listPickupLocations,
   listProducts,
   listUsers,
+  getProduct,
   type PickupLocationRow,
   type ProductRow,
+  type ProductVariantRow,
   type UserRow,
 } from "@/lib/admin-api";
 import {
@@ -45,9 +50,22 @@ import { PosPaymentDialog } from "@/components/pos/payment-dialog";
 
 interface CartLine {
   product: ProductRow;
+  variant?: ProductVariantRow;
   quantity: number;
   custom_text?: string;
 }
+
+const lineKey = (l: CartLine) =>
+  `${l.product.id}${l.variant?.id != null ? `:${l.variant.id}` : ""}`;
+
+const lineUnitPrice = (l: CartLine) =>
+  Number(l.variant?.price ?? l.product.price ?? 0);
+
+const variantLabel = (v: ProductVariantRow) =>
+  [v.size?.display_name ?? v.size?.name, v.color?.name].filter(Boolean).join(" — ") ||
+  v.title ||
+  v.sku ||
+  `Variant ${v.id}`;
 
 export default function PosRegisterPage() {
   const [shift, setShift] = React.useState<ShiftRow | null>(null);
@@ -139,29 +157,57 @@ export default function PosRegisterPage() {
     return () => clearTimeout(t);
   }, [customerSearch]);
 
-  const addLine = (product: ProductRow) => {
+  const addLine = (product: ProductRow, variant?: ProductVariantRow) => {
     setLines((prev) => {
-      const i = prev.findIndex((l) => String(l.product.id) === String(product.id));
+      const key = `${product.id}${variant?.id != null ? `:${variant.id}` : ""}`;
+      const i = prev.findIndex((l) => lineKey(l) === key);
       if (i >= 0) {
         const next = [...prev];
         next[i] = { ...next[i], quantity: next[i].quantity + 1 };
         return next;
       }
-      return [...prev, { product, quantity: 1 }];
+      return [...prev, { product, variant, quantity: 1 }];
     });
   };
 
-  const setQty = (id: number | string, qty: number) =>
+  // Products with more than one variant need the cashier to pick a size
+  // (or other option) before a correct price can be charged — a gang sheet
+  // rung up without picking a size would silently charge the smallest size's
+  // price for every size. Single/no-variant products skip straight to cart.
+  const [variantPicker, setVariantPicker] = React.useState<{
+    product: ProductRow;
+    variants: ProductVariantRow[];
+  } | null>(null);
+  const [variantLoading, setVariantLoading] = React.useState<string | null>(null);
+
+  const handleProductTap = async (product: ProductRow) => {
+    setVariantLoading(String(product.id));
+    try {
+      const detail = await getProduct(product.id);
+      const variants = (detail.variants ?? []).filter(
+        (v) => v.status !== "inactive" && v.status !== "out_of_stock"
+      );
+      if (variants.length > 1) {
+        setVariantPicker({ product, variants });
+      } else {
+        addLine(product, variants[0]);
+      }
+    } catch (error) {
+      toast.error(apiErrorMessage(error, "Couldn't load this product's options."));
+    } finally {
+      setVariantLoading(null);
+    }
+  };
+
+  const setQty = (line: CartLine, qty: number) =>
     setLines((prev) =>
       qty <= 0
-        ? prev.filter((l) => String(l.product.id) !== String(id))
-        : prev.map((l) =>
-            String(l.product.id) === String(id) ? { ...l, quantity: qty } : l
-          )
+        ? prev.filter((l) => lineKey(l) !== lineKey(line))
+        : prev.map((l) => (lineKey(l) === lineKey(line) ? { ...l, quantity: qty } : l))
     );
 
-  const removeLine = (id: number | string) =>
-    setLines((prev) => prev.filter((l) => String(l.product.id) !== String(id)));
+  const removeLine = (line: CartLine) =>
+    setLines((prev) => prev.filter((l) => lineKey(l) !== lineKey(line)));
 
   const clearCart = () => {
     setLines([]);
@@ -172,7 +218,7 @@ export default function PosRegisterPage() {
   };
 
   const subtotal = lines.reduce(
-    (sum, l) => sum + Number(l.product.price ?? 0) * l.quantity,
+    (sum, l) => sum + lineUnitPrice(l) * l.quantity,
     0
   );
   const itemCount = lines.reduce((sum, l) => sum + l.quantity, 0);
@@ -190,6 +236,7 @@ export default function PosRegisterPage() {
     try {
       const items: PosOrderItemInput[] = lines.map((l) => ({
         product_id: l.product.id,
+        variant_id: l.variant?.id ?? undefined,
         quantity: l.quantity,
         custom_text: l.custom_text || undefined,
       }));
@@ -282,17 +329,18 @@ export default function PosRegisterPage() {
               <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 xl:grid-cols-4">
                 {products.map((p) => {
                   const out = (p.quantity ?? 0) <= 0;
+                  const loading = variantLoading === String(p.id);
                   return (
                     <button
                       key={p.id}
                       type="button"
-                      disabled={!shiftOpen}
-                      onClick={() => addLine(p)}
+                      disabled={!shiftOpen || loading}
+                      onClick={() => handleProductTap(p)}
                       className={cn(
                         "group flex flex-col overflow-hidden rounded-xl border border-border text-left transition-colors hover:border-primary/50 hover:bg-muted/40 disabled:cursor-not-allowed disabled:opacity-50"
                       )}
                     >
-                      <div className="flex h-20 items-center justify-center overflow-hidden bg-muted/40">
+                      <div className="relative flex h-20 items-center justify-center overflow-hidden bg-muted/40">
                         {p.featured_image ? (
                           // eslint-disable-next-line @next/next/no-img-element
                           <img
@@ -302,6 +350,11 @@ export default function PosRegisterPage() {
                           />
                         ) : (
                           <ShoppingCart className="size-5 text-muted-foreground" />
+                        )}
+                        {loading && (
+                          <div className="absolute inset-0 flex items-center justify-center bg-white/70">
+                            <Loader2 className="size-4 animate-spin text-muted-foreground" />
+                          </div>
                         )}
                       </div>
                       <div className="flex flex-1 flex-col gap-0.5 p-2">
@@ -357,20 +410,25 @@ export default function PosRegisterPage() {
               <div className="space-y-2">
                 {lines.map((l) => (
                   <div
-                    key={String(l.product.id)}
+                    key={lineKey(l)}
                     className="flex items-start gap-2 rounded-lg border border-border p-2"
                   >
                     <div className="min-w-0 flex-1">
                       <p className="truncate text-sm font-medium">{l.product.title}</p>
+                      {l.variant && (
+                        <p className="truncate text-xs text-muted-foreground">
+                          {variantLabel(l.variant)}
+                        </p>
+                      )}
                       <p className="text-xs text-muted-foreground tabular-nums">
-                        {money(l.product.price)} each
+                        {money(lineUnitPrice(l))} each
                       </p>
                     </div>
                     <div className="flex items-center gap-1">
                       <button
                         type="button"
                         aria-label="Decrease"
-                        onClick={() => setQty(l.product.id, l.quantity - 1)}
+                        onClick={() => setQty(l, l.quantity - 1)}
                         className="rounded p-1 text-muted-foreground hover:bg-muted"
                       >
                         <Minus className="size-3.5" />
@@ -381,19 +439,19 @@ export default function PosRegisterPage() {
                       <button
                         type="button"
                         aria-label="Increase"
-                        onClick={() => setQty(l.product.id, l.quantity + 1)}
+                        onClick={() => setQty(l, l.quantity + 1)}
                         className="rounded p-1 text-muted-foreground hover:bg-muted"
                       >
                         <Plus className="size-3.5" />
                       </button>
                     </div>
                     <span className="w-16 text-right text-sm font-semibold tabular-nums">
-                      {money(Number(l.product.price ?? 0) * l.quantity)}
+                      {money(lineUnitPrice(l) * l.quantity)}
                     </span>
                     <button
                       type="button"
                       aria-label="Remove"
-                      onClick={() => removeLine(l.product.id)}
+                      onClick={() => removeLine(l)}
                       className="rounded p-1 text-muted-foreground hover:bg-destructive/10 hover:text-destructive"
                     >
                       <Trash2 className="size-3.5" />
@@ -573,6 +631,36 @@ export default function PosRegisterPage() {
           onCompleted={() => setShiftKey((k) => k + 1)}
         />
       )}
+
+      <Dialog
+        open={!!variantPicker}
+        onOpenChange={(next) => !next && setVariantPicker(null)}
+      >
+        <DialogContent className="sm:max-w-sm">
+          <DialogHeader>
+            <DialogTitle>{variantPicker?.product.title}</DialogTitle>
+            <DialogDescription>Pick a size — price updates with it.</DialogDescription>
+          </DialogHeader>
+          <div className="grid max-h-96 grid-cols-2 gap-2 overflow-y-auto">
+            {variantPicker?.variants.map((v) => (
+              <button
+                key={v.id}
+                type="button"
+                onClick={() => {
+                  addLine(variantPicker.product, v);
+                  setVariantPicker(null);
+                }}
+                className="flex flex-col items-start gap-0.5 rounded-lg border border-border p-2.5 text-left hover:border-primary/50 hover:bg-muted/40"
+              >
+                <span className="text-sm font-medium">{variantLabel(v)}</span>
+                <span className="text-xs text-muted-foreground tabular-nums">
+                  {money(v.price)}
+                </span>
+              </button>
+            ))}
+          </div>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }

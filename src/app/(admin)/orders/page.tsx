@@ -30,7 +30,7 @@ import { DateRangePicker } from "@/components/date-range-picker";
 import { StatusBadge } from "@/components/status-badge";
 import { apiErrorMessage } from "@/lib/auth-api";
 import {
-  listOrders, getOrdersSummary, bulkUpdateOrderStatus,
+  listOrders, getOrdersSummary, bulkUpdateOrderStatus, listOrderTags,
   ORDER_STATUSES, PAYMENT_STATUSES, DELIVERY_TYPES, SHIPPING_STATUSES,
   type OrderRow, type OrdersSummary,
 } from "@/lib/admin-api";
@@ -261,12 +261,18 @@ export default function OrdersPage() {
   const [payStatuses, setPayStatuses] = React.useState<string[]>([]);
   const [deliveryTypes, setDeliveryTypes] = React.useState<string[]>([]);
   const [shippingStatuses, setShippingStatuses] = React.useState<string[]>([]);
+  const [tags, setTags] = React.useState<string[]>([]);
+  const [availableTags, setAvailableTags] = React.useState<string[]>([]);
   const [search, setSearch] = React.useState("");
   const [searchInput, setSearchInput] = React.useState("");
 
   React.useEffect(() => {
+    listOrderTags().then(setAvailableTags).catch(() => setAvailableTags([]));
+  }, []);
+
+  React.useEffect(() => {
     setPage(1);
-  }, [tab, dateRange, payStatuses, deliveryTypes, shippingStatuses, search]);
+  }, [tab, dateRange, payStatuses, deliveryTypes, shippingStatuses, tags, search]);
 
   const activeFilters = React.useMemo(
     () => ({
@@ -275,9 +281,10 @@ export default function OrdersPage() {
       payment_status: payStatuses,
       delivery_type: deliveryTypes,
       shipping_status: shippingStatuses,
+      tags,
       search: search || undefined,
     }),
-    [dateRange, tab, payStatuses, deliveryTypes, shippingStatuses, search]
+    [dateRange, tab, payStatuses, deliveryTypes, shippingStatuses, tags, search]
   );
 
   const load = React.useCallback(() => {
@@ -423,6 +430,16 @@ export default function OrdersPage() {
           value={shippingStatuses}
           onChange={setShippingStatuses}
         />
+
+        {}
+        {availableTags.length > 0 && (
+          <MultiSelectFilter
+            label="Tags"
+            options={availableTags}
+            value={tags}
+            onChange={setTags}
+          />
+        )}
 
         {}
         <div className="flex items-center gap-1">

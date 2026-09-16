@@ -184,6 +184,7 @@ export interface ListOrdersParams {
   delivery_type?: OneOrMany;
   shipping_status?: OneOrMany;
   channel?: OneOrMany;
+  tags?: OneOrMany;
   order_number?: string;
   email?: string;
   search?: string;
@@ -200,6 +201,7 @@ export async function listOrders(params: ListOrdersParams): Promise<ListResult<O
   if (hasValue(params.delivery_type)) filters.delivery_type = params.delivery_type;
   if (hasValue(params.shipping_status)) filters.shipping_status = params.shipping_status;
   if (hasValue(params.channel)) filters.channel = params.channel;
+  if (hasValue(params.tags)) filters.tags = params.tags;
   if (params.search) body.search = params.search;
   if (params.order_number) filters.order_number = { contains: params.order_number };
   if (params.email) filters.email = params.email;
@@ -209,6 +211,12 @@ export async function listOrders(params: ListOrdersParams): Promise<ListResult<O
   return parseList<OrderRow>(data, params.limit);
 }
 
+
+export async function listOrderTags(): Promise<string[]> {
+  const { data } = await api.get("orders/tags");
+  const p = data?.payload ?? data?.data ?? data;
+  return Array.isArray(p) ? p : [];
+}
 
 export interface OrderSummaryMetric {
   current: number;
@@ -241,7 +249,9 @@ export async function getOrdersSummary(
   if (hasValue(params.status)) filters.status = params.status;
   if (hasValue(params.payment_status)) filters.payment_status = params.payment_status;
   if (hasValue(params.delivery_type)) filters.delivery_type = params.delivery_type;
+  if (hasValue(params.shipping_status)) filters.shipping_status = params.shipping_status;
   if (hasValue(params.channel)) filters.channel = params.channel;
+  if (hasValue(params.tags)) filters.tags = params.tags;
   if (params.search) body.search = params.search;
   Object.assign(filters, params.filters ?? {});
   if (Object.keys(filters).length) body.filters = filters;
@@ -1012,6 +1022,8 @@ export interface ProductVariantRow {
   product_id?: number | string;
   color_id?: number | string | null;
   size_id?: number | string | null;
+  size?: { id?: number | string; name?: string; display_name?: string } | null;
+  color?: { id?: number | string; name?: string; hex_code?: string } | null;
   title?: string;
   sku?: string | null;
   barcode?: string | null;
