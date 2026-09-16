@@ -223,6 +223,7 @@ const COLUMN_FILTERS: Record<string, ColumnFilterDef> = {
   status: { type: "select", options: ORDER_STATUSES, placeholder: "Any" },
   delivery_type: { type: "select", options: DELIVERY_TYPES, placeholder: "Any" },
   shipping_status: { type: "select", options: SHIPPING_STATUSES, placeholder: "Any" },
+  tags: { type: "text", placeholder: "Tag" },
 };
 
 const exportColumns = [
