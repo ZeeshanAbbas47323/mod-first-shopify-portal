@@ -168,26 +168,6 @@ const columns: ColumnDef<OrderRow>[] = [
       return <span className="text-sm capitalize">{v.replace(/_/g, " ")}</span>;
     },
   },
-  {
-    accessorKey: "tags",
-    header: "Tags",
-    cell: ({ row }) => {
-      const tags = row.getValue<string[]>("tags") ?? [];
-      if (!tags.length) return <span className="text-sm text-muted-foreground">—</span>;
-      return (
-        <div className="flex flex-wrap gap-1">
-          {tags.map((t) => (
-            <span
-              key={t}
-              className="inline-flex items-center rounded-lg bg-neutral-subtle px-2 py-0.5 text-xs font-medium text-foreground"
-            >
-              {t}
-            </span>
-          ))}
-        </div>
-      );
-    },
-  },
 ];
 
 const TAB_STATUS: Record<string, string | undefined> = {
@@ -236,7 +216,6 @@ const exportColumns = [
   { key: "items", label: "Items", value: (r: OrderRow) => r.items?.length ?? "" },
   { key: "shipping_status", label: "Delivery status", value: (r: OrderRow) => r.shipping_status ?? "" },
   { key: "delivery_type", label: "Delivery method", value: (r: OrderRow) => r.delivery_type ?? "" },
-  { key: "tags", label: "Tags", value: (r: OrderRow) => (r.tags ?? []).join(", ") },
 ];
 
 export default function OrdersPage() {

@@ -153,7 +153,6 @@ export interface OrderRow {
   delivery_type?: string;
   shipping_status?: string;
   channel?: string;
-  tags?: string[];
   total_amount?: number | string;
   subtotal?: number | string;
   discount?: number | string;
