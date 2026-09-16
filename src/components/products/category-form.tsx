@@ -21,12 +21,17 @@ import { apiErrorMessage } from "@/lib/auth-api";
 import { uploadImage } from "@/lib/upload-api";
 import { ConfirmDeleteDialog } from "@/components/confirm-delete-dialog";
 import { TagInput } from "@/components/tag-input";
+import { EmptyState } from "@/components/empty-state";
+import { StatusBadge } from "@/components/status-badge";
+import { Package } from "lucide-react";
 import {
   createProductCategory,
   updateProductCategory,
   deleteRecord,
   fetchAllProductCategories,
+  listProducts,
   type ProductCategoryRow,
+  type ProductRow,
 } from "@/lib/admin-api";
 
 
@@ -124,6 +129,84 @@ function ImageUploadBox({
   );
 }
 
+
+function CategoryProductsCard({ categoryId }: { categoryId: number | string }) {
+  const router = useRouter();
+  const [products, setProducts] = React.useState<ProductRow[]>([]);
+  const [loading, setLoading] = React.useState(true);
+  const [total, setTotal] = React.useState(0);
+
+  React.useEffect(() => {
+    let cancelled = false;
+    setLoading(true);
+    listProducts({ page: 1, limit: 50, filters: { category_id: categoryId } })
+      .then((res) => {
+        if (cancelled) return;
+        setProducts(res.rows);
+        setTotal(res.total ?? res.rows.length);
+      })
+      .catch(() => !cancelled && setProducts([]))
+      .finally(() => !cancelled && setLoading(false));
+    return () => {
+      cancelled = true;
+    };
+  }, [categoryId]);
+
+  return (
+    <Card className="shadow-none">
+      <CardHeader className="flex-row items-center gap-2 pb-3">
+        <Package className="size-4 text-muted-foreground" />
+        <CardTitle className="text-sm">Products in this category</CardTitle>
+        {total > 0 && (
+          <span className="ml-auto text-xs text-muted-foreground">{total}</span>
+        )}
+      </CardHeader>
+      <CardContent className="p-0">
+        {loading ? (
+          <div className="space-y-2 p-4">
+            {Array.from({ length: 3 }).map((_, i) => (
+              <div key={i} className="h-14 animate-pulse rounded-lg bg-muted" />
+            ))}
+          </div>
+        ) : products.length === 0 ? (
+          <EmptyState
+            title="No products in this category"
+            hint="Products assigned to this category will show up here."
+          />
+        ) : (
+          <div className="divide-y">
+            {products.map((p) => (
+              <button
+                key={p.id}
+                type="button"
+                onClick={() => router.push(`/products/${p.id}`)}
+                className="flex w-full items-center gap-3 px-4 py-2.5 text-left transition-colors hover:bg-muted/40"
+              >
+                <div className="flex size-10 shrink-0 items-center justify-center overflow-hidden rounded-lg border bg-muted">
+                  {p.featured_image ? (
+                    // eslint-disable-next-line @next/next/no-img-element
+                    <img src={imgUrl(p.featured_image)} alt={p.title} className="size-full object-cover" />
+                  ) : (
+                    <Package className="size-4 text-muted-foreground" />
+                  )}
+                </div>
+                <div className="min-w-0 flex-1">
+                  <p className="truncate text-sm font-medium">{p.title}</p>
+                  {p.price != null && (
+                    <p className="text-xs text-muted-foreground">
+                      ${Number(p.price).toFixed(2)}
+                    </p>
+                  )}
+                </div>
+                {p.status && <StatusBadge status={p.status} />}
+              </button>
+            ))}
+          </div>
+        )}
+      </CardContent>
+    </Card>
+  );
+}
 
 export function CategoryForm({ category }: { category?: ProductCategoryRow }) {
   const router = useRouter();
@@ -332,6 +415,9 @@ export function CategoryForm({ category }: { category?: ProductCategoryRow }) {
                 </p>
               </CardContent>
             </Card>
+
+            {}
+            {isEdit && <CategoryProductsCard categoryId={category.id} />}
           </div>
 
           {}

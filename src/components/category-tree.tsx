@@ -9,6 +9,7 @@ import { Checkbox } from "@/components/ui/checkbox";
 import { DragHandle } from "@/components/drag-handle";
 import { EmptyState } from "@/components/empty-state";
 import { StatusToggle } from "@/components/status-badge";
+import { CategoryProductsPreviewPopover } from "@/components/products/category-products-popover";
 import { cn, imgUrl } from "@/lib/utils";
 import type { ProductCategoryRow } from "@/lib/admin-api";
 
@@ -254,9 +255,7 @@ function CategoryTreeRow({
           </div>
         </div>
 
-        <span className="w-20 shrink-0 text-right text-sm tabular-nums">
-          {node.products_count ?? "—"}
-        </span>
+        <CategoryProductsPreviewPopover categoryId={node.id} count={node.products_count} />
         <span className="w-20 shrink-0 text-right" onClick={(e) => e.stopPropagation()}>
           <StatusToggle
             isActive={node.is_active !== false}
