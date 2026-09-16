@@ -31,7 +31,7 @@ import { StatusBadge } from "@/components/status-badge";
 import { apiErrorMessage } from "@/lib/auth-api";
 import {
   listOrders, getOrdersSummary, bulkUpdateOrderStatus,
-  ORDER_STATUSES, PAYMENT_STATUSES, DELIVERY_TYPES, ORDER_CHANNELS,
+  ORDER_STATUSES, PAYMENT_STATUSES, DELIVERY_TYPES, ORDER_CHANNELS, SHIPPING_STATUSES,
   type OrderRow, type OrdersSummary,
 } from "@/lib/admin-api";
 import type { DateRange } from "react-day-picker";
@@ -158,17 +158,25 @@ const columns: ColumnDef<OrderRow>[] = [
     cell: ({ row }) => <StatusBadge status={row.getValue("status") ?? "—"} />,
   },
   {
+    id: "items",
+    header: "Items",
+    cell: ({ row }) => <FulfillmentPreviewPopover {...orderFulfillmentPreview(row.original)} />,
+  },
+  {
+    accessorKey: "shipping_status",
+    header: "Delivery status",
+    cell: ({ row }) => {
+      const v = row.getValue<string>("shipping_status");
+      return v ? <StatusBadge status={v} /> : <span className="text-sm text-muted-foreground">—</span>;
+    },
+  },
+  {
     accessorKey: "delivery_type",
-    header: "Delivery",
+    header: "Delivery method",
     cell: ({ row }) => {
       const v = row.getValue<string>("delivery_type") ?? "";
       return <span className="text-sm capitalize">{v.replace(/_/g, " ")}</span>;
     },
-  },
-  {
-    id: "items",
-    header: "Items",
-    cell: ({ row }) => <FulfillmentPreviewPopover {...orderFulfillmentPreview(row.original)} />,
   },
 ];
 
@@ -205,6 +213,7 @@ const COLUMN_FILTERS: Record<string, ColumnFilterDef> = {
   payment_status: { type: "select", options: PAYMENT_STATUSES, placeholder: "Any" },
   status: { type: "select", options: ORDER_STATUSES, placeholder: "Any" },
   delivery_type: { type: "select", options: DELIVERY_TYPES, placeholder: "Any" },
+  shipping_status: { type: "select", options: SHIPPING_STATUSES, placeholder: "Any" },
 };
 
 const exportColumns = [
@@ -216,8 +225,9 @@ const exportColumns = [
   { key: "total", label: "Total", value: (r: OrderRow) => r.total_amount ?? "" },
   { key: "payment_status", label: "Payment status", value: (r: OrderRow) => r.payment_status ?? "" },
   { key: "status", label: "Status", value: (r: OrderRow) => r.status ?? "" },
-  { key: "delivery_type", label: "Delivery", value: (r: OrderRow) => r.delivery_type ?? "" },
   { key: "items", label: "Items", value: (r: OrderRow) => r.items?.length ?? "" },
+  { key: "shipping_status", label: "Delivery status", value: (r: OrderRow) => r.shipping_status ?? "" },
+  { key: "delivery_type", label: "Delivery method", value: (r: OrderRow) => r.delivery_type ?? "" },
 ];
 
 export default function OrdersPage() {
@@ -241,13 +251,14 @@ export default function OrdersPage() {
   });
   const [payStatuses, setPayStatuses] = React.useState<string[]>([]);
   const [deliveryTypes, setDeliveryTypes] = React.useState<string[]>([]);
+  const [shippingStatuses, setShippingStatuses] = React.useState<string[]>([]);
   const [channels, setChannels] = React.useState<string[]>([]);
   const [search, setSearch] = React.useState("");
   const [searchInput, setSearchInput] = React.useState("");
 
   React.useEffect(() => {
     setPage(1);
-  }, [tab, dateRange, payStatuses, deliveryTypes, channels, search]);
+  }, [tab, dateRange, payStatuses, deliveryTypes, shippingStatuses, channels, search]);
 
   const activeFilters = React.useMemo(
     () => ({
@@ -255,10 +266,11 @@ export default function OrdersPage() {
       status: TAB_STATUS[tab],
       payment_status: payStatuses,
       delivery_type: deliveryTypes,
+      shipping_status: shippingStatuses,
       channel: channels,
       search: search || undefined,
     }),
-    [dateRange, tab, payStatuses, deliveryTypes, channels, search]
+    [dateRange, tab, payStatuses, deliveryTypes, shippingStatuses, channels, search]
   );
 
   const load = React.useCallback(() => {
@@ -395,6 +407,14 @@ export default function OrdersPage() {
           options={DELIVERY_TYPES}
           value={deliveryTypes}
           onChange={setDeliveryTypes}
+        />
+
+        {}
+        <MultiSelectFilter
+          label="Delivery status"
+          options={SHIPPING_STATUSES}
+          value={shippingStatuses}
+          onChange={setShippingStatuses}
         />
 
         {}

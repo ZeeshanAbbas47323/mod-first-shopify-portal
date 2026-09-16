@@ -131,6 +131,11 @@ export type PaymentStatus = (typeof PAYMENT_STATUSES)[number];
 
 export const DELIVERY_TYPES = ["home_delivery", "store_pickup"] as const;
 export const ORDER_CHANNELS = ["online_store", "point_of_sale"] as const;
+export const SHIPPING_STATUSES = [
+  "PENDING", "LABEL_CREATED", "PICKUP_SCHEDULED", "PICKED_UP", "SHIPPED",
+  "IN_TRANSIT", "OUT_FOR_DELIVERY", "DELIVERED", "RETURNED", "FAILED",
+  "CANCELLED", "PROCESSING",
+] as const;
 
 export interface OrderCustomer {
   id?: number | string;
@@ -146,6 +151,7 @@ export interface OrderRow {
   status?: string;
   payment_status?: string;
   delivery_type?: string;
+  shipping_status?: string;
   channel?: string;
   total_amount?: number | string;
   subtotal?: number | string;
@@ -175,6 +181,7 @@ export interface ListOrdersParams {
   status?: OneOrMany;
   payment_status?: OneOrMany;
   delivery_type?: OneOrMany;
+  shipping_status?: OneOrMany;
   channel?: OneOrMany;
   order_number?: string;
   email?: string;
@@ -190,6 +197,7 @@ export async function listOrders(params: ListOrdersParams): Promise<ListResult<O
   if (hasValue(params.status)) filters.status = params.status;
   if (hasValue(params.payment_status)) filters.payment_status = params.payment_status;
   if (hasValue(params.delivery_type)) filters.delivery_type = params.delivery_type;
+  if (hasValue(params.shipping_status)) filters.shipping_status = params.shipping_status;
   if (hasValue(params.channel)) filters.channel = params.channel;
   if (params.search) body.search = params.search;
   if (params.order_number) filters.order_number = { contains: params.order_number };
