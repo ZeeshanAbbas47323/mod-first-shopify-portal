@@ -261,13 +261,12 @@ export default function OrdersPage() {
   const [payStatuses, setPayStatuses] = React.useState<string[]>([]);
   const [deliveryTypes, setDeliveryTypes] = React.useState<string[]>([]);
   const [shippingStatuses, setShippingStatuses] = React.useState<string[]>([]);
-  const [channels, setChannels] = React.useState<string[]>([]);
   const [search, setSearch] = React.useState("");
   const [searchInput, setSearchInput] = React.useState("");
 
   React.useEffect(() => {
     setPage(1);
-  }, [tab, dateRange, payStatuses, deliveryTypes, shippingStatuses, channels, search]);
+  }, [tab, dateRange, payStatuses, deliveryTypes, shippingStatuses, search]);
 
   const activeFilters = React.useMemo(
     () => ({
@@ -276,10 +275,9 @@ export default function OrdersPage() {
       payment_status: payStatuses,
       delivery_type: deliveryTypes,
       shipping_status: shippingStatuses,
-      channel: channels,
       search: search || undefined,
     }),
-    [dateRange, tab, payStatuses, deliveryTypes, shippingStatuses, channels, search]
+    [dateRange, tab, payStatuses, deliveryTypes, shippingStatuses, search]
   );
 
   const load = React.useCallback(() => {
@@ -424,14 +422,6 @@ export default function OrdersPage() {
           options={SHIPPING_STATUSES}
           value={shippingStatuses}
           onChange={setShippingStatuses}
-        />
-
-        {}
-        <MultiSelectFilter
-          label="Channel"
-          options={ORDER_CHANNELS}
-          value={channels}
-          onChange={setChannels}
         />
 
         {}
