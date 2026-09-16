@@ -31,7 +31,7 @@ import { StatusBadge } from "@/components/status-badge";
 import { apiErrorMessage } from "@/lib/auth-api";
 import {
   listOrders, getOrdersSummary, bulkUpdateOrderStatus,
-  ORDER_STATUSES, PAYMENT_STATUSES, DELIVERY_TYPES, ORDER_CHANNELS, SHIPPING_STATUSES,
+  ORDER_STATUSES, PAYMENT_STATUSES, DELIVERY_TYPES, SHIPPING_STATUSES,
   type OrderRow, type OrdersSummary,
 } from "@/lib/admin-api";
 import type { DateRange } from "react-day-picker";
@@ -41,8 +41,6 @@ const EXPORT_CAP = 5000;
 
 const fmt$ = (n?: number | string | null) =>
   n != null ? `$${Number(n).toLocaleString("en-US", { minimumFractionDigits: 2 })}` : "—";
-
-const humanize = (s: string) => s.replace(/_/g, " ").replace(/\b\w/g, (c) => c.toUpperCase());
 
 const orderCustomerPreview = (order: OrderRow) => ({
   user_id: order.user_id,
@@ -133,14 +131,6 @@ const columns: ColumnDef<OrderRow>[] = [
     ),
   },
   {
-    accessorKey: "channel",
-    header: "Channel",
-    cell: ({ row }) => {
-      const v = row.getValue<string>("channel");
-      return <span className="text-sm text-muted-foreground">{v ? humanize(v) : "—"}</span>;
-    },
-  },
-  {
     accessorKey: "total_amount",
     header: () => <div className="text-right">Total</div>,
     cell: ({ row }) => (
@@ -178,6 +168,26 @@ const columns: ColumnDef<OrderRow>[] = [
       return <span className="text-sm capitalize">{v.replace(/_/g, " ")}</span>;
     },
   },
+  {
+    accessorKey: "tags",
+    header: "Tags",
+    cell: ({ row }) => {
+      const tags = row.getValue<string[]>("tags") ?? [];
+      if (!tags.length) return <span className="text-sm text-muted-foreground">—</span>;
+      return (
+        <div className="flex flex-wrap gap-1">
+          {tags.map((t) => (
+            <span
+              key={t}
+              className="inline-flex items-center rounded-lg bg-neutral-subtle px-2 py-0.5 text-xs font-medium text-foreground"
+            >
+              {t}
+            </span>
+          ))}
+        </div>
+      );
+    },
+  },
 ];
 
 const TAB_STATUS: Record<string, string | undefined> = {
@@ -209,7 +219,6 @@ const EMPTY_SUMMARY: OrdersSummary = {
 const COLUMN_FILTERS: Record<string, ColumnFilterDef> = {
   order_number: { type: "text", placeholder: "Order #" },
   customer: { type: "text", placeholder: "Name or email" },
-  channel: { type: "select", options: ORDER_CHANNELS, placeholder: "Any" },
   payment_status: { type: "select", options: PAYMENT_STATUSES, placeholder: "Any" },
   status: { type: "select", options: ORDER_STATUSES, placeholder: "Any" },
   delivery_type: { type: "select", options: DELIVERY_TYPES, placeholder: "Any" },
@@ -221,13 +230,13 @@ const exportColumns = [
   { key: "date", label: "Date", value: (r: OrderRow) => r.order_date ?? r.created_at ?? "" },
   { key: "customer", label: "Customer", value: (r: OrderRow) => r.full_name ?? "" },
   { key: "email", label: "Email", value: (r: OrderRow) => r.email ?? "" },
-  { key: "channel", label: "Channel", value: (r: OrderRow) => (r.channel ? humanize(r.channel) : "") },
   { key: "total", label: "Total", value: (r: OrderRow) => r.total_amount ?? "" },
   { key: "payment_status", label: "Payment status", value: (r: OrderRow) => r.payment_status ?? "" },
   { key: "status", label: "Status", value: (r: OrderRow) => r.status ?? "" },
   { key: "items", label: "Items", value: (r: OrderRow) => r.items?.length ?? "" },
   { key: "shipping_status", label: "Delivery status", value: (r: OrderRow) => r.shipping_status ?? "" },
   { key: "delivery_type", label: "Delivery method", value: (r: OrderRow) => r.delivery_type ?? "" },
+  { key: "tags", label: "Tags", value: (r: OrderRow) => (r.tags ?? []).join(", ") },
 ];
 
 export default function OrdersPage() {
