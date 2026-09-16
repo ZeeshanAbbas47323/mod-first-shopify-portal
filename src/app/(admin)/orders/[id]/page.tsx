@@ -8,6 +8,7 @@ import {
   ArrowLeft, Loader2, Truck, CreditCard, Package, MapPin,
   Phone, Mail, User, Clock, ChevronDown, FileText, Banknote,
   Printer, XCircle, Download, ExternalLink, FileImage, Store,
+  Tag,
 } from "lucide-react";
 import { toast } from "sonner";
 
@@ -34,6 +35,7 @@ import {
   Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
 } from "@/components/ui/select";
 import { StatusBadge } from "@/components/status-badge";
+import { TagInput } from "@/components/tag-input";
 import { OrderComments } from "@/components/orders/order-comments";
 import { RefundsSection } from "@/components/orders/refunds-section";
 import { apiErrorMessage } from "@/lib/auth-api";
@@ -46,7 +48,7 @@ import {
   showBlob,
 } from "@/lib/print-output";
 import {
-  getOrder, updateOrderStatus, printOrder, printOrderRaw,
+  getOrder, updateOrderStatus, updateOrderTags, printOrder, printOrderRaw,
   orderItemDesigns, orderItemDesignIds, orderDesigns, orderDesignIds,
   fetchOrderDesigns, type DesignUploadRow,
   type OrderDesignUpload,
@@ -634,6 +636,9 @@ export default function OrderDetailPage() {
           </Card>
 
           {}
+          <TagsCard order={order} onSaved={load} />
+
+          {}
           <Card>
             <CardHeader className="flex-row items-center gap-2 pb-3">
               <FileText className="size-4 text-muted-foreground" />
@@ -781,6 +786,47 @@ export default function OrderDetailPage() {
         </div>
       </div>
     </div>
+  );
+}
+
+function TagsCard({
+  order,
+  onSaved,
+}: {
+  order: OrderDetail;
+  onSaved: () => void;
+}) {
+  const [tags, setTags] = React.useState<string[]>(order.tags ?? []);
+  const [saving, setSaving] = React.useState(false);
+
+  React.useEffect(() => {
+    setTags(order.tags ?? []);
+  }, [order.tags]);
+
+  const persist = async (next: string[]) => {
+    setSaving(true);
+    try {
+      await updateOrderTags(order.id, next);
+      setTags(next);
+      onSaved();
+    } catch (err) {
+      toast.error(apiErrorMessage(err, "Couldn't update tags."));
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  return (
+    <Card>
+      <CardHeader className="flex-row items-center gap-2 pb-3">
+        <Tag className="size-4 text-muted-foreground" />
+        <CardTitle className="text-base">Tags</CardTitle>
+        {saving && <Loader2 className="ml-auto size-3.5 animate-spin text-muted-foreground" />}
+      </CardHeader>
+      <CardContent>
+        <TagInput value={tags} onChange={persist} disabled={saving} />
+      </CardContent>
+    </Card>
   );
 }
 

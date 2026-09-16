@@ -153,6 +153,7 @@ export interface OrderRow {
   delivery_type?: string;
   shipping_status?: string;
   channel?: string;
+  tags?: string[] | null;
   total_amount?: number | string;
   subtotal?: number | string;
   discount?: number | string;
@@ -462,6 +463,14 @@ export async function updateOrderStatus(
 ): Promise<string> {
   const { data } = await api.put(`orders/${id}/status`, { status, notes });
   return (data?.message as string) ?? "Status updated.";
+}
+
+export async function updateOrderTags(
+  id: number | string,
+  tags: string[]
+): Promise<string> {
+  const { data } = await api.put(`orders/${id}/tags`, { tags });
+  return (data?.message as string) ?? "Tags updated.";
 }
 
 export type PrintType = "thermal_80mm" | "thermal_58mm" | "a4";
@@ -1249,6 +1258,7 @@ export interface ProductCategoryRow {
   image_url?: string | null;
   banner?: string | null;
   icon?: string | null;
+  tags?: string[] | null;
   sort_order?: number;
   is_active?: boolean;
   products_count?: number;

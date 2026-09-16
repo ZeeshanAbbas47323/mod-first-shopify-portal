@@ -239,6 +239,18 @@ function CategoryTreeRow({
           <div className="min-w-0">
             <p className="truncate text-sm font-medium">{node.name}</p>
             <p className="truncate font-mono text-xs text-muted-foreground">/{node.slug}</p>
+            {!!node.tags?.length && (
+              <div className="mt-1 flex flex-wrap gap-1">
+                {node.tags.map((tag) => (
+                  <span
+                    key={tag}
+                    className="inline-flex items-center rounded bg-neutral-subtle px-1.5 py-0.5 text-[10px] font-medium text-foreground"
+                  >
+                    {tag}
+                  </span>
+                ))}
+              </div>
+            )}
           </div>
         </div>
 

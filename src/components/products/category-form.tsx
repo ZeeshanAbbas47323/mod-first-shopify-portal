@@ -20,6 +20,7 @@ import {
 import { apiErrorMessage } from "@/lib/auth-api";
 import { uploadImage } from "@/lib/upload-api";
 import { ConfirmDeleteDialog } from "@/components/confirm-delete-dialog";
+import { TagInput } from "@/components/tag-input";
 import {
   createProductCategory,
   updateProductCategory,
@@ -131,6 +132,7 @@ export function CategoryForm({ category }: { category?: ProductCategoryRow }) {
   const [image, setImage] = React.useState<string | null>(
     category?.image_url ?? category?.image ?? null
   );
+  const [tags, setTags] = React.useState<string[]>(category?.tags ?? []);
   const [parents, setParents] = React.useState<ProductCategoryRow[]>([]);
   const [saving, setSaving] = React.useState(false);
   const [confirmOpen, setConfirmOpen] = React.useState(false);
@@ -182,6 +184,7 @@ export function CategoryForm({ category }: { category?: ProductCategoryRow }) {
         sort_order: values.sort_order,
         is_active: values.is_active,
         image_url: image ?? undefined,
+        tags,
       };
 
       const msg = isEdit
@@ -309,6 +312,24 @@ export function CategoryForm({ category }: { category?: ProductCategoryRow }) {
                   onChange={setImage}
                   hint="Main listing image"
                 />
+              </CardContent>
+            </Card>
+
+            {}
+            <Card className="shadow-none">
+              <CardHeader className="pb-3">
+                <CardTitle className="text-sm">Tags</CardTitle>
+              </CardHeader>
+              <CardContent>
+                <TagInput
+                  value={tags}
+                  onChange={setTags}
+                  placeholder="e.g. DTF PRINTING — press Enter to add"
+                />
+                <p className="mt-2 text-xs text-muted-foreground">
+                  Orders that include a product from this category automatically pick up
+                  these tags.
+                </p>
               </CardContent>
             </Card>
           </div>
